@@ -14,6 +14,93 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_suggestions: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          proposed_date: string | null
+          proposed_time: string | null
+          status: Database["public"]["Enums"]["suggestion_status"]
+          suggestion_type: string
+          target_item_id: string | null
+          target_item_type: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          proposed_date?: string | null
+          proposed_time?: string | null
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggestion_type: string
+          target_item_id?: string | null
+          target_item_type?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          proposed_date?: string | null
+          proposed_time?: string | null
+          status?: Database["public"]["Enums"]["suggestion_status"]
+          suggestion_type?: string
+          target_item_id?: string | null
+          target_item_type?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      appointments: {
+        Row: {
+          created_at: string
+          date: string
+          description: string | null
+          end_time: string | null
+          id: string
+          source: Database["public"]["Enums"]["item_source"]
+          start_time: string | null
+          status: Database["public"]["Enums"]["appointment_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          source?: Database["public"]["Enums"]["item_source"]
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["appointment_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          source?: Database["public"]["Enums"]["item_source"]
+          start_time?: string | null
+          status?: Database["public"]["Enums"]["appointment_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       cases: {
         Row: {
           ai_analyse: string | null
@@ -77,6 +164,42 @@ export type Database = {
         }
         Relationships: []
       }
+      let_go_items: {
+        Row: {
+          action_intent: string | null
+          content: string
+          created_at: string
+          id: string
+          linked_item_id: string | null
+          linked_item_type: string | null
+          status: Database["public"]["Enums"]["let_go_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          action_intent?: string | null
+          content: string
+          created_at?: string
+          id?: string
+          linked_item_id?: string | null
+          linked_item_type?: string | null
+          status?: Database["public"]["Enums"]["let_go_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          action_intent?: string | null
+          content?: string
+          created_at?: string
+          id?: string
+          linked_item_id?: string | null
+          linked_item_type?: string | null
+          status?: Database["public"]["Enums"]["let_go_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       mood_logs: {
         Row: {
           created_at: string
@@ -122,6 +245,120 @@ export type Database = {
         }
         Relationships: []
       }
+      reminders: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          remind_at: string | null
+          source: Database["public"]["Enums"]["item_source"]
+          status: Database["public"]["Enums"]["reminder_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          remind_at?: string | null
+          source?: Database["public"]["Enums"]["item_source"]
+          status?: Database["public"]["Enums"]["reminder_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          remind_at?: string | null
+          source?: Database["public"]["Enums"]["item_source"]
+          status?: Database["public"]["Enums"]["reminder_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_behavior_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          item_id: string | null
+          item_type: string | null
+          metadata: Json | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          item_id?: string | null
+          item_type?: string | null
+          metadata?: Json | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          item_id?: string | null
+          item_type?: string | null
+          metadata?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          created_at: string
+          hard_moment_of_day: string | null
+          id: string
+          main_difficulty: string | null
+          overstimulation_level: string | null
+          planning_style: string | null
+          preferred_help_area: string | null
+          primary_goal: string | null
+          reminder_style: string | null
+          suggestion_count_preference: string | null
+          support_style: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          hard_moment_of_day?: string | null
+          id?: string
+          main_difficulty?: string | null
+          overstimulation_level?: string | null
+          planning_style?: string | null
+          preferred_help_area?: string | null
+          primary_goal?: string | null
+          reminder_style?: string | null
+          suggestion_count_preference?: string | null
+          support_style?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          hard_moment_of_day?: string | null
+          id?: string
+          main_difficulty?: string | null
+          overstimulation_level?: string | null
+          planning_style?: string | null
+          preferred_help_area?: string | null
+          primary_goal?: string | null
+          reminder_style?: string | null
+          suggestion_count_preference?: string | null
+          support_style?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -130,7 +367,17 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      appointment_status: "scheduled" | "completed" | "cancelled"
+      item_source:
+        | "manual"
+        | "ai_suggested"
+        | "confirmed_from_ai"
+        | "imported"
+        | "onboarding"
+        | "system"
+      let_go_status: "active" | "archived" | "processed"
+      reminder_status: "active" | "done" | "snoozed" | "deleted"
+      suggestion_status: "pending" | "accepted" | "dismissed" | "deleted"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -257,6 +504,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      appointment_status: ["scheduled", "completed", "cancelled"],
+      item_source: [
+        "manual",
+        "ai_suggested",
+        "confirmed_from_ai",
+        "imported",
+        "onboarding",
+        "system",
+      ],
+      let_go_status: ["active", "archived", "processed"],
+      reminder_status: ["active", "done", "snoozed", "deleted"],
+      suggestion_status: ["pending", "accepted", "dismissed", "deleted"],
+    },
   },
 } as const

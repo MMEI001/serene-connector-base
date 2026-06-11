@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/journal")({
   ssr: false,
-  head: () => ({ meta: [{ title: "HoofdRust — Journal" }] }),
+  head: () => ({ meta: [{ title: "HoofdRust — Notities" }] }),
   component: JournalPage,
 });
 
@@ -29,8 +29,7 @@ type Entry = {
 };
 
 function JournalPage() {
-  const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -40,9 +39,6 @@ function JournalPage() {
   const [busy, setBusy] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
 
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [loading, user, navigate]);
 
   const fetchEntries = useCallback(async () => {
     if (!user) return;
@@ -103,20 +99,11 @@ function JournalPage() {
     }
   };
 
-  if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="h-8 w-8 animate-pulse rounded-full bg-primary/40" />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader />
-      <main className="mx-auto max-w-2xl px-4 py-10">
-        <div className="mb-8">
-          <h1 className="text-3xl text-foreground">Journal</h1>
+    <AppShell>
+      <div className="mb-8">
+        <h1 className="text-3xl text-foreground">Notities</h1>
+
           <p className="mt-2 text-muted-foreground">
             Adem rustig in en uit. Schrijf wat er in je opkomt.
           </p>
@@ -244,7 +231,6 @@ function JournalPage() {
             </div>
           )}
         </section>
-      </main>
-    </div>
+    </AppShell>
   );
 }
