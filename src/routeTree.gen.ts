@@ -21,6 +21,7 @@ import { Route as RemindersNieuwRouteImport } from './routes/reminders.nieuw'
 import { Route as RemindersIdRouteImport } from './routes/reminders.$id'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
+import { Route as RemindersIdIndexRouteImport } from './routes/reminders.$id.index'
 import { Route as AgendaIdIndexRouteImport } from './routes/agenda.$id.index'
 import { Route as RemindersIdBewerkenRouteImport } from './routes/reminders.$id.bewerken'
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
@@ -85,6 +86,11 @@ const AgendaIdRoute = AgendaIdRouteImport.update({
   path: '/agenda/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RemindersIdIndexRoute = RemindersIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RemindersIdRoute,
+} as any)
 const AgendaIdIndexRoute = AgendaIdIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id/': typeof AgendaIdIndexRoute
+  '/reminders/$id/': typeof RemindersIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -126,13 +133,13 @@ export interface FileRoutesByTo {
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/nieuw': typeof AgendaNieuwRoute
-  '/reminders/$id': typeof RemindersIdRouteWithChildren
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda': typeof AgendaIndexRoute
   '/reminders': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id': typeof AgendaIdIndexRoute
+  '/reminders/$id': typeof RemindersIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -151,6 +158,7 @@ export interface FileRoutesById {
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id/': typeof AgendaIdIndexRoute
+  '/reminders/$id/': typeof RemindersIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -170,6 +178,7 @@ export interface FileRouteTypes {
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id/'
+    | '/reminders/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -179,13 +188,13 @@ export interface FileRouteTypes {
     | '/profiel'
     | '/suggesties'
     | '/agenda/nieuw'
-    | '/reminders/$id'
     | '/reminders/nieuw'
     | '/agenda'
     | '/reminders'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id'
+    | '/reminders/$id'
   id:
     | '__root__'
     | '/'
@@ -203,6 +212,7 @@ export interface FileRouteTypes {
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id/'
+    | '/reminders/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -306,6 +316,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgendaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reminders/$id/': {
+      id: '/reminders/$id/'
+      path: '/'
+      fullPath: '/reminders/$id/'
+      preLoaderRoute: typeof RemindersIdIndexRouteImport
+      parentRoute: typeof RemindersIdRoute
+    }
     '/agenda/$id/': {
       id: '/agenda/$id/'
       path: '/'
@@ -346,10 +363,12 @@ const AgendaIdRouteWithChildren = AgendaIdRoute._addFileChildren(
 
 interface RemindersIdRouteChildren {
   RemindersIdBewerkenRoute: typeof RemindersIdBewerkenRoute
+  RemindersIdIndexRoute: typeof RemindersIdIndexRoute
 }
 
 const RemindersIdRouteChildren: RemindersIdRouteChildren = {
   RemindersIdBewerkenRoute: RemindersIdBewerkenRoute,
+  RemindersIdIndexRoute: RemindersIdIndexRoute,
 }
 
 const RemindersIdRouteWithChildren = RemindersIdRoute._addFileChildren(
