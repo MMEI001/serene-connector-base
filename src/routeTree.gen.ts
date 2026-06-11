@@ -11,17 +11,20 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuggestiesRouteImport } from './routes/suggesties'
 import { Route as ProfielRouteImport } from './routes/profiel'
-import { Route as LaatLosRouteImport } from './routes/laat-los'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
+import { Route as LaatLosIndexRouteImport } from './routes/laat-los.index'
 import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
 import { Route as RemindersNieuwRouteImport } from './routes/reminders.nieuw'
 import { Route as RemindersIdRouteImport } from './routes/reminders.$id'
+import { Route as LaatLosNieuwRouteImport } from './routes/laat-los.nieuw'
+import { Route as LaatLosIdRouteImport } from './routes/laat-los.$id'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
 import { Route as RemindersIdIndexRouteImport } from './routes/reminders.$id.index'
+import { Route as LaatLosIdIndexRouteImport } from './routes/laat-los.$id.index'
 import { Route as AgendaIdIndexRouteImport } from './routes/agenda.$id.index'
 import { Route as RemindersIdBewerkenRouteImport } from './routes/reminders.$id.bewerken'
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
@@ -34,11 +37,6 @@ const SuggestiesRoute = SuggestiesRouteImport.update({
 const ProfielRoute = ProfielRouteImport.update({
   id: '/profiel',
   path: '/profiel',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LaatLosRoute = LaatLosRouteImport.update({
-  id: '/laat-los',
-  path: '/laat-los',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JournalRoute = JournalRouteImport.update({
@@ -61,6 +59,11 @@ const RemindersIndexRoute = RemindersIndexRouteImport.update({
   path: '/reminders/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LaatLosIndexRoute = LaatLosIndexRouteImport.update({
+  id: '/laat-los/',
+  path: '/laat-los/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgendaIndexRoute = AgendaIndexRouteImport.update({
   id: '/agenda/',
   path: '/agenda/',
@@ -74,6 +77,16 @@ const RemindersNieuwRoute = RemindersNieuwRouteImport.update({
 const RemindersIdRoute = RemindersIdRouteImport.update({
   id: '/reminders/$id',
   path: '/reminders/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaatLosNieuwRoute = LaatLosNieuwRouteImport.update({
+  id: '/laat-los/nieuw',
+  path: '/laat-los/nieuw',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaatLosIdRoute = LaatLosIdRouteImport.update({
+  id: '/laat-los/$id',
+  path: '/laat-los/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
@@ -90,6 +103,11 @@ const RemindersIdIndexRoute = RemindersIdIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => RemindersIdRoute,
+} as any)
+const LaatLosIdIndexRoute = LaatLosIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => LaatLosIdRoute,
 } as any)
 const AgendaIdIndexRoute = AgendaIdIndexRouteImport.update({
   id: '/',
@@ -111,34 +129,39 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
-  '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/laat-los/$id': typeof LaatLosIdRouteWithChildren
+  '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/$id': typeof RemindersIdRouteWithChildren
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
+  '/laat-los/': typeof LaatLosIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id/': typeof AgendaIdIndexRoute
+  '/laat-los/$id/': typeof LaatLosIdIndexRoute
   '/reminders/$id/': typeof RemindersIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
-  '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda': typeof AgendaIndexRoute
+  '/laat-los': typeof LaatLosIndexRoute
   '/reminders': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id': typeof AgendaIdIndexRoute
+  '/laat-los/$id': typeof LaatLosIdIndexRoute
   '/reminders/$id': typeof RemindersIdIndexRoute
 }
 export interface FileRoutesById {
@@ -146,18 +169,21 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
-  '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/laat-los/$id': typeof LaatLosIdRouteWithChildren
+  '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/$id': typeof RemindersIdRouteWithChildren
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
+  '/laat-los/': typeof LaatLosIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
   '/agenda/$id/': typeof AgendaIdIndexRoute
+  '/laat-los/$id/': typeof LaatLosIdIndexRoute
   '/reminders/$id/': typeof RemindersIdIndexRoute
 }
 export interface FileRouteTypes {
@@ -166,52 +192,60 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/journal'
-    | '/laat-los'
     | '/profiel'
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/laat-los/$id'
+    | '/laat-los/nieuw'
     | '/reminders/$id'
     | '/reminders/nieuw'
     | '/agenda/'
+    | '/laat-los/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id/'
+    | '/laat-los/$id/'
     | '/reminders/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
     | '/journal'
-    | '/laat-los'
     | '/profiel'
     | '/suggesties'
     | '/agenda/nieuw'
+    | '/laat-los/nieuw'
     | '/reminders/nieuw'
     | '/agenda'
+    | '/laat-los'
     | '/reminders'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id'
+    | '/laat-los/$id'
     | '/reminders/$id'
   id:
     | '__root__'
     | '/'
     | '/auth'
     | '/journal'
-    | '/laat-los'
     | '/profiel'
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/laat-los/$id'
+    | '/laat-los/nieuw'
     | '/reminders/$id'
     | '/reminders/nieuw'
     | '/agenda/'
+    | '/laat-los/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
     | '/agenda/$id/'
+    | '/laat-los/$id/'
     | '/reminders/$id/'
   fileRoutesById: FileRoutesById
 }
@@ -219,14 +253,16 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
   JournalRoute: typeof JournalRoute
-  LaatLosRoute: typeof LaatLosRoute
   ProfielRoute: typeof ProfielRoute
   SuggestiesRoute: typeof SuggestiesRoute
   AgendaIdRoute: typeof AgendaIdRouteWithChildren
   AgendaNieuwRoute: typeof AgendaNieuwRoute
+  LaatLosIdRoute: typeof LaatLosIdRouteWithChildren
+  LaatLosNieuwRoute: typeof LaatLosNieuwRoute
   RemindersIdRoute: typeof RemindersIdRouteWithChildren
   RemindersNieuwRoute: typeof RemindersNieuwRoute
   AgendaIndexRoute: typeof AgendaIndexRoute
+  LaatLosIndexRoute: typeof LaatLosIndexRoute
   RemindersIndexRoute: typeof RemindersIndexRoute
 }
 
@@ -244,13 +280,6 @@ declare module '@tanstack/react-router' {
       path: '/profiel'
       fullPath: '/profiel'
       preLoaderRoute: typeof ProfielRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/laat-los': {
-      id: '/laat-los'
-      path: '/laat-los'
-      fullPath: '/laat-los'
-      preLoaderRoute: typeof LaatLosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/journal': {
@@ -281,6 +310,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RemindersIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/laat-los/': {
+      id: '/laat-los/'
+      path: '/laat-los'
+      fullPath: '/laat-los/'
+      preLoaderRoute: typeof LaatLosIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agenda/': {
       id: '/agenda/'
       path: '/agenda'
@@ -300,6 +336,20 @@ declare module '@tanstack/react-router' {
       path: '/reminders/$id'
       fullPath: '/reminders/$id'
       preLoaderRoute: typeof RemindersIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/laat-los/nieuw': {
+      id: '/laat-los/nieuw'
+      path: '/laat-los/nieuw'
+      fullPath: '/laat-los/nieuw'
+      preLoaderRoute: typeof LaatLosNieuwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/laat-los/$id': {
+      id: '/laat-los/$id'
+      path: '/laat-los/$id'
+      fullPath: '/laat-los/$id'
+      preLoaderRoute: typeof LaatLosIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agenda/nieuw': {
@@ -322,6 +372,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reminders/$id/'
       preLoaderRoute: typeof RemindersIdIndexRouteImport
       parentRoute: typeof RemindersIdRoute
+    }
+    '/laat-los/$id/': {
+      id: '/laat-los/$id/'
+      path: '/'
+      fullPath: '/laat-los/$id/'
+      preLoaderRoute: typeof LaatLosIdIndexRouteImport
+      parentRoute: typeof LaatLosIdRoute
     }
     '/agenda/$id/': {
       id: '/agenda/$id/'
@@ -361,6 +418,18 @@ const AgendaIdRouteWithChildren = AgendaIdRoute._addFileChildren(
   AgendaIdRouteChildren,
 )
 
+interface LaatLosIdRouteChildren {
+  LaatLosIdIndexRoute: typeof LaatLosIdIndexRoute
+}
+
+const LaatLosIdRouteChildren: LaatLosIdRouteChildren = {
+  LaatLosIdIndexRoute: LaatLosIdIndexRoute,
+}
+
+const LaatLosIdRouteWithChildren = LaatLosIdRoute._addFileChildren(
+  LaatLosIdRouteChildren,
+)
+
 interface RemindersIdRouteChildren {
   RemindersIdBewerkenRoute: typeof RemindersIdBewerkenRoute
   RemindersIdIndexRoute: typeof RemindersIdIndexRoute
@@ -379,14 +448,16 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
   JournalRoute: JournalRoute,
-  LaatLosRoute: LaatLosRoute,
   ProfielRoute: ProfielRoute,
   SuggestiesRoute: SuggestiesRoute,
   AgendaIdRoute: AgendaIdRouteWithChildren,
   AgendaNieuwRoute: AgendaNieuwRoute,
+  LaatLosIdRoute: LaatLosIdRouteWithChildren,
+  LaatLosNieuwRoute: LaatLosNieuwRoute,
   RemindersIdRoute: RemindersIdRouteWithChildren,
   RemindersNieuwRoute: RemindersNieuwRoute,
   AgendaIndexRoute: AgendaIndexRoute,
+  LaatLosIndexRoute: LaatLosIndexRoute,
   RemindersIndexRoute: RemindersIndexRoute,
 }
 export const routeTree = rootRouteImport
