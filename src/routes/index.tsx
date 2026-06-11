@@ -25,7 +25,7 @@ export const Route = createFileRoute("/")({
 
 type Appt = { id: string; title: string; start_time: string | null; date: string };
 type Reminder = { id: string; title: string; remind_at: string | null };
-type Suggestion = { id: string; title: string | null; content: string | null; suggestion_type: string };
+
 
 function todayISO() {
   const d = new Date();
