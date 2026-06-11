@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/journal")({
   ssr: false,
-  head: () => ({ meta: [{ title: "HoofdRust — Journal" }] }),
+  head: () => ({ meta: [{ title: "HoofdRust — Notities" }] }),
   component: JournalPage,
 });
 
