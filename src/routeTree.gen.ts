@@ -19,6 +19,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
+import { Route as AgendaIdIndexRouteImport } from './routes/agenda.$id.index'
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
 
 const SuggestiesRoute = SuggestiesRouteImport.update({
@@ -71,6 +72,11 @@ const AgendaIdRoute = AgendaIdRouteImport.update({
   path: '/agenda/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgendaIdIndexRoute = AgendaIdIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AgendaIdRoute,
+} as any)
 const AgendaIdBewerkenRoute = AgendaIdBewerkenRouteImport.update({
   id: '/bewerken',
   path: '/bewerken',
@@ -89,6 +95,7 @@ export interface FileRoutesByFullPath {
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
+  '/agenda/$id/': typeof AgendaIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -98,10 +105,10 @@ export interface FileRoutesByTo {
   '/profiel': typeof ProfielRoute
   '/reminders': typeof RemindersRoute
   '/suggesties': typeof SuggestiesRoute
-  '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agenda': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
+  '/agenda/$id': typeof AgendaIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -116,6 +123,7 @@ export interface FileRoutesById {
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
+  '/agenda/$id/': typeof AgendaIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +139,7 @@ export interface FileRouteTypes {
     | '/agenda/nieuw'
     | '/agenda/'
     | '/agenda/$id/bewerken'
+    | '/agenda/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -140,10 +149,10 @@ export interface FileRouteTypes {
     | '/profiel'
     | '/reminders'
     | '/suggesties'
-    | '/agenda/$id'
     | '/agenda/nieuw'
     | '/agenda'
     | '/agenda/$id/bewerken'
+    | '/agenda/$id'
   id:
     | '__root__'
     | '/'
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
     | '/agenda/nieuw'
     | '/agenda/'
     | '/agenda/$id/bewerken'
+    | '/agenda/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -244,6 +254,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgendaIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agenda/$id/': {
+      id: '/agenda/$id/'
+      path: '/'
+      fullPath: '/agenda/$id/'
+      preLoaderRoute: typeof AgendaIdIndexRouteImport
+      parentRoute: typeof AgendaIdRoute
+    }
     '/agenda/$id/bewerken': {
       id: '/agenda/$id/bewerken'
       path: '/bewerken'
@@ -256,10 +273,12 @@ declare module '@tanstack/react-router' {
 
 interface AgendaIdRouteChildren {
   AgendaIdBewerkenRoute: typeof AgendaIdBewerkenRoute
+  AgendaIdIndexRoute: typeof AgendaIdIndexRoute
 }
 
 const AgendaIdRouteChildren: AgendaIdRouteChildren = {
   AgendaIdBewerkenRoute: AgendaIdBewerkenRoute,
+  AgendaIdIndexRoute: AgendaIdIndexRoute,
 }
 
 const AgendaIdRouteWithChildren = AgendaIdRoute._addFileChildren(
@@ -281,13 +300,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
