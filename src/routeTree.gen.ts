@@ -15,8 +15,11 @@ import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as LaatLosRouteImport } from './routes/laat-los'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
+import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
+import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
+import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
 
 const SuggestiesRoute = SuggestiesRouteImport.update({
   id: '/suggesties',
@@ -48,90 +51,123 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgendaRoute = AgendaRouteImport.update({
-  id: '/agenda',
-  path: '/agenda',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgendaIndexRoute = AgendaIndexRouteImport.update({
+  id: '/agenda/',
+  path: '/agenda/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
+  id: '/nieuw',
+  path: '/nieuw',
+  getParentRoute: () => AgendaRoute,
+} as any)
+const AgendaIdRoute = AgendaIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => AgendaRoute,
+} as any)
+const AgendaIdBewerkenRoute = AgendaIdBewerkenRouteImport.update({
+  id: '/bewerken',
+  path: '/bewerken',
+  getParentRoute: () => AgendaIdRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/reminders': typeof RemindersRoute
   '/suggesties': typeof SuggestiesRoute
+  '/agenda/$id': typeof AgendaIdRouteWithChildren
+  '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda/': typeof AgendaIndexRoute
+  '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/reminders': typeof RemindersRoute
   '/suggesties': typeof SuggestiesRoute
+  '/agenda/$id': typeof AgendaIdRouteWithChildren
+  '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda': typeof AgendaIndexRoute
+  '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
   '/profiel': typeof ProfielRoute
   '/reminders': typeof RemindersRoute
   '/suggesties': typeof SuggestiesRoute
+  '/agenda/$id': typeof AgendaIdRouteWithChildren
+  '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda/': typeof AgendaIndexRoute
+  '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
     | '/profiel'
     | '/reminders'
     | '/suggesties'
+    | '/agenda/$id'
+    | '/agenda/nieuw'
+    | '/agenda/'
+    | '/agenda/$id/bewerken'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
     | '/profiel'
     | '/reminders'
     | '/suggesties'
+    | '/agenda/$id'
+    | '/agenda/nieuw'
+    | '/agenda'
+    | '/agenda/$id/bewerken'
   id:
     | '__root__'
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
     | '/profiel'
     | '/reminders'
     | '/suggesties'
+    | '/agenda/$id'
+    | '/agenda/nieuw'
+    | '/agenda/'
+    | '/agenda/$id/bewerken'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AgendaRoute: typeof AgendaRoute
   AuthRoute: typeof AuthRoute
   JournalRoute: typeof JournalRoute
   LaatLosRoute: typeof LaatLosRoute
   ProfielRoute: typeof ProfielRoute
   RemindersRoute: typeof RemindersRoute
   SuggestiesRoute: typeof SuggestiesRoute
+  AgendaIndexRoute: typeof AgendaIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -178,13 +214,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agenda': {
-      id: '/agenda'
-      path: '/agenda'
-      fullPath: '/agenda'
-      preLoaderRoute: typeof AgendaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -192,19 +221,57 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agenda/': {
+      id: '/agenda/'
+      path: '/agenda'
+      fullPath: '/agenda/'
+      preLoaderRoute: typeof AgendaIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda/nieuw': {
+      id: '/agenda/nieuw'
+      path: '/nieuw'
+      fullPath: '/agenda/nieuw'
+      preLoaderRoute: typeof AgendaNieuwRouteImport
+      parentRoute: typeof AgendaRoute
+    }
+    '/agenda/$id': {
+      id: '/agenda/$id'
+      path: '/$id'
+      fullPath: '/agenda/$id'
+      preLoaderRoute: typeof AgendaIdRouteImport
+      parentRoute: typeof AgendaRoute
+    }
+    '/agenda/$id/bewerken': {
+      id: '/agenda/$id/bewerken'
+      path: '/bewerken'
+      fullPath: '/agenda/$id/bewerken'
+      preLoaderRoute: typeof AgendaIdBewerkenRouteImport
+      parentRoute: typeof AgendaIdRoute
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AgendaRoute: AgendaRoute,
   AuthRoute: AuthRoute,
   JournalRoute: JournalRoute,
   LaatLosRoute: LaatLosRoute,
   ProfielRoute: ProfielRoute,
   RemindersRoute: RemindersRoute,
   SuggestiesRoute: SuggestiesRoute,
+  AgendaIndexRoute: AgendaIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
