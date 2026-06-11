@@ -62,14 +62,14 @@ const AgendaIndexRoute = AgendaIndexRouteImport.update({
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
-  id: '/nieuw',
-  path: '/nieuw',
-  getParentRoute: () => AgendaRoute,
+  id: '/agenda/nieuw',
+  path: '/agenda/nieuw',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaIdRoute = AgendaIdRouteImport.update({
-  id: '/$id',
-  path: '/$id',
-  getParentRoute: () => AgendaRoute,
+  id: '/agenda/$id',
+  path: '/agenda/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaIdBewerkenRoute = AgendaIdBewerkenRouteImport.update({
   id: '/bewerken',
@@ -167,6 +167,8 @@ export interface RootRouteChildren {
   ProfielRoute: typeof ProfielRoute
   RemindersRoute: typeof RemindersRoute
   SuggestiesRoute: typeof SuggestiesRoute
+  AgendaIdRoute: typeof AgendaIdRouteWithChildren
+  AgendaNieuwRoute: typeof AgendaNieuwRoute
   AgendaIndexRoute: typeof AgendaIndexRoute
 }
 
@@ -230,17 +232,17 @@ declare module '@tanstack/react-router' {
     }
     '/agenda/nieuw': {
       id: '/agenda/nieuw'
-      path: '/nieuw'
+      path: '/agenda/nieuw'
       fullPath: '/agenda/nieuw'
       preLoaderRoute: typeof AgendaNieuwRouteImport
-      parentRoute: typeof AgendaRoute
+      parentRoute: typeof rootRouteImport
     }
     '/agenda/$id': {
       id: '/agenda/$id'
-      path: '/$id'
+      path: '/agenda/$id'
       fullPath: '/agenda/$id'
       preLoaderRoute: typeof AgendaIdRouteImport
-      parentRoute: typeof AgendaRoute
+      parentRoute: typeof rootRouteImport
     }
     '/agenda/$id/bewerken': {
       id: '/agenda/$id/bewerken'
@@ -252,6 +254,18 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AgendaIdRouteChildren {
+  AgendaIdBewerkenRoute: typeof AgendaIdBewerkenRoute
+}
+
+const AgendaIdRouteChildren: AgendaIdRouteChildren = {
+  AgendaIdBewerkenRoute: AgendaIdBewerkenRoute,
+}
+
+const AgendaIdRouteWithChildren = AgendaIdRoute._addFileChildren(
+  AgendaIdRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
@@ -260,6 +274,8 @@ const rootRouteChildren: RootRouteChildren = {
   ProfielRoute: ProfielRoute,
   RemindersRoute: RemindersRoute,
   SuggestiesRoute: SuggestiesRoute,
+  AgendaIdRoute: AgendaIdRouteWithChildren,
+  AgendaNieuwRoute: AgendaNieuwRoute,
   AgendaIndexRoute: AgendaIndexRoute,
 }
 export const routeTree = rootRouteImport
