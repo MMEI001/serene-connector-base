@@ -231,7 +231,6 @@ function JournalPage() {
             </div>
           )}
         </section>
-      </main>
-    </div>
+    </AppShell>
   );
 }
