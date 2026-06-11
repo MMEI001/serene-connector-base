@@ -29,8 +29,7 @@ type Entry = {
 };
 
 function JournalPage() {
-  const navigate = useNavigate();
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -40,9 +39,6 @@ function JournalPage() {
   const [busy, setBusy] = useState(false);
   const [entries, setEntries] = useState<Entry[]>([]);
 
-  useEffect(() => {
-    if (!loading && !user) navigate({ to: "/auth" });
-  }, [loading, user, navigate]);
 
   const fetchEntries = useCallback(async () => {
     if (!user) return;
