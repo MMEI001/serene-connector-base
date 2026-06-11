@@ -137,33 +137,6 @@ export type Database = {
         }
         Relationships: []
       }
-      journal_entries: {
-        Row: {
-          content: string
-          created_at: string
-          id: string
-          mood: string | null
-          title: string | null
-          user_id: string
-        }
-        Insert: {
-          content: string
-          created_at?: string
-          id?: string
-          mood?: string | null
-          title?: string | null
-          user_id: string
-        }
-        Update: {
-          content?: string
-          created_at?: string
-          id?: string
-          mood?: string | null
-          title?: string | null
-          user_id?: string
-        }
-        Relationships: []
-      }
       let_go_items: {
         Row: {
           action_intent: string | null
@@ -200,29 +173,32 @@ export type Database = {
         }
         Relationships: []
       }
-      mood_logs: {
+      notes: {
         Row: {
+          content: string
           created_at: string
           id: string
-          mood: string | null
-          mood_score: number | null
-          note: string | null
+          status: string
+          title: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
+          content: string
           created_at?: string
           id?: string
-          mood?: string | null
-          mood_score?: number | null
-          note?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
+          content?: string
           created_at?: string
           id?: string
-          mood?: string | null
-          mood_score?: number | null
-          note?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
