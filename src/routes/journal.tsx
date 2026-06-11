@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
-import { Slider } from "@/components/ui/slider";
 
 export const Route = createFileRoute("/journal")({
   ssr: false,
@@ -17,14 +16,10 @@ export const Route = createFileRoute("/journal")({
   component: JournalPage,
 });
 
-const MOODS = ["rustig", "blij", "gespannen", "verdrietig", "neutraal"] as const;
-type Mood = (typeof MOODS)[number];
-
-type Entry = {
+type Note = {
   id: string;
   title: string | null;
   content: string;
-  mood: string | null;
   created_at: string;
 };
 
@@ -33,30 +28,28 @@ function JournalPage() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
-  const [mood, setMood] = useState<Mood>("rustig");
-  const [moodScore, setMoodScore] = useState(5);
-  const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
-  const [entries, setEntries] = useState<Entry[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
 
-
-  const fetchEntries = useCallback(async () => {
+  const fetchNotes = useCallback(async () => {
     if (!user) return;
     const { data, error } = await supabase
-      .from("journal_entries")
-      .select("id, title, content, mood, created_at")
+      .from("notes")
+      .select("id, title, content, created_at")
       .eq("user_id", user.id)
+      .eq("status", "active")
       .order("created_at", { ascending: false });
     if (error) {
-      console.error("[fetch entries]", error);
+      console.error("[fetch notes]", error);
+      toast.error(error.message);
       return;
     }
-    setEntries(data ?? []);
+    setNotes(data ?? []);
   }, [user]);
 
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
+    fetchNotes();
+  }, [fetchNotes]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,32 +60,21 @@ function JournalPage() {
     }
     setBusy(true);
     try {
-      const { error: jErr } = await supabase.from("journal_entries").insert({
+      const { error } = await supabase.from("notes").insert({
         user_id: user.id,
         title: title.trim() || null,
         content: content.trim(),
-        mood,
+        status: "active",
       });
-      if (jErr) throw jErr;
-
-      const { error: mErr } = await supabase.from("mood_logs").insert({
-        user_id: user.id,
-        mood_score: moodScore,
-        mood,
-        note: note.trim() || null,
-      });
-      if (mErr) throw mErr;
+      if (error) throw error;
 
       toast.success("Je notitie is opgeslagen");
       setTitle("");
       setContent("");
-      setMood("rustig");
-      setMoodScore(5);
-      setNote("");
-      await fetchEntries();
+      await fetchNotes();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Opslaan lukte niet";
-      console.error("[journal save]", err);
+      console.error("[note save]", err);
       toast.error(msg);
     } finally {
       setBusy(false);
@@ -103,134 +85,80 @@ function JournalPage() {
     <AppShell>
       <div className="mb-8">
         <h1 className="text-3xl text-foreground">Notities</h1>
+        <p className="mt-2 text-muted-foreground">
+          Adem rustig in en uit. Schrijf wat er in je opkomt.
+        </p>
+      </div>
 
-          <p className="mt-2 text-muted-foreground">
-            Adem rustig in en uit. Schrijf wat er in je opkomt.
-          </p>
-        </div>
+      <Card className="rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="title">Titel (optioneel)</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="rounded-xl"
+              placeholder="Een korte titel"
+            />
+          </div>
 
-        <Card className="rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="title">Titel (optioneel)</Label>
-              <Input
-                id="title"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="rounded-xl"
-                placeholder="Een korte titel"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="content">Je gedachten</Label>
+            <Textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              rows={6}
+              className="rounded-2xl"
+              placeholder="Vandaag voel ik…"
+            />
+          </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="content">Je gedachten</Label>
-              <Textarea
-                id="content"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                rows={6}
-                className="rounded-2xl"
-                placeholder="Vandaag voel ik…"
-              />
-            </div>
+          <Button
+            type="submit"
+            disabled={busy}
+            size="lg"
+            className="w-full rounded-full"
+          >
+            {busy ? "Opslaan…" : "Opslaan"}
+          </Button>
+        </form>
+      </Card>
 
-            <div className="space-y-3">
-              <Label>Hoe voel je je?</Label>
-              <div className="flex flex-wrap gap-2">
-                {MOODS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => setMood(m)}
-                    className={[
-                      "rounded-full px-4 py-1.5 text-sm transition-colors",
-                      mood === m
-                        ? "bg-primary text-primary-foreground shadow-sm"
-                        : "bg-accent/60 text-accent-foreground hover:bg-accent",
-                    ].join(" ")}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-baseline justify-between">
-                <Label>Stemmingscore</Label>
-                <span className="text-sm text-muted-foreground">
-                  {moodScore} / 10
-                </span>
-              </div>
-              <Slider
-                value={[moodScore]}
-                onValueChange={(v) => setMoodScore(v[0] ?? 5)}
-                min={1}
-                max={10}
-                step={1}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="note">Korte toelichting (optioneel)</Label>
-              <Input
-                id="note"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="rounded-xl"
-                placeholder="Iets wat je wilt onthouden"
-              />
-            </div>
-
-            <Button
-              type="submit"
-              disabled={busy}
-              size="lg"
-              className="w-full rounded-full"
-            >
-              {busy ? "Opslaan…" : "Opslaan"}
-            </Button>
-          </form>
-        </Card>
-
-        <section className="mt-10">
-          <h2 className="mb-4 text-lg text-foreground">Jouw notities</h2>
-          {entries.length === 0 ? (
-            <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-              Nog geen notities. Schrijf hierboven je eerste.
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {entries.map((e) => (
-                <Card
-                  key={e.id}
-                  className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm"
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h3 className="text-base text-foreground">
-                      {e.title || "Notitie"}
-                    </h3>
-                    <span className="shrink-0 text-xs text-muted-foreground">
-                      {new Date(e.created_at).toLocaleDateString("nl-NL", {
-                        day: "numeric",
-                        month: "short",
-                        year: "numeric",
-                      })}
-                    </span>
-                  </div>
-                  {e.mood && (
-                    <span className="mt-2 inline-block rounded-full bg-accent px-3 py-0.5 text-xs text-accent-foreground">
-                      {e.mood}
-                    </span>
-                  )}
-                  <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {e.content}
-                  </p>
-                </Card>
-              ))}
-            </div>
-          )}
-        </section>
+      <section className="mt-10">
+        <h2 className="mb-4 text-lg text-foreground">Jouw notities</h2>
+        {notes.length === 0 ? (
+          <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
+            Nog geen notities. Schrijf hierboven je eerste.
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {notes.map((n) => (
+              <Card
+                key={n.id}
+                className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm"
+              >
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-base text-foreground">
+                    {n.title || "Notitie"}
+                  </h3>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(n.created_at).toLocaleDateString("nl-NL", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })}
+                  </span>
+                </div>
+                <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground">
+                  {n.content}
+                </p>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </AppShell>
   );
 }
