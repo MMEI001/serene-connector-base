@@ -17,6 +17,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
 import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
+import { Route as RemindersNieuwRouteImport } from './routes/reminders.nieuw'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
 import { Route as AgendaIdIndexRouteImport } from './routes/agenda.$id.index'
@@ -62,6 +63,11 @@ const AgendaIndexRoute = AgendaIndexRouteImport.update({
   path: '/agenda/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RemindersNieuwRoute = RemindersNieuwRouteImport.update({
+  id: '/reminders/nieuw',
+  path: '/reminders/nieuw',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
   id: '/agenda/nieuw',
   path: '/agenda/nieuw',
@@ -92,6 +98,7 @@ export interface FileRoutesByFullPath {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda': typeof AgendaIndexRoute
   '/reminders': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/reminders/nieuw'
     | '/agenda/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
@@ -149,6 +159,7 @@ export interface FileRouteTypes {
     | '/profiel'
     | '/suggesties'
     | '/agenda/nieuw'
+    | '/reminders/nieuw'
     | '/agenda'
     | '/reminders'
     | '/agenda/$id/bewerken'
@@ -163,6 +174,7 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/reminders/nieuw'
     | '/agenda/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
@@ -178,6 +190,7 @@ export interface RootRouteChildren {
   SuggestiesRoute: typeof SuggestiesRoute
   AgendaIdRoute: typeof AgendaIdRouteWithChildren
   AgendaNieuwRoute: typeof AgendaNieuwRoute
+  RemindersNieuwRoute: typeof RemindersNieuwRoute
   AgendaIndexRoute: typeof AgendaIndexRoute
   RemindersIndexRoute: typeof RemindersIndexRoute
 }
@@ -240,6 +253,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgendaIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/reminders/nieuw': {
+      id: '/reminders/nieuw'
+      path: '/reminders/nieuw'
+      fullPath: '/reminders/nieuw'
+      preLoaderRoute: typeof RemindersNieuwRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agenda/nieuw': {
       id: '/agenda/nieuw'
       path: '/agenda/nieuw'
@@ -294,6 +314,7 @@ const rootRouteChildren: RootRouteChildren = {
   SuggestiesRoute: SuggestiesRoute,
   AgendaIdRoute: AgendaIdRouteWithChildren,
   AgendaNieuwRoute: AgendaNieuwRoute,
+  RemindersNieuwRoute: RemindersNieuwRoute,
   AgendaIndexRoute: AgendaIndexRoute,
   RemindersIndexRoute: RemindersIndexRoute,
 }
