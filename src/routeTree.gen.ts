@@ -9,10 +9,35 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SuggestiesRouteImport } from './routes/suggesties'
+import { Route as RemindersRouteImport } from './routes/reminders'
+import { Route as ProfielRouteImport } from './routes/profiel'
+import { Route as LaatLosRouteImport } from './routes/laat-los'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SuggestiesRoute = SuggestiesRouteImport.update({
+  id: '/suggesties',
+  path: '/suggesties',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RemindersRoute = RemindersRouteImport.update({
+  id: '/reminders',
+  path: '/reminders',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProfielRoute = ProfielRouteImport.update({
+  id: '/profiel',
+  path: '/profiel',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LaatLosRoute = LaatLosRouteImport.update({
+  id: '/laat-los',
+  path: '/laat-los',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const JournalRoute = JournalRouteImport.update({
   id: '/journal',
   path: '/journal',
@@ -23,6 +48,11 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgendaRoute = AgendaRouteImport.update({
+  id: '/agenda',
+  path: '/agenda',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,36 +61,109 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
+  '/laat-los': typeof LaatLosRoute
+  '/profiel': typeof ProfielRoute
+  '/reminders': typeof RemindersRoute
+  '/suggesties': typeof SuggestiesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
+  '/laat-los': typeof LaatLosRoute
+  '/profiel': typeof ProfielRoute
+  '/reminders': typeof RemindersRoute
+  '/suggesties': typeof SuggestiesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agenda': typeof AgendaRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
+  '/laat-los': typeof LaatLosRoute
+  '/profiel': typeof ProfielRoute
+  '/reminders': typeof RemindersRoute
+  '/suggesties': typeof SuggestiesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/journal'
+  fullPaths:
+    | '/'
+    | '/agenda'
+    | '/auth'
+    | '/journal'
+    | '/laat-los'
+    | '/profiel'
+    | '/reminders'
+    | '/suggesties'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/journal'
-  id: '__root__' | '/' | '/auth' | '/journal'
+  to:
+    | '/'
+    | '/agenda'
+    | '/auth'
+    | '/journal'
+    | '/laat-los'
+    | '/profiel'
+    | '/reminders'
+    | '/suggesties'
+  id:
+    | '__root__'
+    | '/'
+    | '/agenda'
+    | '/auth'
+    | '/journal'
+    | '/laat-los'
+    | '/profiel'
+    | '/reminders'
+    | '/suggesties'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgendaRoute: typeof AgendaRoute
   AuthRoute: typeof AuthRoute
   JournalRoute: typeof JournalRoute
+  LaatLosRoute: typeof LaatLosRoute
+  ProfielRoute: typeof ProfielRoute
+  RemindersRoute: typeof RemindersRoute
+  SuggestiesRoute: typeof SuggestiesRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/suggesties': {
+      id: '/suggesties'
+      path: '/suggesties'
+      fullPath: '/suggesties'
+      preLoaderRoute: typeof SuggestiesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reminders': {
+      id: '/reminders'
+      path: '/reminders'
+      fullPath: '/reminders'
+      preLoaderRoute: typeof RemindersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/profiel': {
+      id: '/profiel'
+      path: '/profiel'
+      fullPath: '/profiel'
+      preLoaderRoute: typeof ProfielRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/laat-los': {
+      id: '/laat-los'
+      path: '/laat-los'
+      fullPath: '/laat-los'
+      preLoaderRoute: typeof LaatLosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/journal': {
       id: '/journal'
       path: '/journal'
@@ -75,6 +178,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agenda': {
+      id: '/agenda'
+      path: '/agenda'
+      fullPath: '/agenda'
+      preLoaderRoute: typeof AgendaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,9 +197,24 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgendaRoute: AgendaRoute,
   AuthRoute: AuthRoute,
   JournalRoute: JournalRoute,
+  LaatLosRoute: LaatLosRoute,
+  ProfielRoute: ProfielRoute,
+  RemindersRoute: RemindersRoute,
+  SuggestiesRoute: SuggestiesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
