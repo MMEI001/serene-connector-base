@@ -143,26 +143,17 @@ function Dashboard() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-4 text-lg text-foreground">Voorstellen</h2>
-        {suggestions.length === 0 ? (
-          <EmptyState>Geen openstaande voorstellen.</EmptyState>
-        ) : (
+      {suggestions.length > 0 && (
+        <section>
+          <h2 className="mb-4 text-lg text-foreground">Voorstellen</h2>
           <div className="space-y-3">
             {suggestions.map((s) => (
-              <Card key={s.id} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
-                <span className="inline-block rounded-full bg-accent px-3 py-0.5 text-xs text-accent-foreground">
-                  {s.suggestion_type}
-                </span>
-                {s.title && (
-                  <h3 className="mt-2 text-base text-foreground">{s.title}</h3>
-                )}
-                {s.content && (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {s.content}
-                  </p>
-                )}
-              </Card>
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                userId={user!.id}
+                onChanged={loadSuggestions}
+              />
             ))}
             <div className="pt-1 text-right">
               <Link to="/suggesties" className="text-sm text-primary hover:underline">
@@ -170,8 +161,8 @@ function Dashboard() {
               </Link>
             </div>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </AppShell>
   );
 }
