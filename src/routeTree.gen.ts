@@ -15,8 +15,8 @@ import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as LaatLosRouteImport } from './routes/laat-los'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AgendaRouteImport } from './routes/agenda'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
@@ -51,14 +51,14 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AgendaRoute = AgendaRouteImport.update({
-  id: '/agenda',
-  path: '/agenda',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendaIndexRoute = AgendaIndexRouteImport.update({
+  id: '/agenda/',
+  path: '/agenda/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
@@ -79,7 +79,6 @@ const AgendaIdBewerkenRoute = AgendaIdBewerkenRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRouteWithChildren
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
@@ -88,11 +87,11 @@ export interface FileRoutesByFullPath {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda/': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRouteWithChildren
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
@@ -101,12 +100,12 @@ export interface FileRoutesByTo {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/agenda': typeof AgendaRouteWithChildren
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/laat-los': typeof LaatLosRoute
@@ -115,13 +114,13 @@ export interface FileRoutesById {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agenda/': typeof AgendaIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
@@ -130,11 +129,11 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/agenda/'
     | '/agenda/$id/bewerken'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
@@ -143,11 +142,11 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/agenda'
     | '/agenda/$id/bewerken'
   id:
     | '__root__'
     | '/'
-    | '/agenda'
     | '/auth'
     | '/journal'
     | '/laat-los'
@@ -156,18 +155,19 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/agenda/'
     | '/agenda/$id/bewerken'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AgendaRoute: typeof AgendaRouteWithChildren
   AuthRoute: typeof AuthRoute
   JournalRoute: typeof JournalRoute
   LaatLosRoute: typeof LaatLosRoute
   ProfielRoute: typeof ProfielRoute
   RemindersRoute: typeof RemindersRoute
   SuggestiesRoute: typeof SuggestiesRoute
+  AgendaIndexRoute: typeof AgendaIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -214,18 +214,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/agenda': {
-      id: '/agenda'
-      path: '/agenda'
-      fullPath: '/agenda'
-      preLoaderRoute: typeof AgendaRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agenda/': {
+      id: '/agenda/'
+      path: '/agenda'
+      fullPath: '/agenda/'
+      preLoaderRoute: typeof AgendaIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agenda/nieuw': {
@@ -252,40 +252,15 @@ declare module '@tanstack/react-router' {
   }
 }
 
-interface AgendaIdRouteChildren {
-  AgendaIdBewerkenRoute: typeof AgendaIdBewerkenRoute
-}
-
-const AgendaIdRouteChildren: AgendaIdRouteChildren = {
-  AgendaIdBewerkenRoute: AgendaIdBewerkenRoute,
-}
-
-const AgendaIdRouteWithChildren = AgendaIdRoute._addFileChildren(
-  AgendaIdRouteChildren,
-)
-
-interface AgendaRouteChildren {
-  AgendaIdRoute: typeof AgendaIdRouteWithChildren
-  AgendaNieuwRoute: typeof AgendaNieuwRoute
-}
-
-const AgendaRouteChildren: AgendaRouteChildren = {
-  AgendaIdRoute: AgendaIdRouteWithChildren,
-  AgendaNieuwRoute: AgendaNieuwRoute,
-}
-
-const AgendaRouteWithChildren =
-  AgendaRoute._addFileChildren(AgendaRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AgendaRoute: AgendaRouteWithChildren,
   AuthRoute: AuthRoute,
   JournalRoute: JournalRoute,
   LaatLosRoute: LaatLosRoute,
   ProfielRoute: ProfielRoute,
   RemindersRoute: RemindersRoute,
   SuggestiesRoute: SuggestiesRoute,
+  AgendaIndexRoute: AgendaIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

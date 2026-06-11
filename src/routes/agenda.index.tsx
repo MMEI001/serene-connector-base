@@ -12,7 +12,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-export const Route = createFileRoute("/agenda")({
+export const Route = createFileRoute("/agenda/")({
   ssr: false,
   head: () => ({ meta: [{ title: "HoofdRust — Agenda" }] }),
   component: AgendaPage,
