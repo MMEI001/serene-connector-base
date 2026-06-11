@@ -12,46 +12,79 @@ export const Route = createFileRoute("/onboarding")({
   component: OnboardingPage,
 });
 
+type MultiKey =
+  | "primary_goal"
+  | "main_difficulty"
+  | "hard_moment_of_day"
+  | "preferred_help_area";
+type SingleKey =
+  | "support_style"
+  | "overstimulation_level"
+  | "suggestion_count_preference";
+
 type Answers = {
-  primary_goal: string | null;
+  primary_goal: string[];
+  main_difficulty: string[];
+  hard_moment_of_day: string[];
+  preferred_help_area: string[];
   support_style: string | null;
-  main_difficulty: string | null;
   overstimulation_level: string | null;
-  hard_moment_of_day: string | null;
   suggestion_count_preference: string | null;
 };
 
-const steps: {
-  key: keyof Answers;
-  question: string;
-  options: string[];
-}[] = [
+const emptyAnswers: Answers = {
+  primary_goal: [],
+  main_difficulty: [],
+  hard_moment_of_day: [],
+  preferred_help_area: [],
+  support_style: null,
+  overstimulation_level: null,
+  suggestion_count_preference: null,
+};
+
+type Step =
+  | { kind: "multi"; key: MultiKey; question: string; options: string[] }
+  | { kind: "single"; key: SingleKey; question: string; options: string[] };
+
+const steps: Step[] = [
   {
+    kind: "multi",
     key: "primary_goal",
     question: "Wat zou HoofdRust voor jou mogen doen?",
     options: ["Meer overzicht", "Minder in mijn hoofd", "Beter plannen", "Rust vinden", "Anders"],
   },
   {
+    kind: "single",
     key: "support_style",
     question: "Hoe wil je dat ik je help?",
     options: ["Rustig en zacht", "Kort en duidelijk", "Meedenkend", "Zo min mogelijk"],
   },
   {
+    kind: "multi",
     key: "main_difficulty",
     question: "Waar loop je het meest tegenaan?",
     options: ["Te veel tegelijk", "Vergeten van afspraken", "Niet kunnen loslaten", "Beginnen aan dingen", "Anders"],
   },
   {
+    kind: "single",
     key: "overstimulation_level",
     question: "Hoe snel raak je overprikkeld?",
     options: ["Bijna nooit", "Soms", "Vaak", "Heel vaak"],
   },
   {
+    kind: "multi",
     key: "hard_moment_of_day",
     question: "Welk moment van de dag is voor jou het lastigst?",
     options: ["Ochtend", "Middag", "Avond", "Wisselt", "Geen specifiek moment"],
   },
   {
+    kind: "multi",
+    key: "preferred_help_area",
+    question: "Waar wil je hulp bij?",
+    options: ["Plannen", "Reminders", "Loslaten", "Notities", "Alles"],
+  },
+  {
+    kind: "single",
     key: "suggestion_count_preference",
     question: "Hoeveel voorstellen wil je per keer zien?",
     options: ["Eén tegelijk", "Twee of drie", "Maakt me niet uit"],
@@ -61,15 +94,8 @@ const steps: {
 function OnboardingPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const [stepIndex, setStepIndex] = useState(-1); // -1 = welcome, steps.length = done
-  const [answers, setAnswers] = useState<Answers>({
-    primary_goal: null,
-    support_style: null,
-    main_difficulty: null,
-    overstimulation_level: null,
-    hard_moment_of_day: null,
-    suggestion_count_preference: null,
-  });
+  const [stepIndex, setStepIndex] = useState(-1);
+  const [answers, setAnswers] = useState<Answers>(emptyAnswers);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -91,23 +117,42 @@ function OnboardingPage() {
     setStepIndex(steps.length);
   }
 
-  async function handleSkip() {
-    await saveAndFinish({
-      primary_goal: null,
-      support_style: null,
-      main_difficulty: null,
-      overstimulation_level: null,
-      hard_moment_of_day: null,
-      suggestion_count_preference: null,
+  async function handleSkipAll() {
+    if (!user || saving) return;
+    setSaving(true);
+    const { error } = await supabase
+      .from("user_profiles")
+      .insert({ user_id: user.id });
+    setSaving(false);
+    if (error) {
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setStepIndex(steps.length);
+  }
+
+  function goNext() {
+    if (stepIndex === steps.length - 1) {
+      void saveAndFinish(answers);
+    } else {
+      setStepIndex(stepIndex + 1);
+    }
+  }
+
+  function toggleMulti(key: MultiKey, value: string) {
+    setAnswers((prev) => {
+      const current = prev[key];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [key]: next };
     });
   }
 
-  function handlePick(value: string) {
-    const step = steps[stepIndex];
-    const next = { ...answers, [step.key]: value };
-    setAnswers(next);
+  function pickSingle(key: SingleKey, value: string) {
+    setAnswers((prev) => ({ ...prev, [key]: value }));
     if (stepIndex === steps.length - 1) {
-      void saveAndFinish(next);
+      void saveAndFinish({ ...answers, [key]: value });
     } else {
       setStepIndex(stepIndex + 1);
     }
@@ -120,6 +165,10 @@ function OnboardingPage() {
       </div>
     );
   }
+
+  const current = stepIndex >= 0 && stepIndex < steps.length ? steps[stepIndex] : null;
+  const canContinue =
+    current?.kind === "multi" ? answers[current.key].length > 0 : true;
 
   return (
     <div className="min-h-screen bg-background">
@@ -141,7 +190,7 @@ function OnboardingPage() {
             <div className="mt-4">
               <button
                 type="button"
-                onClick={handleSkip}
+                onClick={handleSkipAll}
                 className="text-sm text-muted-foreground underline-offset-4 hover:underline"
               >
                 Overslaan
@@ -150,31 +199,61 @@ function OnboardingPage() {
           </div>
         )}
 
-        {stepIndex >= 0 && stepIndex < steps.length && (
+        {current && (
           <div className="m-auto w-full">
             <p className="text-center text-xs uppercase tracking-wide text-muted-foreground">
               Stap {stepIndex + 1} van {steps.length}
             </p>
             <h2 className="mt-4 text-center text-2xl text-foreground">
-              {steps[stepIndex].question}
+              {current.question}
             </h2>
+            {current.kind === "multi" && (
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                Meerdere antwoorden mogelijk
+              </p>
+            )}
+
             <div className="mt-8 space-y-3">
-              {steps[stepIndex].options.map((opt) => {
-                const selected = answers[steps[stepIndex].key] === opt;
+              {current.options.map((opt) => {
+                const selected =
+                  current.kind === "multi"
+                    ? answers[current.key].includes(opt)
+                    : answers[current.key] === opt;
                 return (
                   <Card
                     key={opt}
-                    onClick={() => handlePick(opt)}
+                    onClick={() =>
+                      current.kind === "multi"
+                        ? toggleMulti(current.key, opt)
+                        : pickSingle(current.key, opt)
+                    }
                     className={`cursor-pointer rounded-2xl border-border/60 bg-card/80 p-5 text-base shadow-sm transition-colors hover:bg-card ${
-                      selected ? "border-primary" : ""
+                      selected ? "border-primary bg-primary/5" : ""
                     }`}
                   >
-                    {opt}
+                    <div className="flex items-center justify-between">
+                      <span>{opt}</span>
+                      {selected && (
+                        <span className="text-xs text-primary">✓</span>
+                      )}
+                    </div>
                   </Card>
                 );
               })}
             </div>
-            <div className="mt-8 flex items-center justify-between">
+
+            {current.kind === "multi" && (
+              <Button
+                size="lg"
+                disabled={!canContinue || saving}
+                onClick={goNext}
+                className="mt-6 w-full rounded-full"
+              >
+                {stepIndex === steps.length - 1 ? "Klaar" : "Volgende"}
+              </Button>
+            )}
+
+            <div className="mt-6 flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => (stepIndex === 0 ? setStepIndex(-1) : setStepIndex(stepIndex - 1))}
@@ -184,7 +263,7 @@ function OnboardingPage() {
               </button>
               <button
                 type="button"
-                onClick={handleSkip}
+                onClick={handleSkipAll}
                 disabled={saving}
                 className="text-sm text-muted-foreground underline-offset-4 hover:underline"
               >

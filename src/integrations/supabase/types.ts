@@ -290,13 +290,13 @@ export type Database = {
       user_profiles: {
         Row: {
           created_at: string
-          hard_moment_of_day: string | null
+          hard_moment_of_day: string[] | null
           id: string
-          main_difficulty: string | null
+          main_difficulty: string[] | null
           overstimulation_level: string | null
           planning_style: string | null
-          preferred_help_area: string | null
-          primary_goal: string | null
+          preferred_help_area: string[] | null
+          primary_goal: string[] | null
           reminder_style: string | null
           suggestion_count_preference: string | null
           support_style: string | null
@@ -305,13 +305,13 @@ export type Database = {
         }
         Insert: {
           created_at?: string
-          hard_moment_of_day?: string | null
+          hard_moment_of_day?: string[] | null
           id?: string
-          main_difficulty?: string | null
+          main_difficulty?: string[] | null
           overstimulation_level?: string | null
           planning_style?: string | null
-          preferred_help_area?: string | null
-          primary_goal?: string | null
+          preferred_help_area?: string[] | null
+          primary_goal?: string[] | null
           reminder_style?: string | null
           suggestion_count_preference?: string | null
           support_style?: string | null
@@ -320,13 +320,13 @@ export type Database = {
         }
         Update: {
           created_at?: string
-          hard_moment_of_day?: string | null
+          hard_moment_of_day?: string[] | null
           id?: string
-          main_difficulty?: string | null
+          main_difficulty?: string[] | null
           overstimulation_level?: string | null
           planning_style?: string | null
-          preferred_help_area?: string | null
-          primary_goal?: string | null
+          preferred_help_area?: string[] | null
+          primary_goal?: string[] | null
           reminder_style?: string | null
           suggestion_count_preference?: string | null
           support_style?: string | null
