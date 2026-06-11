@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -6,6 +6,7 @@ import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -24,7 +25,7 @@ export const Route = createFileRoute("/")({
 
 type Appt = { id: string; title: string; start_time: string | null; date: string };
 type Reminder = { id: string; title: string; remind_at: string | null };
-type Suggestion = { id: string; title: string | null; content: string | null; suggestion_type: string };
+
 
 function todayISO() {
   const d = new Date();
@@ -41,13 +42,25 @@ function Dashboard() {
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
+  const loadSuggestions = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("ai_suggestions")
+      .select("id, title, content, suggestion_type, proposed_date, proposed_time")
+      .eq("user_id", user.id)
+      .eq("status", "pending")
+      .order("created_at", { ascending: false })
+      .limit(3);
+    setSuggestions(data ?? []);
+  }, [user]);
+
   useEffect(() => {
     if (!user) return;
     const today = todayISO();
     const startOfDay = `${today}T00:00:00`;
     const endOfDay = `${today}T23:59:59`;
     (async () => {
-      const [profile, a, r, s] = await Promise.all([
+      const [profile, a, r] = await Promise.all([
         supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
         supabase
           .from("appointments")
@@ -62,20 +75,13 @@ function Dashboard() {
           .eq("status", "active")
           .or(`remind_at.is.null,and(remind_at.gte.${startOfDay},remind_at.lte.${endOfDay})`)
           .order("remind_at", { ascending: true, nullsFirst: true }),
-        supabase
-          .from("ai_suggestions")
-          .select("id, title, content, suggestion_type")
-          .eq("user_id", user.id)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false })
-          .limit(3),
       ]);
       setDisplayName(profile.data?.display_name ?? "");
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
-      setSuggestions(s.data ?? []);
+      void loadSuggestions();
     })();
-  }, [user]);
+  }, [user, loadSuggestions]);
 
   return (
     <AppShell>
@@ -137,26 +143,17 @@ function Dashboard() {
         )}
       </section>
 
-      <section>
-        <h2 className="mb-4 text-lg text-foreground">Voorstellen</h2>
-        {suggestions.length === 0 ? (
-          <EmptyState>Geen openstaande voorstellen.</EmptyState>
-        ) : (
+      {suggestions.length > 0 && (
+        <section>
+          <h2 className="mb-4 text-lg text-foreground">Voorstellen</h2>
           <div className="space-y-3">
             {suggestions.map((s) => (
-              <Card key={s.id} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
-                <span className="inline-block rounded-full bg-accent px-3 py-0.5 text-xs text-accent-foreground">
-                  {s.suggestion_type}
-                </span>
-                {s.title && (
-                  <h3 className="mt-2 text-base text-foreground">{s.title}</h3>
-                )}
-                {s.content && (
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
-                    {s.content}
-                  </p>
-                )}
-              </Card>
+              <SuggestionCard
+                key={s.id}
+                suggestion={s}
+                userId={user!.id}
+                onChanged={loadSuggestions}
+              />
             ))}
             <div className="pt-1 text-right">
               <Link to="/suggesties" className="text-sm text-primary hover:underline">
@@ -164,8 +161,8 @@ function Dashboard() {
               </Link>
             </div>
           </div>
-        )}
-      </section>
+        </section>
+      )}
     </AppShell>
   );
 }
