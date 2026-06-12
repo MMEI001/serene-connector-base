@@ -256,6 +256,24 @@ function ProfilePage() {
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <h2 className="text-base text-foreground">Stem</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <Label htmlFor="voice-toggle" className="text-sm text-foreground">
+            Laat HoofdRust voorlezen
+          </Label>
+          <Switch
+            id="voice-toggle"
+            checked={voiceEnabled}
+            disabled={loading || voiceSaving}
+            onCheckedChange={handleVoiceToggle}
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          De app leest belangrijke meldingen rustig voor.
+        </p>
+      </Card>
+
+      <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
         <h2 className="text-base text-foreground">Account</h2>
         <Button
           variant="outline"
