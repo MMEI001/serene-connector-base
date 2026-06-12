@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
+import { speakText } from "@/lib/speak";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -61,11 +62,13 @@ function Dashboard() {
         note: "Ik heb dit bewaard als voorstel voor een notitie.",
         let_go: "Ik heb dit bewaard onder je voorstellen om los te laten.",
       };
-      let msg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      const baseMsg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      let msg = baseMsg;
       if (result.confidence === "low") {
         msg += " Bekijk het voorstel even, ik wist het niet helemaal zeker.";
       }
       toast.success(msg);
+      void speakText(baseMsg);
       setAiText("");
       void loadSuggestions();
     } catch {
@@ -113,6 +116,10 @@ function Dashboard() {
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
       void loadSuggestions();
+      if (typeof window !== "undefined" && !sessionStorage.getItem("hr_welcomed")) {
+        sessionStorage.setItem("hr_welcomed", "1");
+        void speakText("Welkom terug. Ik wens je een rustige dag.");
+      }
     })();
   }, [user, loadSuggestions]);
 

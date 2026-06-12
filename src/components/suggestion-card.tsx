@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Calendar, Bell, FileText, Leaf } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { speakText } from "@/lib/speak";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -141,6 +142,7 @@ export function SuggestionCard({
         return;
       }
       toast.success(successMsg);
+      void speakText(successMsg);
       onChanged();
     } finally {
       setBusy(false);

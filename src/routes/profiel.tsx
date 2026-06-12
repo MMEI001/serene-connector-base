@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { speakText, setVoicePreferenceCache } from "@/lib/speak";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
@@ -87,6 +89,8 @@ function ProfilePage() {
   const [prefs, setPrefs] = useState<Prefs>(empty);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceSaving, setVoiceSaving] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -94,26 +98,51 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
       if (data) {
+        const d = data as typeof data & { voice_enabled?: boolean | null };
         setPrefs({
-          primary_goal: data.primary_goal ?? [],
-          main_difficulty: data.main_difficulty ?? [],
-          hard_moment_of_day: data.hard_moment_of_day ?? [],
-          preferred_help_area: data.preferred_help_area ?? [],
-          support_style: data.support_style ?? null,
-          overstimulation_level: data.overstimulation_level ?? null,
-          suggestion_count_preference: data.suggestion_count_preference ?? null,
-          reminder_style: data.reminder_style ?? null,
-          planning_style: data.planning_style ?? null,
+          primary_goal: d.primary_goal ?? [],
+          main_difficulty: d.main_difficulty ?? [],
+          hard_moment_of_day: d.hard_moment_of_day ?? [],
+          preferred_help_area: d.preferred_help_area ?? [],
+          support_style: d.support_style ?? null,
+          overstimulation_level: d.overstimulation_level ?? null,
+          suggestion_count_preference: d.suggestion_count_preference ?? null,
+          reminder_style: d.reminder_style ?? null,
+          planning_style: d.planning_style ?? null,
         });
+        const v = Boolean(d.voice_enabled);
+        setVoiceEnabled(v);
+        setVoicePreferenceCache(v);
       }
       setLoading(false);
     })();
   }, [user]);
+
+  async function handleVoiceToggle(next: boolean) {
+    if (!user || voiceSaving) return;
+    setVoiceSaving(true);
+    const previous = voiceEnabled;
+    setVoiceEnabled(next);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ voice_enabled: next } as never)
+      .eq("user_id", user.id);
+    setVoiceSaving(false);
+    if (error) {
+      setVoiceEnabled(previous);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setVoicePreferenceCache(next);
+    if (next) {
+      void speakText("Fijn dat je naar me wilt luisteren.", { force: true });
+    }
+  }
 
   function toggleMulti(key: MultiField["key"], value: string) {
     setPrefs((p) => {
@@ -224,6 +253,24 @@ function ProfilePage() {
         >
           {saving ? "Bezig met opslaan…" : "Wijzigingen opslaan"}
         </Button>
+      </Card>
+
+      <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <h2 className="text-base text-foreground">Stem</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <Label htmlFor="voice-toggle" className="text-sm text-foreground">
+            Laat HoofdRust voorlezen
+          </Label>
+          <Switch
+            id="voice-toggle"
+            checked={voiceEnabled}
+            disabled={loading || voiceSaving}
+            onCheckedChange={handleVoiceToggle}
+          />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          De app leest belangrijke meldingen rustig voor.
+        </p>
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
