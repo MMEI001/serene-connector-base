@@ -132,6 +132,31 @@ function Dashboard() {
       </section>
 
       <section className="mb-10">
+        <Card className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
+          <Textarea
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            placeholder="Wat speelt er in je hoofd? Typ het hier."
+            rows={3}
+            disabled={aiBusy}
+            className="resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0"
+          />
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Ik bewaar het zorgvuldig en doe niets zonder jouw bevestiging.
+            </p>
+            <Button
+              onClick={handleClassify}
+              disabled={aiBusy || !aiText.trim()}
+              className="rounded-full px-6"
+            >
+              {aiBusy ? "Even verwerken…" : "Verwerken"}
+            </Button>
+          </div>
+        </Card>
+      </section>
+
+      <section className="mb-10">
         <h2 className="mb-4 text-lg text-foreground">Vandaag op je agenda</h2>
         {appts.length === 0 ? (
           <EmptyState>Geen afspraken vandaag.</EmptyState>
