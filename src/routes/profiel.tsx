@@ -16,7 +16,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { speakText, setVoicePreferenceCache } from "@/lib/speak";
+import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
+
+const VOICE_OPTIONS = [
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend" },
+  { id: "onwK4e9ZLuTAKqWW03F0", name: "Daniel", desc: "neutraal en rustig" },
+];
+const SAMPLE_TEXT = "Hallo, ik ben er voor je.";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
@@ -91,6 +100,7 @@ function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
+  const [voiceId, setVoiceId] = useState<string>(DEFAULT_VOICE_ID);
 
   useEffect(() => {
     if (!user) return;
@@ -98,12 +108,12 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled" as "*",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
       if (data) {
-        const d = data as typeof data & { voice_enabled?: boolean | null };
+        const d = data as typeof data & { voice_enabled?: boolean | null; voice_id?: string | null };
         setPrefs({
           primary_goal: d.primary_goal ?? [],
           main_difficulty: d.main_difficulty ?? [],
@@ -118,6 +128,9 @@ function ProfilePage() {
         const v = Boolean(d.voice_enabled);
         setVoiceEnabled(v);
         setVoicePreferenceCache(v);
+        const vid = d.voice_id || DEFAULT_VOICE_ID;
+        setVoiceId(vid);
+        setVoiceIdCache(vid);
       }
       setLoading(false);
     })();
@@ -143,6 +156,27 @@ function ProfilePage() {
       void speakText("Fijn dat je naar me wilt luisteren.", { force: true });
     }
   }
+
+  async function handleVoiceChange(nextVoiceId: string) {
+    if (!user || voiceSaving || nextVoiceId === voiceId) return;
+    const previous = voiceId;
+    setVoiceId(nextVoiceId);
+    setVoiceSaving(true);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ voice_id: nextVoiceId } as never)
+      .eq("user_id", user.id);
+    setVoiceSaving(false);
+    if (error) {
+      setVoiceId(previous);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setVoiceIdCache(nextVoiceId);
+    toast.success("Stem opgeslagen.");
+  }
+
+
 
   function toggleMulti(key: MultiField["key"], value: string) {
     setPrefs((p) => {
@@ -271,6 +305,46 @@ function ProfilePage() {
         <p className="mt-2 text-xs text-muted-foreground">
           De app leest belangrijke meldingen rustig voor.
         </p>
+
+        {voiceEnabled && (
+          <div className="mt-6 space-y-3">
+            <Label className="text-sm text-foreground">Welke stem?</Label>
+            <div className="space-y-2">
+              {VOICE_OPTIONS.map((v) => {
+                const selected = voiceId === v.id;
+                return (
+                  <div
+                    key={v.id}
+                    className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 bg-background"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceChange(v.id)}
+                      disabled={voiceSaving}
+                      className="flex-1 text-left"
+                    >
+                      <div className="text-sm text-foreground">{v.name}</div>
+                      <div className="text-xs text-muted-foreground">{v.desc}</div>
+                    </button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => speakText(SAMPLE_TEXT, { force: true, voiceId: v.id })}
+                    >
+                      Beluister
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">

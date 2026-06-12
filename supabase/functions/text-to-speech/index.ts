@@ -8,7 +8,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const VOICE_ID = "XrExE9yKIg1WjnnlVkGX"; // Matilda — calm, warm
+const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+const ALLOWED_VOICE_IDS = new Set([
+  "XB0fDUnXU5powFXDhCwa", // Charlotte
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice
+  "pFZP5JQG7iQjIQuC4Bku", // Lily
+  "nPczCjzI2devNBz1zQrb", // Brian
+  "onwK4e9ZLuTAKqWW03F0", // Daniel
+]);
 const MODEL_ID = "eleven_multilingual_v2";
 
 Deno.serve(async (req) => {
@@ -28,7 +35,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { text } = await req.json();
+    const body = await req.json();
+    const text = body?.text;
+    const requestedVoiceId = typeof body?.voice_id === "string" ? body.voice_id : "";
     if (!text || typeof text !== "string") {
       return new Response(
         JSON.stringify({ error: "text is verplicht" }),
@@ -39,7 +48,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`;
+    const voiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
+      ? requestedVoiceId
+      : DEFAULT_VOICE_ID;
+
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
 
     const resp = await fetch(url, {
       method: "POST",

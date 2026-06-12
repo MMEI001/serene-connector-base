@@ -1,38 +1,56 @@
 import { supabase } from "@/integrations/supabase/client";
 
+export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+
 let cachedEnabled: boolean | null = null;
+let cachedVoiceId: string | null = null;
 let currentAudio: HTMLAudioElement | null = null;
 
 export function resetVoicePreferenceCache() {
   cachedEnabled = null;
+  cachedVoiceId = null;
 }
 
 export function setVoicePreferenceCache(enabled: boolean) {
   cachedEnabled = enabled;
 }
 
-async function getVoiceEnabled(): Promise<boolean> {
-  if (cachedEnabled !== null) return cachedEnabled;
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
-  if (!user) return false;
-  const { data } = await supabase
-    .from("user_profiles")
-    .select("voice_enabled")
-    .eq("user_id", user.id)
-    .maybeSingle();
-  // voice_enabled column may not yet be in generated types
-  const enabled = Boolean((data as { voice_enabled?: boolean } | null)?.voice_enabled);
-  cachedEnabled = enabled;
-  return enabled;
+export function setVoiceIdCache(voiceId: string) {
+  cachedVoiceId = voiceId;
 }
 
-export async function speakText(text: string, opts?: { force?: boolean }): Promise<void> {
+async function loadPrefs(): Promise<{ enabled: boolean; voiceId: string }> {
+  if (cachedEnabled !== null && cachedVoiceId !== null) {
+    return { enabled: cachedEnabled, voiceId: cachedVoiceId };
+  }
+  const { data: userData } = await supabase.auth.getUser();
+  const user = userData.user;
+  if (!user) return { enabled: false, voiceId: DEFAULT_VOICE_ID };
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("voice_enabled, voice_id" as "*")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const row = data as { voice_enabled?: boolean; voice_id?: string } | null;
+  const enabled = Boolean(row?.voice_enabled);
+  const voiceId = row?.voice_id || DEFAULT_VOICE_ID;
+  cachedEnabled = enabled;
+  cachedVoiceId = voiceId;
+  return { enabled, voiceId };
+}
+
+export async function speakText(
+  text: string,
+  opts?: { force?: boolean; voiceId?: string },
+): Promise<void> {
   try {
     if (!text || !text.trim()) return;
-    if (!opts?.force) {
-      const enabled = await getVoiceEnabled();
-      if (!enabled) return;
+
+    let voiceId = opts?.voiceId ?? DEFAULT_VOICE_ID;
+    if (!opts?.voiceId) {
+      const prefs = await loadPrefs();
+      if (!opts?.force && !prefs.enabled) return;
+      voiceId = prefs.voiceId;
     }
 
     const SUPABASE_URL =
@@ -53,7 +71,7 @@ export async function speakText(text: string, opts?: { force?: boolean }): Promi
         apikey: ANON,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, voice_id: voiceId }),
     });
     if (!res.ok) {
       console.warn("[speakText] edge function returned", res.status);
@@ -75,7 +93,6 @@ export async function speakText(text: string, opts?: { force?: boolean }): Promi
     try {
       await audio.play();
     } catch (err) {
-      // Autoplay can be blocked (esp. iOS Safari) when not triggered by user gesture
       console.warn("[speakText] playback blocked", err);
     }
   } catch (err) {
