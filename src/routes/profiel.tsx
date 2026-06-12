@@ -16,7 +16,16 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import { speakText, setVoicePreferenceCache } from "@/lib/speak";
+import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
+
+const VOICE_OPTIONS = [
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend" },
+  { id: "onwK4e9ZLuTAKqWW03F0", name: "Daniel", desc: "neutraal en rustig" },
+];
+const SAMPLE_TEXT = "Hallo, ik ben er voor je.";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
