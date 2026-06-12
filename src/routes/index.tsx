@@ -116,6 +116,10 @@ function Dashboard() {
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
       void loadSuggestions();
+      if (typeof window !== "undefined" && !sessionStorage.getItem("hr_welcomed")) {
+        sessionStorage.setItem("hr_welcomed", "1");
+        void speakText("Welkom terug. Ik wens je een rustige dag.");
+      }
     })();
   }, [user, loadSuggestions]);
 
