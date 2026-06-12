@@ -108,12 +108,12 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled" as "*",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
       if (data) {
-        const d = data as typeof data & { voice_enabled?: boolean | null };
+        const d = data as typeof data & { voice_enabled?: boolean | null; voice_id?: string | null };
         setPrefs({
           primary_goal: d.primary_goal ?? [],
           main_difficulty: d.main_difficulty ?? [],
@@ -128,6 +128,9 @@ function ProfilePage() {
         const v = Boolean(d.voice_enabled);
         setVoiceEnabled(v);
         setVoicePreferenceCache(v);
+        const vid = d.voice_id || DEFAULT_VOICE_ID;
+        setVoiceId(vid);
+        setVoiceIdCache(vid);
       }
       setLoading(false);
     })();
