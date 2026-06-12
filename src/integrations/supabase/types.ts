@@ -302,6 +302,7 @@ export type Database = {
           support_style: string | null
           updated_at: string
           user_id: string
+          voice_enabled: boolean | null
         }
         Insert: {
           created_at?: string
@@ -317,6 +318,7 @@ export type Database = {
           support_style?: string | null
           updated_at?: string
           user_id: string
+          voice_enabled?: boolean | null
         }
         Update: {
           created_at?: string
@@ -332,6 +334,7 @@ export type Database = {
           support_style?: string | null
           updated_at?: string
           user_id?: string
+          voice_enabled?: boolean | null
         }
         Relationships: []
       }
