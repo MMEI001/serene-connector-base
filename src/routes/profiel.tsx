@@ -157,6 +157,24 @@ function ProfilePage() {
     }
   }
 
+  async function handleVoiceChange(nextVoiceId: string) {
+    if (!user || voiceSaving || nextVoiceId === voiceId) return;
+    const previous = voiceId;
+    setVoiceId(nextVoiceId);
+    setVoiceSaving(true);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ voice_id: nextVoiceId } as never)
+      .eq("user_id", user.id);
+    setVoiceSaving(false);
+    if (error) {
+      setVoiceId(previous);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setVoiceIdCache(nextVoiceId);
+    toast.success("Stem opgeslagen.");
+
   function toggleMulti(key: MultiField["key"], value: string) {
     setPrefs((p) => {
       const current = p[key];
