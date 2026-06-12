@@ -8,7 +8,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const VOICE_ID = "XrExE9yKIg1WjnnlVkGX"; // Matilda — calm, warm
+const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+const ALLOWED_VOICE_IDS = new Set([
+  "XB0fDUnXU5powFXDhCwa", // Charlotte
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice
+  "pFZP5JQG7iQjIQuC4Bku", // Lily
+  "nPczCjzI2devNBz1zQrb", // Brian
+  "onwK4e9ZLuTAKqWW03F0", // Daniel
+]);
 const MODEL_ID = "eleven_multilingual_v2";
 
 Deno.serve(async (req) => {
