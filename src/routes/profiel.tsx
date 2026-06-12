@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { speakText, setVoicePreferenceCache } from "@/lib/speak";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
