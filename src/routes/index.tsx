@@ -45,6 +45,35 @@ function Dashboard() {
   const [appts, setAppts] = useState<Appt[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const classify = useServerFn(classifyAndStoreSuggestion);
+
+  async function handleClassify() {
+    const text = aiText.trim();
+    if (!text || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const result = await classify({ data: { text } });
+      const labels: Record<string, string> = {
+        appointment: "Ik heb een voorstel klaargezet in je voorstellen.",
+        reminder: "Ik heb een reminder-voorstel klaargezet.",
+        note: "Ik heb dit bewaard als voorstel voor een notitie.",
+        let_go: "Ik heb dit bewaard onder je voorstellen om los te laten.",
+      };
+      let msg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      if (result.confidence === "low") {
+        msg += " Bekijk het voorstel even, ik wist het niet helemaal zeker.";
+      }
+      toast.success(msg);
+      setAiText("");
+      void loadSuggestions();
+    } catch {
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   const loadSuggestions = useCallback(async () => {
     if (!user) return;
