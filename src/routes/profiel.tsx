@@ -305,6 +305,46 @@ function ProfilePage() {
         <p className="mt-2 text-xs text-muted-foreground">
           De app leest belangrijke meldingen rustig voor.
         </p>
+
+        {voiceEnabled && (
+          <div className="mt-6 space-y-3">
+            <Label className="text-sm text-foreground">Welke stem?</Label>
+            <div className="space-y-2">
+              {VOICE_OPTIONS.map((v) => {
+                const selected = voiceId === v.id;
+                return (
+                  <div
+                    key={v.id}
+                    className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 bg-background"
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleVoiceChange(v.id)}
+                      disabled={voiceSaving}
+                      className="flex-1 text-left"
+                    >
+                      <div className="text-sm text-foreground">{v.name}</div>
+                      <div className="text-xs text-muted-foreground">{v.desc}</div>
+                    </button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => speakText(SAMPLE_TEXT, { force: true, voiceId: v.id })}
+                    >
+                      Beluister
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
