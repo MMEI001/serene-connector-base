@@ -35,7 +35,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { text } = await req.json();
+    const body = await req.json();
+    const text = body?.text;
+    const requestedVoiceId = typeof body?.voice_id === "string" ? body.voice_id : "";
     if (!text || typeof text !== "string") {
       return new Response(
         JSON.stringify({ error: "text is verplicht" }),
@@ -46,7 +48,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${VOICE_ID}?output_format=mp3_44100_128`;
+    const voiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
+      ? requestedVoiceId
+      : DEFAULT_VOICE_ID;
+
+    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
 
     const resp = await fetch(url, {
       method: "POST",
