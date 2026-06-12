@@ -68,6 +68,7 @@ function Dashboard() {
         msg += " Bekijk het voorstel even, ik wist het niet helemaal zeker.";
       }
       toast.success(msg);
+      void speakText(baseMsg);
       setAiText("");
       void loadSuggestions();
     } catch {
