@@ -100,6 +100,7 @@ function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
+  const [voiceId, setVoiceId] = useState<string>(DEFAULT_VOICE_ID);
 
   useEffect(() => {
     if (!user) return;
