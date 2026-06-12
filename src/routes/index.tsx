@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
+import { speakText } from "@/lib/speak";
 
 export const Route = createFileRoute("/")({
   ssr: false,
