@@ -142,6 +142,7 @@ export function SuggestionCard({
         return;
       }
       toast.success(successMsg);
+      void speakText(successMsg);
       onChanged();
     } finally {
       setBusy(false);
