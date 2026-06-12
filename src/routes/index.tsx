@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
+import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -41,6 +45,35 @@ function Dashboard() {
   const [appts, setAppts] = useState<Appt[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const classify = useServerFn(classifyAndStoreSuggestion);
+
+  async function handleClassify() {
+    const text = aiText.trim();
+    if (!text || aiBusy) return;
+    setAiBusy(true);
+    try {
+      const result = await classify({ data: { text } });
+      const labels: Record<string, string> = {
+        appointment: "Ik heb een voorstel klaargezet in je voorstellen.",
+        reminder: "Ik heb een reminder-voorstel klaargezet.",
+        note: "Ik heb dit bewaard als voorstel voor een notitie.",
+        let_go: "Ik heb dit bewaard onder je voorstellen om los te laten.",
+      };
+      let msg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      if (result.confidence === "low") {
+        msg += " Bekijk het voorstel even, ik wist het niet helemaal zeker.";
+      }
+      toast.success(msg);
+      setAiText("");
+      void loadSuggestions();
+    } catch {
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   const loadSuggestions = useCallback(async () => {
     if (!user) return;
@@ -96,6 +129,31 @@ function Dashboard() {
         <Button asChild className="mt-6 rounded-full px-6" size="lg">
           <Link to="/journal">Nieuwe notitie schrijven</Link>
         </Button>
+      </section>
+
+      <section className="mb-10">
+        <Card className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
+          <Textarea
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            placeholder="Wat speelt er in je hoofd? Typ het hier."
+            rows={3}
+            disabled={aiBusy}
+            className="resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0"
+          />
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-muted-foreground">
+              Ik bewaar het zorgvuldig en doe niets zonder jouw bevestiging.
+            </p>
+            <Button
+              onClick={handleClassify}
+              disabled={aiBusy || !aiText.trim()}
+              className="rounded-full px-6"
+            >
+              {aiBusy ? "Even verwerken…" : "Verwerken"}
+            </Button>
+          </div>
+        </Card>
       </section>
 
       <section className="mb-10">
