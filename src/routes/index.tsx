@@ -62,7 +62,8 @@ function Dashboard() {
         note: "Ik heb dit bewaard als voorstel voor een notitie.",
         let_go: "Ik heb dit bewaard onder je voorstellen om los te laten.",
       };
-      let msg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      const baseMsg = labels[result.suggestion_type] ?? "Voorstel klaargezet.";
+      let msg = baseMsg;
       if (result.confidence === "low") {
         msg += " Bekijk het voorstel even, ik wist het niet helemaal zeker.";
       }
