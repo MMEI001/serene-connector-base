@@ -174,6 +174,9 @@ function ProfilePage() {
     }
     setVoiceIdCache(nextVoiceId);
     toast.success("Stem opgeslagen.");
+  }
+
+
 
   function toggleMulti(key: MultiField["key"], value: string) {
     setPrefs((p) => {
