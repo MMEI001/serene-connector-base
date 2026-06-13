@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -345,6 +345,16 @@ function ProfilePage() {
             </div>
           </div>
         )}
+      </Card>
+
+      <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <h2 className="text-base text-foreground">Agenda's</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Koppel je Google Agenda zodat HoofdRust mee kan kijken.
+        </p>
+        <Button asChild variant="outline" className="mt-4 w-full rounded-full">
+          <Link to="/agendas">Beheer agenda-koppeling</Link>
+        </Button>
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
