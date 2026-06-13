@@ -17,11 +17,13 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
 import { Route as LaatLosIndexRouteImport } from './routes/laat-los.index'
+import { Route as AgendasIndexRouteImport } from './routes/agendas.index'
 import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
 import { Route as RemindersNieuwRouteImport } from './routes/reminders.nieuw'
 import { Route as RemindersIdRouteImport } from './routes/reminders.$id'
 import { Route as LaatLosNieuwRouteImport } from './routes/laat-los.nieuw'
 import { Route as LaatLosIdRouteImport } from './routes/laat-los.$id'
+import { Route as AgendasCallbackRouteImport } from './routes/agendas.callback'
 import { Route as AgendaNieuwRouteImport } from './routes/agenda.nieuw'
 import { Route as AgendaIdRouteImport } from './routes/agenda.$id'
 import { Route as RemindersIdIndexRouteImport } from './routes/reminders.$id.index'
@@ -70,6 +72,11 @@ const LaatLosIndexRoute = LaatLosIndexRouteImport.update({
   path: '/laat-los/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AgendasIndexRoute = AgendasIndexRouteImport.update({
+  id: '/agendas/',
+  path: '/agendas/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgendaIndexRoute = AgendaIndexRouteImport.update({
   id: '/agenda/',
   path: '/agenda/',
@@ -93,6 +100,11 @@ const LaatLosNieuwRoute = LaatLosNieuwRouteImport.update({
 const LaatLosIdRoute = LaatLosIdRouteImport.update({
   id: '/laat-los/$id',
   path: '/laat-los/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgendasCallbackRoute = AgendasCallbackRouteImport.update({
+  id: '/agendas/callback',
+  path: '/agendas/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AgendaNieuwRoute = AgendaNieuwRouteImport.update({
@@ -140,11 +152,13 @@ export interface FileRoutesByFullPath {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agendas/callback': typeof AgendasCallbackRoute
   '/laat-los/$id': typeof LaatLosIdRouteWithChildren
   '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/$id': typeof RemindersIdRouteWithChildren
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
+  '/agendas/': typeof AgendasIndexRoute
   '/laat-los/': typeof LaatLosIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -161,9 +175,11 @@ export interface FileRoutesByTo {
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agendas/callback': typeof AgendasCallbackRoute
   '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda': typeof AgendaIndexRoute
+  '/agendas': typeof AgendasIndexRoute
   '/laat-los': typeof LaatLosIndexRoute
   '/reminders': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -182,11 +198,13 @@ export interface FileRoutesById {
   '/suggesties': typeof SuggestiesRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
+  '/agendas/callback': typeof AgendasCallbackRoute
   '/laat-los/$id': typeof LaatLosIdRouteWithChildren
   '/laat-los/nieuw': typeof LaatLosNieuwRoute
   '/reminders/$id': typeof RemindersIdRouteWithChildren
   '/reminders/nieuw': typeof RemindersNieuwRoute
   '/agenda/': typeof AgendaIndexRoute
+  '/agendas/': typeof AgendasIndexRoute
   '/laat-los/': typeof LaatLosIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
@@ -206,11 +224,13 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/agendas/callback'
     | '/laat-los/$id'
     | '/laat-los/nieuw'
     | '/reminders/$id'
     | '/reminders/nieuw'
     | '/agenda/'
+    | '/agendas/'
     | '/laat-los/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
@@ -227,9 +247,11 @@ export interface FileRouteTypes {
     | '/profiel'
     | '/suggesties'
     | '/agenda/nieuw'
+    | '/agendas/callback'
     | '/laat-los/nieuw'
     | '/reminders/nieuw'
     | '/agenda'
+    | '/agendas'
     | '/laat-los'
     | '/reminders'
     | '/agenda/$id/bewerken'
@@ -247,11 +269,13 @@ export interface FileRouteTypes {
     | '/suggesties'
     | '/agenda/$id'
     | '/agenda/nieuw'
+    | '/agendas/callback'
     | '/laat-los/$id'
     | '/laat-los/nieuw'
     | '/reminders/$id'
     | '/reminders/nieuw'
     | '/agenda/'
+    | '/agendas/'
     | '/laat-los/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
@@ -270,11 +294,13 @@ export interface RootRouteChildren {
   SuggestiesRoute: typeof SuggestiesRoute
   AgendaIdRoute: typeof AgendaIdRouteWithChildren
   AgendaNieuwRoute: typeof AgendaNieuwRoute
+  AgendasCallbackRoute: typeof AgendasCallbackRoute
   LaatLosIdRoute: typeof LaatLosIdRouteWithChildren
   LaatLosNieuwRoute: typeof LaatLosNieuwRoute
   RemindersIdRoute: typeof RemindersIdRouteWithChildren
   RemindersNieuwRoute: typeof RemindersNieuwRoute
   AgendaIndexRoute: typeof AgendaIndexRoute
+  AgendasIndexRoute: typeof AgendasIndexRoute
   LaatLosIndexRoute: typeof LaatLosIndexRoute
   RemindersIndexRoute: typeof RemindersIndexRoute
 }
@@ -337,6 +363,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LaatLosIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/agendas/': {
+      id: '/agendas/'
+      path: '/agendas'
+      fullPath: '/agendas/'
+      preLoaderRoute: typeof AgendasIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agenda/': {
       id: '/agenda/'
       path: '/agenda'
@@ -370,6 +403,13 @@ declare module '@tanstack/react-router' {
       path: '/laat-los/$id'
       fullPath: '/laat-los/$id'
       preLoaderRoute: typeof LaatLosIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agendas/callback': {
+      id: '/agendas/callback'
+      path: '/agendas/callback'
+      fullPath: '/agendas/callback'
+      preLoaderRoute: typeof AgendasCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/agenda/nieuw': {
@@ -473,11 +513,13 @@ const rootRouteChildren: RootRouteChildren = {
   SuggestiesRoute: SuggestiesRoute,
   AgendaIdRoute: AgendaIdRouteWithChildren,
   AgendaNieuwRoute: AgendaNieuwRoute,
+  AgendasCallbackRoute: AgendasCallbackRoute,
   LaatLosIdRoute: LaatLosIdRouteWithChildren,
   LaatLosNieuwRoute: LaatLosNieuwRoute,
   RemindersIdRoute: RemindersIdRouteWithChildren,
   RemindersNieuwRoute: RemindersNieuwRoute,
   AgendaIndexRoute: AgendaIndexRoute,
+  AgendasIndexRoute: AgendasIndexRoute,
   LaatLosIndexRoute: LaatLosIndexRoute,
   RemindersIndexRoute: RemindersIndexRoute,
 }
