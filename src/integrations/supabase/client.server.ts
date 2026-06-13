@@ -10,7 +10,9 @@ function createSupabaseAdminClient() {
   // Prefer the new Supabase secret key (sb_secret_...). Fall back to the
   // legacy service role key for backwards compatibility.
   const SUPABASE_SECRET_KEY =
-    process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+    process.env.SUPABASE_SECRET_KEYS ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SECRET_KEY) {
     const missing = [
