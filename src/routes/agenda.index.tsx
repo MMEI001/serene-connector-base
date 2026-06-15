@@ -206,7 +206,7 @@ function AgendaPage() {
           date: isoDateOf(start),
           startTime: e.is_all_day ? null : hhmm(start),
           endTime: e.is_all_day || !end ? null : hhmm(end),
-          href: null,
+          appointmentId: null,
         });
       }
 
