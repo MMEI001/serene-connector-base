@@ -70,17 +70,31 @@ function AgendasPage() {
   async function handleConnect() {
     setConnecting(true);
     const redirectTo = `${window.location.origin}/agendas/callback`;
-    const { error: linkErr } = await supabase.auth.linkIdentity({
-      provider: "google",
-      options: {
-        scopes: "https://www.googleapis.com/auth/calendar.readonly",
-        redirectTo,
-        queryParams: { access_type: "offline", prompt: "consent" },
-      },
-    });
-    if (linkErr) {
+    try {
+      const { data, error: linkErr } = await supabase.auth.linkIdentity({
+        provider: "google",
+        options: {
+          scopes: "https://www.googleapis.com/auth/calendar.readonly",
+          redirectTo,
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
+      });
+      if (linkErr) {
+        console.error("Google Calendar linkIdentity failed:", linkErr, {
+          name: linkErr.name,
+          message: linkErr.message,
+          status: (linkErr as { status?: number }).status,
+        });
+        setConnecting(false);
+        toast.error(`Koppelen lukte niet: ${linkErr.message}`);
+        return;
+      }
+      console.info("linkIdentity initiated", data);
+    } catch (err) {
+      console.error("Google Calendar linkIdentity threw:", err);
       setConnecting(false);
-      toast.error("Koppelen lukte niet. Probeer het opnieuw.");
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Koppelen lukte niet: ${msg}`);
     }
   }
 
