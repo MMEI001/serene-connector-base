@@ -22,122 +22,6 @@ function normalizeUrl(raw: string): string {
   return trimmed;
 }
 
-type ParsedEvent = {
-  uid: string;
-  summary: string;
-  description: string | null;
-  location: string | null;
-  start_time: string; // ISO
-  end_time: string | null;
-  is_all_day: boolean;
-};
-
-async function fetchAndParse(url: string): Promise<ParsedEvent[]> {
-  const res = await fetch(url, {
-    headers: { Accept: "text/calendar, text/plain;q=0.8, */*;q=0.5" },
-    redirect: "follow",
-  });
-  if (!res.ok) {
-    throw new Error(`Kon feed niet ophalen (HTTP ${res.status})`);
-  }
-  const text = await res.text();
-  if (!text || !/BEGIN:VCALENDAR/i.test(text)) {
-    throw new Error("Antwoord lijkt geen geldige ICS-feed");
-  }
-
-  // Dynamic import — ical.js is server-safe but keep load out of client bundle scope
-  const ICAL = (await import("ical.js")).default;
-  let jcal: unknown;
-  try {
-    jcal = ICAL.parse(text);
-  } catch (e) {
-    throw new Error(
-      `Kon ICS niet parsen: ${e instanceof Error ? e.message : "onbekende fout"}`,
-    );
-  }
-  const comp = new ICAL.Component(jcal as never);
-  const vevents = comp.getAllSubcomponents("vevent");
-
-  const out: ParsedEvent[] = [];
-  const seen = new Set<string>();
-  for (const ve of vevents) {
-    try {
-      const ev = new ICAL.Event(ve);
-      const uid = ev.uid ?? ve.getFirstPropertyValue("uid")?.toString();
-      if (!uid) continue;
-      // Skip duplicate UIDs within the same feed (recurrence overrides)
-      if (seen.has(uid)) continue;
-      seen.add(uid);
-
-      const startProp = ev.startDate;
-      if (!startProp) continue;
-      const isAllDay = Boolean(startProp.isDate);
-      const startJs = startProp.toJSDate();
-      const endJs = ev.endDate ? ev.endDate.toJSDate() : null;
-
-      out.push({
-        uid,
-        summary: (ev.summary ?? "").toString().slice(0, 500),
-        description: ev.description ? ev.description.toString().slice(0, 2000) : null,
-        location: ev.location ? ev.location.toString().slice(0, 500) : null,
-        start_time: startJs.toISOString(),
-        end_time: endJs ? endJs.toISOString() : null,
-        is_all_day: isAllDay,
-      });
-    } catch (err) {
-      console.warn("[ics] skip event", err);
-    }
-  }
-  return out;
-}
-
-async function syncCalendarRow(
-  supabaseAdmin: import("@supabase/supabase-js").SupabaseClient,
-  cal: { id: string; url: string },
-): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
-  try {
-    const events = await fetchAndParse(cal.url);
-    const nowIso = new Date().toISOString();
-
-    if (events.length > 0) {
-      const rows = events.map((e) => ({ calendar_id: cal.id, ...e }));
-      const { error: upErr } = await supabaseAdmin
-        .from("ics_events")
-        .upsert(rows, { onConflict: "calendar_id,uid" });
-      if (upErr) throw new Error(upErr.message);
-    }
-
-    // Delete events no longer in the feed
-    const keepUids = events.map((e) => e.uid);
-    if (keepUids.length > 0) {
-      const { error: delErr } = await supabaseAdmin
-        .from("ics_events")
-        .delete()
-        .eq("calendar_id", cal.id)
-        .not("uid", "in", `(${keepUids.map((u) => `"${u.replace(/"/g, '""')}"`).join(",")})`);
-      if (delErr) console.warn("[ics] delete stale failed", delErr);
-    } else {
-      await supabaseAdmin.from("ics_events").delete().eq("calendar_id", cal.id);
-    }
-
-    await supabaseAdmin
-      .from("ics_calendars")
-      .update({ last_synced_at: nowIso, last_error: null })
-      .eq("id", cal.id);
-
-    return { ok: true, count: events.length };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    await supabaseAdmin
-      .from("ics_calendars")
-      .update({ last_error: msg })
-      .eq("id", cal.id);
-    return { ok: false, error: msg };
-  }
-}
-
-// ---- Public server functions ----
-
 export const listIcsCalendars = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -147,7 +31,6 @@ export const listIcsCalendars = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     if (error) throw new Error(error.message);
 
-    // Get event counts per calendar
     const ids = (data ?? []).map((c) => c.id);
     const counts: Record<string, number> = {};
     if (ids.length > 0) {
@@ -171,10 +54,10 @@ export const addIcsCalendar = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const normalizedUrl = normalizeUrl(data.url);
 
-    // Validate by fetching/parsing before insert
-    let parsed: ParsedEvent[];
+    const { fetchAndValidateIcs } = await import("@/lib/ics-calendar.server");
+    let parsed;
     try {
-      parsed = await fetchAndParse(normalizedUrl);
+      parsed = await fetchAndValidateIcs(normalizedUrl);
     } catch (e) {
       throw new Error(
         `Feed ongeldig: ${e instanceof Error ? e.message : "onbekende fout"}`,
@@ -192,7 +75,6 @@ export const addIcsCalendar = createServerFn({ method: "POST" })
       .single();
     if (error) throw new Error(error.message);
 
-    // Initial sync via admin client (we already validated; reuse parsed events)
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const nowIso = new Date().toISOString();
     if (parsed.length > 0) {
@@ -236,9 +118,11 @@ export const syncIcsCalendar = createServerFn({ method: "POST" })
       .single();
     if (error || !cal) throw new Error("Agenda niet gevonden");
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const result = await syncCalendarRow(supabaseAdmin, cal);
-    return result;
+    const [{ supabaseAdmin }, { syncCalendarRow }] = await Promise.all([
+      import("@/integrations/supabase/client.server"),
+      import("@/lib/ics-calendar.server"),
+    ]);
+    return syncCalendarRow(supabaseAdmin, cal);
   });
 
 export const syncAllIcsCalendars = createServerFn({ method: "POST" })
@@ -249,7 +133,10 @@ export const syncAllIcsCalendars = createServerFn({ method: "POST" })
       .select("id, url");
     if (error) throw new Error(error.message);
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const [{ supabaseAdmin }, { syncCalendarRow }] = await Promise.all([
+      import("@/integrations/supabase/client.server"),
+      import("@/lib/ics-calendar.server"),
+    ]);
     const results: Record<string, { ok: boolean; count?: number; error?: string }> = {};
     await Promise.all(
       (cals ?? []).map(async (c) => {
@@ -298,27 +185,3 @@ export const listIcsEventsInRange = createServerFn({ method: "POST" })
       calendar_color: calMap.get(e.calendar_id)?.color ?? null,
     }));
   });
-
-// Internal helper for the cron route — not for client use
-export async function syncAllCalendarsAdmin(): Promise<{
-  total: number;
-  ok: number;
-  failed: number;
-}> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { data: cals, error } = await supabaseAdmin
-    .from("ics_calendars")
-    .select("id, url");
-  if (error) throw new Error(error.message);
-
-  let ok = 0;
-  let failed = 0;
-  await Promise.all(
-    (cals ?? []).map(async (c) => {
-      const r = await syncCalendarRow(supabaseAdmin, c);
-      if (r.ok) ok += 1;
-      else failed += 1;
-    }),
-  );
-  return { total: cals?.length ?? 0, ok, failed };
-}
