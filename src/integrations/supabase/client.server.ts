@@ -19,7 +19,7 @@ function createSupabaseAdminClient() {
     throw new Error(message);
   }
 
-  return createClient<Database>(SUPABASE_URL, SUPABASE_SECRET_KEY, {
+  return createClient<Database>(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: {
       storage: undefined,
       persistSession: false,
