@@ -26,7 +26,13 @@ function CallbackPage() {
       if (done || !session) return;
       const providerToken = session.provider_token;
       const providerRefreshToken = session.provider_refresh_token;
-      if (!providerToken) return;
+      if (!providerToken) {
+        console.warn("Callback session zonder provider_token", {
+          hasSession: !!session,
+          hasRefresh: !!providerRefreshToken,
+        });
+        return;
+      }
       done = true;
       try {
         await save({
@@ -37,9 +43,11 @@ function CallbackPage() {
           },
         });
         navigate({ to: "/agendas" });
-      } catch {
+      } catch (err) {
+        console.error("saveGoogleTokens failed:", err);
         setStatus("error");
-        setMessage("Koppelen lukte niet. Probeer het opnieuw.");
+        const msg = err instanceof Error ? err.message : String(err);
+        setMessage(`Koppelen lukte niet: ${msg}`);
       }
     }
 
