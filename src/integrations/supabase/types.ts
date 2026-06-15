@@ -161,6 +161,92 @@ export type Database = {
         }
         Relationships: []
       }
+      ics_calendars: {
+        Row: {
+          color: string | null
+          created_at: string
+          id: string
+          last_error: string | null
+          last_synced_at: string | null
+          name: string
+          updated_at: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          name: string
+          updated_at?: string
+          url: string
+          user_id: string
+        }
+        Update: {
+          color?: string | null
+          created_at?: string
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          name?: string
+          updated_at?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ics_events: {
+        Row: {
+          calendar_id: string
+          created_at: string
+          description: string | null
+          end_time: string | null
+          id: string
+          is_all_day: boolean
+          location: string | null
+          start_time: string
+          summary: string
+          uid: string
+          updated_at: string
+        }
+        Insert: {
+          calendar_id: string
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          start_time: string
+          summary?: string
+          uid: string
+          updated_at?: string
+        }
+        Update: {
+          calendar_id?: string
+          created_at?: string
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          is_all_day?: boolean
+          location?: string | null
+          start_time?: string
+          summary?: string
+          uid?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ics_events_calendar_id_fkey"
+            columns: ["calendar_id"]
+            isOneToOne: false
+            referencedRelation: "ics_calendars"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       let_go_items: {
         Row: {
           action_intent: string | null
