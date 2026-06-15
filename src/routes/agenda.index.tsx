@@ -191,7 +191,7 @@ function AgendaPage() {
           date: a.date,
           startTime: a.start_time ? a.start_time.slice(0, 5) : null,
           endTime: a.end_time ? a.end_time.slice(0, 5) : null,
-          href: `/agenda/${a.id}`,
+          appointmentId: a.id,
         });
       }
       for (const e of icsRes ?? []) {
