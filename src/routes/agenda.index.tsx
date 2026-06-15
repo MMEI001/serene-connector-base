@@ -125,8 +125,13 @@ function ApptList({ groups }: { groups: [string, DisplayEvent[]][] }) {
                   </div>
                 </Card>
               );
-              return a.href ? (
-                <Link key={a.id} to={a.href} className="block">
+              return a.appointmentId ? (
+                <Link
+                  key={a.id}
+                  to="/agenda/$id"
+                  params={{ id: a.appointmentId }}
+                  className="block"
+                >
                   {inner}
                 </Link>
               ) : (
