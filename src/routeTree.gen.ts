@@ -31,6 +31,7 @@ import { Route as LaatLosIdIndexRouteImport } from './routes/laat-los.$id.index'
 import { Route as AgendaIdIndexRouteImport } from './routes/agenda.$id.index'
 import { Route as RemindersIdBewerkenRouteImport } from './routes/reminders.$id.bewerken'
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
+import { Route as ApiPublicHooksSyncIcsRouteImport } from './routes/api/public/hooks/sync-ics'
 
 const SuggestiesRoute = SuggestiesRouteImport.update({
   id: '/suggesties',
@@ -142,6 +143,11 @@ const AgendaIdBewerkenRoute = AgendaIdBewerkenRouteImport.update({
   path: '/bewerken',
   getParentRoute: () => AgendaIdRoute,
 } as any)
+const ApiPublicHooksSyncIcsRoute = ApiPublicHooksSyncIcsRouteImport.update({
+  id: '/api/public/hooks/sync-ics',
+  path: '/api/public/hooks/sync-ics',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/agenda/$id/': typeof AgendaIdIndexRoute
   '/laat-los/$id/': typeof LaatLosIdIndexRoute
   '/reminders/$id/': typeof RemindersIdIndexRoute
+  '/api/public/hooks/sync-ics': typeof ApiPublicHooksSyncIcsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/agenda/$id': typeof AgendaIdIndexRoute
   '/laat-los/$id': typeof LaatLosIdIndexRoute
   '/reminders/$id': typeof RemindersIdIndexRoute
+  '/api/public/hooks/sync-ics': typeof ApiPublicHooksSyncIcsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/agenda/$id/': typeof AgendaIdIndexRoute
   '/laat-los/$id/': typeof LaatLosIdIndexRoute
   '/reminders/$id/': typeof RemindersIdIndexRoute
+  '/api/public/hooks/sync-ics': typeof ApiPublicHooksSyncIcsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/agenda/$id/'
     | '/laat-los/$id/'
     | '/reminders/$id/'
+    | '/api/public/hooks/sync-ics'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -259,6 +269,7 @@ export interface FileRouteTypes {
     | '/agenda/$id'
     | '/laat-los/$id'
     | '/reminders/$id'
+    | '/api/public/hooks/sync-ics'
   id:
     | '__root__'
     | '/'
@@ -283,6 +294,7 @@ export interface FileRouteTypes {
     | '/agenda/$id/'
     | '/laat-los/$id/'
     | '/reminders/$id/'
+    | '/api/public/hooks/sync-ics'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -303,6 +315,7 @@ export interface RootRouteChildren {
   AgendasIndexRoute: typeof AgendasIndexRoute
   LaatLosIndexRoute: typeof LaatLosIndexRoute
   RemindersIndexRoute: typeof RemindersIndexRoute
+  ApiPublicHooksSyncIcsRoute: typeof ApiPublicHooksSyncIcsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -461,6 +474,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AgendaIdBewerkenRouteImport
       parentRoute: typeof AgendaIdRoute
     }
+    '/api/public/hooks/sync-ics': {
+      id: '/api/public/hooks/sync-ics'
+      path: '/api/public/hooks/sync-ics'
+      fullPath: '/api/public/hooks/sync-ics'
+      preLoaderRoute: typeof ApiPublicHooksSyncIcsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -522,6 +542,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgendasIndexRoute: AgendasIndexRoute,
   LaatLosIndexRoute: LaatLosIndexRoute,
   RemindersIndexRoute: RemindersIndexRoute,
+  ApiPublicHooksSyncIcsRoute: ApiPublicHooksSyncIcsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
