@@ -150,6 +150,100 @@ export function IcsCalendarsSection() {
             maxLength={2000}
             className="mt-1 rounded-2xl"
           />
+          <Accordion type="single" collapsible className="mt-2">
+            <AccordionItem value="help" className="border-0">
+              <AccordionTrigger className="py-2 text-xs text-muted-foreground hover:no-underline">
+                Hoe vind ik mijn agenda-link?
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-4 text-xs text-muted-foreground">
+                  <div>
+                    <p className="mb-1 font-medium text-foreground">
+                      Apple Agenda (iPhone/iPad)
+                    </p>
+                    <ol className="list-decimal space-y-0.5 pl-4">
+                      <li>Open de Agenda-app</li>
+                      <li>Tik onderaan op Agenda's</li>
+                      <li>
+                        Tik op het (i)-icoontje naast de agenda die je wilt
+                        koppelen
+                      </li>
+                      <li>Schakel Openbare agenda in</li>
+                      <li>Tik op Deel link en kies bijvoorbeeld 'Kopieer'</li>
+                      <li>Plak de link hierboven</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="mb-1 font-medium text-foreground">
+                      Apple Agenda (Mac)
+                    </p>
+                    <ol className="list-decimal space-y-0.5 pl-4">
+                      <li>Open de Agenda-app</li>
+                      <li>
+                        Beweeg in de zijbalk met je muis over de agenda die je
+                        wilt koppelen
+                      </li>
+                      <li>
+                        Klik op het uitzend-icoontje (📡) dat verschijnt naast
+                        de naam
+                      </li>
+                      <li>Vink Openbare agenda aan</li>
+                      <li>
+                        Klik op E-mail link of rechtsklik op de agenda → Kopieer
+                        URL
+                      </li>
+                      <li>Plak de link hierboven</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="mb-1 font-medium text-foreground">
+                      Google Agenda (web)
+                    </p>
+                    <ol className="list-decimal space-y-0.5 pl-4">
+                      <li>Ga naar calendar.google.com</li>
+                      <li>
+                        Hover in de linker zijbalk over de agenda → klik op de
+                        drie puntjes → Instellingen en delen
+                      </li>
+                      <li>
+                        Scroll naar Toegangsrechten voor evenementen → vink
+                        Openbaar beschikbaar maken aan
+                      </li>
+                      <li>Scroll verder naar Integratie van agenda</li>
+                      <li>
+                        Kopieer de Openbare URL naar deze agenda (eindigt op
+                        /public/basic.ics)
+                      </li>
+                      <li>Plak de link hierboven</li>
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="mb-1 font-medium text-foreground">
+                      Outlook / Microsoft 365
+                    </p>
+                    <ol className="list-decimal space-y-0.5 pl-4">
+                      <li>Ga naar outlook.live.com/calendar</li>
+                      <li>
+                        Klik rechtsboven op Instellingen (tandwiel) → Agenda →
+                        Gedeelde agenda's
+                      </li>
+                      <li>
+                        Onder Een agenda publiceren kies je de agenda en stel
+                        Alle details kunnen zien in
+                      </li>
+                      <li>Kopieer de ICS-link</li>
+                      <li>Plak de link hierboven</li>
+                    </ol>
+                  </div>
+                  <p className="text-destructive">
+                    Let op: een openbare link betekent dat iedereen met de URL
+                    de agenda kan zien. Updates verschijnen niet direct, maar
+                    binnen enkele uren.
+                  </p>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
         </div>
         <Button
           type="submit"
