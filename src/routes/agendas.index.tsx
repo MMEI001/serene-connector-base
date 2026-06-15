@@ -71,7 +71,7 @@ function AgendasPage() {
     setConnecting(true);
     const redirectTo = `${window.location.origin}/agendas/callback`;
     try {
-      const { data, error: linkErr } = await supabase.auth.linkIdentity({
+      const { data, error: oauthErr } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           scopes: "https://www.googleapis.com/auth/calendar.readonly",
@@ -79,19 +79,19 @@ function AgendasPage() {
           queryParams: { access_type: "offline", prompt: "consent" },
         },
       });
-      if (linkErr) {
-        console.error("Google Calendar linkIdentity failed:", linkErr, {
-          name: linkErr.name,
-          message: linkErr.message,
-          status: (linkErr as { status?: number }).status,
+      if (oauthErr) {
+        console.error("Google Calendar signInWithOAuth failed:", oauthErr, {
+          name: oauthErr.name,
+          message: oauthErr.message,
+          status: (oauthErr as { status?: number }).status,
         });
         setConnecting(false);
-        toast.error(`Koppelen lukte niet: ${linkErr.message}`);
+        toast.error(`Koppelen lukte niet: ${oauthErr.message}`);
         return;
       }
-      console.info("linkIdentity initiated", data);
+      console.info("signInWithOAuth initiated", data);
     } catch (err) {
-      console.error("Google Calendar linkIdentity threw:", err);
+      console.error("Google Calendar signInWithOAuth threw:", err);
       setConnecting(false);
       const msg = err instanceof Error ? err.message : String(err);
       toast.error(`Koppelen lukte niet: ${msg}`);
