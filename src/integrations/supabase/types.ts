@@ -161,42 +161,6 @@ export type Database = {
         }
         Relationships: []
       }
-      cases: {
-        Row: {
-          ai_analyse: string | null
-          created_at: string
-          document_url: string | null
-          email: string | null
-          id: string
-          naam: string | null
-          risico_score: string | null
-          status: string | null
-          type_document: string | null
-        }
-        Insert: {
-          ai_analyse?: string | null
-          created_at?: string
-          document_url?: string | null
-          email?: string | null
-          id?: string
-          naam?: string | null
-          risico_score?: string | null
-          status?: string | null
-          type_document?: string | null
-        }
-        Update: {
-          ai_analyse?: string | null
-          created_at?: string
-          document_url?: string | null
-          email?: string | null
-          id?: string
-          naam?: string | null
-          risico_score?: string | null
-          status?: string | null
-          type_document?: string | null
-        }
-        Relationships: []
-      }
       let_go_items: {
         Row: {
           action_intent: string | null

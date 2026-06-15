@@ -1,6 +1,8 @@
 // Supabase Edge Function: text-to-speech
 // Converts text to speech via ElevenLabs and returns audio/mpeg.
 
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
@@ -10,13 +12,21 @@ const corsHeaders = {
 
 const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 const ALLOWED_VOICE_IDS = new Set([
-  "XB0fDUnXU5powFXDhCwa", // Charlotte
-  "Xb7hH8MSUJpSbSDYk0k2", // Alice
-  "pFZP5JQG7iQjIQuC4Bku", // Lily
-  "nPczCjzI2devNBz1zQrb", // Brian
-  "onwK4e9ZLuTAKqWW03F0", // Daniel
+  "XB0fDUnXU5powFXDhCwa",
+  "Xb7hH8MSUJpSbSDYk0k2",
+  "pFZP5JQG7iQjIQuC4Bku",
+  "nPczCjzI2devNBz1zQrb",
+  "onwK4e9ZLuTAKqWW03F0",
 ]);
 const MODEL_ID = "eleven_multilingual_v2";
+const MAX_CHARS = 1000;
+
+function json(body: unknown, status: number) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -24,28 +34,42 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
-    if (!apiKey) {
-      return new Response(
-        JSON.stringify({ error: "ELEVENLABS_API_KEY ontbreekt" }),
-        {
-          status: 500,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+    // --- Auth check ---
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return json({ error: "Unauthorized" }, 401);
+    }
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseAnon = Deno.env.get("SUPABASE_ANON_KEY") ??
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+    if (!supabaseUrl || !supabaseAnon) {
+      console.error("Supabase env missing");
+      return json({ error: "Server misconfigured" }, 500);
+    }
+    const supabase = createClient(supabaseUrl, supabaseAnon, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await supabase.auth.getUser(
+      authHeader.replace("Bearer ", ""),
+    );
+    if (userErr || !userData?.user) {
+      return json({ error: "Unauthorized" }, 401);
     }
 
-    const body = await req.json();
+    const apiKey = Deno.env.get("ELEVENLABS_API_KEY");
+    if (!apiKey) {
+      console.error("ELEVENLABS_API_KEY ontbreekt");
+      return json({ error: "Spraak is tijdelijk niet beschikbaar." }, 503);
+    }
+
+    const body = await req.json().catch(() => null);
     const text = body?.text;
     const requestedVoiceId = typeof body?.voice_id === "string" ? body.voice_id : "";
     if (!text || typeof text !== "string") {
-      return new Response(
-        JSON.stringify({ error: "text is verplicht" }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return json({ error: "text is verplicht" }, 400);
+    }
+    if (text.length > MAX_CHARS) {
+      return json({ error: "Tekst is te lang" }, 400);
     }
 
     const voiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
@@ -76,13 +100,7 @@ Deno.serve(async (req) => {
     if (!resp.ok) {
       const detail = await resp.text();
       console.error("ElevenLabs error", resp.status, detail);
-      return new Response(
-        JSON.stringify({ error: "TTS-fout", status: resp.status, detail }),
-        {
-          status: 502,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
+      return json({ error: "Spraak is tijdelijk niet beschikbaar." }, 502);
     }
 
     const audio = await resp.arrayBuffer();
@@ -96,15 +114,6 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error("text-to-speech crashed", err);
-    return new Response(
-      JSON.stringify({
-        error: "Onverwachte fout",
-        details: String(err),
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return json({ error: "Onverwachte fout" }, 500);
   }
 });
