@@ -29,7 +29,7 @@ type DisplayEvent = {
   date: string; // YYYY-MM-DD
   startTime: string | null; // HH:MM
   endTime: string | null;
-  href: string | null;
+  appointmentId: string | null;
 };
 
 function todayISO() {
