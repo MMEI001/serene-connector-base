@@ -224,6 +224,8 @@ function AgendasPage() {
           </Card>
         </>
       )}
+
+      {user && <IcsCalendarsSection />}
     </AppShell>
   );
 }
