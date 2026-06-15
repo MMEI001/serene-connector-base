@@ -15,6 +15,7 @@ import {
   setCalendarPreference,
   disconnectGoogleCalendar,
 } from "@/lib/google-calendar.functions";
+import { IcsCalendarsSection } from "@/components/ics-calendars-section";
 
 export const Route = createFileRoute("/agendas/")({
   ssr: false,
