@@ -1,104 +1,83 @@
-# ICS-agenda's koppelen (Apple iCloud e.d.)
+# HoofdRust — Zen-tech rebrand (4 fases)
 
-Doel: gebruikers kunnen één of meer ICS-feeds koppelen (webcal:// of https://), die periodiek synchroniseren, en de events tonen samen met Google Calendar events in de bestaande agenda-view.
+Een eerdere ronde heeft al een "warm cream" basis gelegd (Fraunces/Inter, glass surfaces, breathing FAB, basis orb op `/laat-los`). Deze update vervangt en breidt dat consistent uit volgens de nieuwe spec.
 
-## 1. Database migratie
+## Fase 1 — Design system
 
-Twee nieuwe tabellen in `public`:
+- Fonts via `<link>` in `__root.tsx`: **Fraunces** (display), **DM Sans** (body, vervangt Inter), **JetBrains Mono** (numeriek).
+- `src/styles.css` herschrijven:
+  - Tokens: `--bg-base #F5F0EC`, `--bg-gradient-top #EDE4DD`, `--bg-gradient-bottom #F8F3EE`, `--text-primary #3D352E`, `--text-secondary #8B7E73`, `--text-tertiary #B5A99E`.
+  - Source dots: sage `#A8B89A`, dusty-pink `#D9A5A5`, powder-blue `#A5B5C9`, butter `#D4C896`.
+  - Accent gradient `--gradient-iridescent: linear-gradient(135deg,#C8B6D9 0%,#E8D4DC 50%,#F0E1D4 100%)`.
+  - Radii: `--radius-card 20px`, `--radius-float 24px`, `--radius-pill 999px`. Shadow `--shadow-soft: 0 4px 24px rgba(139,126,115,.08)`.
+  - Standaard transition cubic-bezier(0.4,0,0.2,1) 300–500ms.
+  - shadcn color mapping (`--background`, `--foreground`, `--primary`, `--muted`, `--destructive`) opnieuw afstemmen — geen rode notificaties; destructive wordt zachte taupe-paars.
+- `surface-glass` utility: `bg-white/70 backdrop-blur-[20px] border-white/40 shadow-soft rounded-[20px]`.
+- Bestaande hardcoded kleuren/Inter-referenties in components weghalen.
 
-**`ics_calendars`**
-- `id` uuid pk
-- `user_id` uuid (FK auth.users, cascade)
-- `name` text
-- `url` text (genormaliseerd naar https://)
-- `color` text nullable (voor latere kleur-config)
-- `last_synced_at` timestamptz nullable
-- `last_error` text nullable
-- `created_at`, `updated_at` timestamptz
+## Fase 2 — `<TimeAwareBackground>`
 
-**`ics_events`**
-- `id` uuid pk
-- `calendar_id` uuid (FK ics_calendars, cascade)
-- `uid` text (uit ICS)
-- `summary` text
-- `description` text nullable
-- `location` text nullable
-- `start_time` timestamptz
-- `end_time` timestamptz nullable
-- `is_all_day` boolean default false
-- `updated_at` timestamptz
-- UNIQUE (calendar_id, uid)
-- index op (calendar_id, start_time)
+- Nieuw `src/components/time-aware-background.tsx`, gemount in `app-shell`.
+- Bepaalt periode (5–11, 11–17, 17–22, 22–5) en zet CSS-vars op een fixed full-screen `<div>` met radial+linear gradient.
+- Periodes:
+  - Ochtend `#F0E5E8 → #F8F0E8`
+  - Middag `#F5F0EC → #F8F3EE`
+  - Avond `#E8DDD5 → #E5DCD8`
+  - Nacht `#3D3540 → #2D2832` + sterren-laag (kleine witte dots, css `radial-gradient`, lage opacity).
+- Bij periode-overgang: 60s `transition: background 60s linear`. Re-check elke minuut.
+- Nacht-modus zet ook `data-theme="night"` op `<html>` zodat tekst-tokens omflippen naar lichte variant.
 
-RLS: gebruiker ziet/bewerkt alleen eigen rijen. Voor `ics_events` via subquery op `ics_calendars.user_id`. GRANT op beide aan `authenticated` + `service_role`.
+## Fase 3 — Bottom navigation
 
-Trigger `set_updated_at` op beide.
+- Volgorde: **Agenda · Reminders · Laat los (FAB) · Notities · Profiel** (5 items, 4 normaal + 1 centrale FAB).
+- Nieuwe route nodig: `/notities` als alias voor bestaande `journal.tsx` (of journal hernoemen → `notities.index.tsx`). Reminders bestaat al (`/reminders`). Profiel bestaat (`/profiel`).
+- Glass-balk: `surface-nav` (`bg-white/60 backdrop-blur-[20px] border-t border-white/40`), safe-area padding.
+- 4 line-icons (Lucide, 24px, stroke `--text-secondary`), actieve state krijgt `--text-primary` + onderstreping/dot.
+- Laat los FAB: 64×64 rounded-full, iridescent gradient, glow via dubbele `box-shadow` met lavender/peach. 16px boven balk (`-translate-y-4`).
+- `motion.button` met continue breathing keyframe (scale 1 → 1.05 → 1, 4s, ease-in-out, infinite). On tap: `navigator.vibrate?.(10)`.
 
-## 2. Server functions (`src/lib/ics-calendar.functions.ts`)
+## Fase 4 — `/laat-los` ervaring
 
-Allemaal met `requireSupabaseAuth`:
-- `listIcsCalendars()` → calendars van huidige user
-- `addIcsCalendar({ name, url })` → normaliseer webcal:// → https://, valideer met fetch+parse (min. 1 VEVENT), insert, trigger initial `syncIcsCalendar`, return rij
-- `deleteIcsCalendar({ id })`
-- `syncIcsCalendar({ id })` → fetch URL, parse met `node-ical`, upsert events op (calendar_id, uid), delete events met uids die niet meer voorkomen, update `last_synced_at` of `last_error`, return `{ count, syncedAt }`
-- `syncAllIcsCalendars()` → loop over user's calendars, vang per-calendar errors af, return per-id status
-- `listIcsEventsInRange({ from, to })` → events van alle eigen calendars binnen window, join met calendar-naam/kleur
+- Layout:
+  - Tijdgebaseerde groet (Fraunces, 34px) — Goedemorgen/-middag/-avond/-nacht.
+  - Subline DM Sans taupe — "Wat wil je loslaten?".
+  - `<BreathingOrb>` 240×240 centraal.
+  - "Tik om te spreken" + pulserend mic-icoon.
+  - Privacy: "Wat je hier zegt blijft bij jou" (12px, text-tertiary).
+  - Horizontaal-scrollende pill-rij: "Schrijf in plaats daarvan", "Bekijk eerdere", "Stilte modus".
+- `<BreathingOrb>` (`src/components/breathing-orb.tsx`):
+  - 240px rounded-full, gelaagde radial gradients (lavender top-left, dusty pink center, pearl peach bottom-right).
+  - Box-shadow glow met dezelfde kleurfamilies, blur 60px.
+  - `motion.div` breathing 4s. Hover: glow opacity omhoog. Recording: cyclus 2s + warmere tint via class-toggle.
+- Tap-flow:
+  1. Haptic medium `navigator.vibrate?.(30)`.
+  2. State `recording`. Orb sneller + warmer.
+  3. (Bestaande voice/transcript-logica wordt hergebruikt; geen backend-wijzigingen.)
+- Zen-moment na opslaan:
+  - `phase: idle → bloom → fade → silence → reset`.
+  - Bloom 800ms (scale 1.3, gradient bloeit), fade-out 600ms, "Losgelaten." in Fraunces, 3s stilte, dan fade terug.
+  - Haptic `navigator.vibrate?.([100, 30, 200])` bij bloom-start.
 
-`node-ical` toevoegen via `bun add node-ical`. Parsing alleen in server-functions (server-side runtime).
+## Bestanden
 
-## 3. UI — `src/routes/agendas.index.tsx`
+Nieuw:
+- `src/components/time-aware-background.tsx`
+- `src/components/breathing-orb.tsx`
+- `src/components/zen-release.tsx` (bloom/fade overlay)
+- `src/routes/notities.index.tsx` (alias/rename van journal)
 
-Nieuwe sectie onder Google-blok: **"Andere agenda's (ICS)"**
-- Form: input `name`, input `url`, knop "Toevoegen" (loading state, toont fout bij ongeldige feed)
-- Lijst van ICS-calendars: naam, "Laatst gesynchroniseerd" (relatief), aantal events (uit count query), eventueel `last_error` rood, "Nu syncen" knop, prullenbak
+Gewijzigd:
+- `src/styles.css`, `src/routes/__root.tsx`, `src/components/app-shell.tsx`,
+  `src/components/bottom-nav.tsx`, `src/routes/laat-los.index.tsx`,
+  agenda/reminders/profiel/journal styling (alleen tokens + glass surfaces).
 
-State los van Google-state zodat fouten/ontkoppelen elkaar niet blokkeren.
+Geen wijzigingen aan: server functions, DB schema, auth, ICS sync.
 
-## 4. Agenda-view integratie — `src/routes/agenda.index.tsx`
+## Aannames
 
-Huidige view toont alleen `appointments`. Uitbreiding:
-- Naast `appointments` ook ICS-events ophalen (komende ~90 dagen) via `listIcsEventsInRange`
-- Optioneel ook Google-events (laten we voorlopig buiten scope houden tenzij al aanwezig — als bestaande view alleen `appointments` toont, voegen we ICS toe; Google-events visualisatie is eerder werk en valt buiten deze taak)
-- Unified type `DisplayEvent { id, source: 'appointment' | 'ics', sourceLabel, color, title, startDate, startTime, endTime }`
-- Mergen en sorteren per dag op start tijd
-- Per kaart een kleine badge rechtsboven met `sourceLabel` (bv. "Werk", "Privé"); kleurpunt links via `color`
-- Default kleuren per ICS-calendar uit `color` of fallback uit hash van naam
+- `motion` is al geïnstalleerd (vorige ronde). DM Sans + JetBrains Mono komen van Google Fonts via `<link>`.
+- Bestaande Inter-koppeling wordt vervangen door DM Sans; Fraunces blijft.
+- Geen nieuwe routes voor "Stilte modus" / "Bekijk eerdere" — pills tonen toast "binnenkort" tot je ze uitwerkt.
+- `journal.tsx` wordt **hernoemd** naar `notities.index.tsx`; oude `/journal`-links worden geüpdatet.
 
-## 5. Achtergrond-sync bij app-open
-
-In `src/routes/__root.tsx` (of een client-only effect daar): zodra `user` ingelogd, fire-and-forget `syncAllIcsCalendars()` zonder UI te blokkeren; bij succes invalidate van router/queries niet nodig — de agenda-view laadt opnieuw bij navigatie.
-
-## 6. Hourly cron
-
-Server route `src/routes/api/public/hooks/sync-ics.ts` (POST):
-- Geen user-context; gebruikt `supabaseAdmin` (binnen handler import)
-- Lijst alle `ics_calendars`
-- Voor elk: zelfde sync-logica als `syncIcsCalendar`, error per kalender afvangen
-- Auth via `apikey` header (Supabase anon key) — `/api/public/*` bypasst auth op published site, en de logic doet geen privileged write namens user
-
-Daarna via `supabase--insert` tool: `cron.schedule('sync-ics-hourly', '0 * * * *', ...)` met `net.http_post` naar `https://project--aa2817e3-a301-4a75-9e08-9af6a4d4d4e1.lovable.app/api/public/hooks/sync-ics`.
-
-## Volgorde van implementatie
-
-1. Migratie (tabellen + RLS + grants + triggers)
-2. `bun add node-ical`
-3. Server functions
-4. UI in `agendas.index.tsx`
-5. Agenda-view merge
-6. Background sync hook in `__root.tsx`
-7. Cron route + `cron.schedule`
-
-## Technische notities
-
-- `webcal://` → `https://` enkel voor fetch en opslag; we slaan de https-versie op zodat cron eenvoudig werkt
-- Validatie van URL: protocol whitelist `webcal:`, `https:`, optioneel `http:`. Max length 2000.
-- Naam: trim, 1–100 chars.
-- `node-ical` werkt in workerd-runtime mits geen filesystem-deps; gebruik `ical.async.parseICS(text)` op gefetchte body i.p.v. `fromURL`.
-- Soft-fail: één corrupte feed mag nooit de sync van andere blokkeren.
-- Geen kleur-picker UI in deze ronde — alleen kolom alvast voorbereiden.
-
-## Out of scope
-
-- Google Calendar events in unified view (alleen ICS + appointments nu, tenzij triviaal toe te voegen)
-- Kleur-picker per ICS-agenda (kolom bestaat, UI later)
-- Two-way sync; alles is read-only
+Akkoord om alle 4 fases in één keer uit te voeren?

@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "./app-header";
 import { BottomNav } from "./bottom-nav";
+import { TimeAwareBackground } from "./time-aware-background";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
@@ -44,7 +45,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen pb-28">
+    <div className="relative min-h-screen pb-28">
+      <TimeAwareBackground />
       <AppHeader />
       <main className="mx-auto max-w-2xl px-5 py-10 animate-float-up">{children}</main>
       <BottomNav />

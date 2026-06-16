@@ -134,7 +134,7 @@ function Dashboard() {
           Neem even een momentje voor jezelf. Hieronder vind je je dag in rust.
         </p>
         <Button asChild className="mt-6 rounded-full px-6" size="lg">
-          <Link to="/journal">Nieuwe notitie schrijven</Link>
+          <Link to="/notities">Nieuwe notitie schrijven</Link>
         </Button>
       </section>
 

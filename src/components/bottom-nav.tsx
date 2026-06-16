@@ -1,32 +1,37 @@
 import { Link } from "@tanstack/react-router";
 import { Calendar, Bell, NotebookPen, User, Sparkles } from "lucide-react";
 
-const sideItems = [
+const leftItems = [
   { to: "/agenda", label: "Agenda", Icon: Calendar },
   { to: "/reminders", label: "Reminders", Icon: Bell },
-  { to: "/journal", label: "Notities", Icon: NotebookPen },
+] as const;
+
+const rightItems = [
+  { to: "/notities", label: "Notities", Icon: NotebookPen },
   { to: "/profiel", label: "Profiel", Icon: User },
 ] as const;
 
 export function BottomNav() {
-  const left = sideItems.slice(0, 2);
-  const right = sideItems.slice(2);
-
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30">
-      {/* Floating Laat-los button */}
+      {/* Floating Laat-los FAB */}
       <Link
         to="/laat-los"
         aria-label="Laat los"
-        className="group absolute left-1/2 -top-6 -translate-x-1/2 flex h-16 w-16 items-center justify-center rounded-full gradient-iridescent text-[#3d352e] shadow-[0_8px_32px_rgba(200,182,217,0.55),0_0_0_6px_rgba(255,255,255,0.55)] transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-95 animate-breathe-slow"
+        onClick={() => {
+          if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+            navigator.vibrate(10);
+          }
+        }}
+        className="group absolute left-1/2 -top-4 -translate-x-1/2 flex h-16 w-16 items-center justify-center rounded-full gradient-iridescent text-[#3d352e] shadow-[0_10px_36px_rgba(200,182,217,0.55),0_4px_18px_rgba(240,225,212,0.45),0_0_0_6px_rgba(255,255,255,0.55)] transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-95 animate-breathe-slow"
       >
         <span className="absolute inset-0 rounded-full bg-white/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
         <Sparkles className="relative h-7 w-7" strokeWidth={1.5} />
       </Link>
 
-      <div className="surface-nav">
-        <ul className="mx-auto grid max-w-2xl grid-cols-5 items-end px-3 pb-3 pt-2.5">
-          {left.map(({ to, label, Icon }) => (
+      <div className="surface-nav pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <ul className="mx-auto grid max-w-2xl grid-cols-5 items-end px-3 pt-2.5">
+          {leftItems.map(({ to, label, Icon }) => (
             <NavItem key={to} to={to} label={label} Icon={Icon} />
           ))}
           <li className="flex justify-center">
@@ -38,7 +43,7 @@ export function BottomNav() {
               Laat los
             </Link>
           </li>
-          {right.map(({ to, label, Icon }) => (
+          {rightItems.map(({ to, label, Icon }) => (
             <NavItem key={to} to={to} label={label} Icon={Icon} />
           ))}
         </ul>

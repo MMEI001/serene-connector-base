@@ -12,10 +12,10 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuggestiesRouteImport } from './routes/suggesties'
 import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
+import { Route as NotitiesIndexRouteImport } from './routes/notities.index'
 import { Route as LaatLosIndexRouteImport } from './routes/laat-los.index'
 import { Route as AgendasIndexRouteImport } from './routes/agendas.index'
 import { Route as AgendaIndexRouteImport } from './routes/agenda.index'
@@ -48,11 +48,6 @@ const OnboardingRoute = OnboardingRouteImport.update({
   path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
-const JournalRoute = JournalRouteImport.update({
-  id: '/journal',
-  path: '/journal',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -66,6 +61,11 @@ const IndexRoute = IndexRouteImport.update({
 const RemindersIndexRoute = RemindersIndexRouteImport.update({
   id: '/reminders/',
   path: '/reminders/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NotitiesIndexRoute = NotitiesIndexRouteImport.update({
+  id: '/notities/',
+  path: '/notities/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LaatLosIndexRoute = LaatLosIndexRouteImport.update({
@@ -152,7 +152,6 @@ const ApiPublicHooksSyncIcsRoute = ApiPublicHooksSyncIcsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -166,6 +165,7 @@ export interface FileRoutesByFullPath {
   '/agenda/': typeof AgendaIndexRoute
   '/agendas/': typeof AgendasIndexRoute
   '/laat-los/': typeof LaatLosIndexRoute
+  '/notities/': typeof NotitiesIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
@@ -177,7 +177,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -188,6 +187,7 @@ export interface FileRoutesByTo {
   '/agenda': typeof AgendaIndexRoute
   '/agendas': typeof AgendasIndexRoute
   '/laat-los': typeof LaatLosIndexRoute
+  '/notities': typeof NotitiesIndexRoute
   '/reminders': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
@@ -200,7 +200,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
-  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -214,6 +213,7 @@ export interface FileRoutesById {
   '/agenda/': typeof AgendaIndexRoute
   '/agendas/': typeof AgendasIndexRoute
   '/laat-los/': typeof LaatLosIndexRoute
+  '/notities/': typeof NotitiesIndexRoute
   '/reminders/': typeof RemindersIndexRoute
   '/agenda/$id/bewerken': typeof AgendaIdBewerkenRoute
   '/reminders/$id/bewerken': typeof RemindersIdBewerkenRoute
@@ -227,7 +227,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
-    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -241,6 +240,7 @@ export interface FileRouteTypes {
     | '/agenda/'
     | '/agendas/'
     | '/laat-los/'
+    | '/notities/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
@@ -252,7 +252,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
-    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -263,6 +262,7 @@ export interface FileRouteTypes {
     | '/agenda'
     | '/agendas'
     | '/laat-los'
+    | '/notities'
     | '/reminders'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
@@ -274,7 +274,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/auth'
-    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -288,6 +287,7 @@ export interface FileRouteTypes {
     | '/agenda/'
     | '/agendas/'
     | '/laat-los/'
+    | '/notities/'
     | '/reminders/'
     | '/agenda/$id/bewerken'
     | '/reminders/$id/bewerken'
@@ -300,7 +300,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
-  JournalRoute: typeof JournalRoute
   OnboardingRoute: typeof OnboardingRoute
   ProfielRoute: typeof ProfielRoute
   SuggestiesRoute: typeof SuggestiesRoute
@@ -314,6 +313,7 @@ export interface RootRouteChildren {
   AgendaIndexRoute: typeof AgendaIndexRoute
   AgendasIndexRoute: typeof AgendasIndexRoute
   LaatLosIndexRoute: typeof LaatLosIndexRoute
+  NotitiesIndexRoute: typeof NotitiesIndexRoute
   RemindersIndexRoute: typeof RemindersIndexRoute
   ApiPublicHooksSyncIcsRoute: typeof ApiPublicHooksSyncIcsRoute
 }
@@ -341,13 +341,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/journal': {
-      id: '/journal'
-      path: '/journal'
-      fullPath: '/journal'
-      preLoaderRoute: typeof JournalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -367,6 +360,13 @@ declare module '@tanstack/react-router' {
       path: '/reminders'
       fullPath: '/reminders/'
       preLoaderRoute: typeof RemindersIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/notities/': {
+      id: '/notities/'
+      path: '/notities'
+      fullPath: '/notities/'
+      preLoaderRoute: typeof NotitiesIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/laat-los/': {
@@ -527,7 +527,6 @@ const RemindersIdRouteWithChildren = RemindersIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
-  JournalRoute: JournalRoute,
   OnboardingRoute: OnboardingRoute,
   ProfielRoute: ProfielRoute,
   SuggestiesRoute: SuggestiesRoute,
@@ -541,6 +540,7 @@ const rootRouteChildren: RootRouteChildren = {
   AgendaIndexRoute: AgendaIndexRoute,
   AgendasIndexRoute: AgendasIndexRoute,
   LaatLosIndexRoute: LaatLosIndexRoute,
+  NotitiesIndexRoute: NotitiesIndexRoute,
   RemindersIndexRoute: RemindersIndexRoute,
   ApiPublicHooksSyncIcsRoute: ApiPublicHooksSyncIcsRoute,
 }
