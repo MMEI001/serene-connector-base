@@ -194,7 +194,7 @@ function AgendaPage() {
           id: `appt:${a.id}`,
           source: "appointment",
           sourceLabel: "Eigen",
-          color: "#64748b",
+          color: "#a8b89a",
           title: a.title,
           date: a.date,
           startTime: a.start_time ? a.start_time.slice(0, 5) : null,
