@@ -231,14 +231,18 @@ function AgendaPage() {
 
   return (
     <AppShell>
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-10 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl text-foreground">Agenda</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">Agenda</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Je afspraken in rustig overzicht.
           </p>
         </div>
-        <Button asChild size="sm" className="rounded-full">
+        <Button
+          asChild
+          size="sm"
+          className="rounded-full bg-white/70 text-foreground shadow-[var(--shadow-soft)] backdrop-blur-md hover:bg-white"
+        >
           <Link to="/agenda/nieuw">Nieuwe afspraak</Link>
         </Button>
       </div>
