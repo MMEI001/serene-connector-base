@@ -68,7 +68,7 @@ function hhmm(d: Date) {
 function hashColor(s: string): string {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  const palette = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24", "#a78bfa", "#fb7185", "#22d3ee"];
+  const palette = ["#a8b89a", "#d9a5a5", "#a5b5c9", "#d4c896", "#c8b6d9", "#e8d4dc"];
   return palette[h % palette.length];
 }
 
@@ -92,38 +92,46 @@ function groupByDay(items: DisplayEvent[]) {
 
 function ApptList({ groups }: { groups: [string, DisplayEvent[]][] }) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {groups.map(([day, list]) => (
         <section key={day}>
-          <h2 className="mb-3 text-sm capitalize text-muted-foreground">
+          <h2 className="mb-4 font-display text-lg capitalize tracking-[-0.02em] text-foreground/90">
             {formatDay(day)}
           </h2>
           <div className="space-y-3">
             {list.map((a) => {
               const span = timeSpan(a);
+              const stripe = a.color ?? hashColor(a.sourceLabel);
               const inner = (
-                <Card className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm transition-colors hover:bg-card">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: a.color ?? hashColor(a.sourceLabel) }}
-                        aria-hidden
-                      />
-                      <h3 className="truncate text-base text-foreground">{a.title}</h3>
-                    </div>
+                <div className="relative overflow-hidden rounded-[20px] surface-glass p-5 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5">
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-3 left-0 w-1 rounded-full"
+                    style={{ backgroundColor: stripe }}
+                  />
+                  <div className="ml-3 flex items-baseline justify-between gap-3">
+                    <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
+                      {a.title}
+                    </h3>
                     {span && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      <span className="shrink-0 text-mono text-xs text-foreground/70">
                         {span}
                       </span>
                     )}
                   </div>
-                  <div className="mt-2">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="ml-3 mt-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
+                    >
+                      <span
+                        aria-hidden
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: stripe }}
+                      />
                       {a.sourceLabel}
                     </span>
                   </div>
-                </Card>
+                </div>
               );
               return a.appointmentId ? (
                 <Link
@@ -186,7 +194,7 @@ function AgendaPage() {
           id: `appt:${a.id}`,
           source: "appointment",
           sourceLabel: "Eigen",
-          color: "#64748b",
+          color: "#a8b89a",
           title: a.title,
           date: a.date,
           startTime: a.start_time ? a.start_time.slice(0, 5) : null,
@@ -223,14 +231,18 @@ function AgendaPage() {
 
   return (
     <AppShell>
-      <div className="mb-8 flex items-start justify-between gap-4">
+      <div className="mb-10 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl text-foreground">Agenda</h1>
-          <p className="mt-2 text-muted-foreground">
+          <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">Agenda</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             Je afspraken in rustig overzicht.
           </p>
         </div>
-        <Button asChild size="sm" className="rounded-full">
+        <Button
+          asChild
+          size="sm"
+          className="rounded-full bg-white/70 text-foreground shadow-[var(--shadow-soft)] backdrop-blur-md hover:bg-white"
+        >
           <Link to="/agenda/nieuw">Nieuwe afspraak</Link>
         </Button>
       </div>

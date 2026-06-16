@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { motion } from "motion/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Collapsible,
   CollapsibleContent,
@@ -25,95 +23,161 @@ type Item = {
   created_at: string;
 };
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 6) return "Goedenacht";
+  if (h < 12) return "Goedemorgen";
+  if (h < 18) return "Goedemiddag";
+  return "Goedenavond";
+}
+
 function formatCreated(iso: string) {
   const d = new Date(iso);
   const now = new Date();
-  const sameDay =
+  const same =
     d.getFullYear() === now.getFullYear() &&
     d.getMonth() === now.getMonth() &&
     d.getDate() === now.getDate();
-  if (sameDay) return "vandaag";
+  if (same) return "vandaag";
   return d.toLocaleDateString("nl-NL", { day: "numeric", month: "long" });
 }
 
 function preview(text: string) {
-  const firstLine = text.split("\n")[0]?.trim() ?? "";
-  if (firstLine.length <= 120) return firstLine;
-  return firstLine.slice(0, 117) + "…";
+  const f = text.split("\n")[0]?.trim() ?? "";
+  return f.length <= 100 ? f : f.slice(0, 97) + "…";
 }
+
+const suggestions = [
+  { label: "Schrijf in plaats daarvan", to: "/laat-los/nieuw" },
+  { label: "Bekijk eerdere", to: "/laat-los" },
+  { label: "Stilte modus", to: "/laat-los" },
+] as const;
 
 function LetGoPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [active, setActive] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
-      setLoading(true);
-      setError(false);
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("let_go_items")
         .select("id, content, status, created_at")
         .eq("user_id", user.id)
         .in("status", ["active", "archived"])
         .order("created_at", { ascending: false });
-      if (error) {
-        console.error("[let_go]", error);
-        setError(true);
-      }
       setItems((data ?? []) as Item[]);
       setLoading(false);
     })();
   }, [user]);
 
-  const active = items.filter((i) => i.status === "active");
+  const activeItems = items.filter((i) => i.status === "active");
   const archived = items.filter((i) => i.status === "archived");
+
+  const handleOrb = () => {
+    setActive(true);
+    setTimeout(() => navigate({ to: "/laat-los/nieuw" }), 350);
+  };
 
   return (
     <AppShell>
-      <div className="mb-10 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl text-foreground">Laat los</h1>
-          <p className="mt-2 text-muted-foreground">
-            Een rustige plek voor wat uit je hoofd mag.
-          </p>
+      <div className="flex flex-col items-center text-center">
+        <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">
+          {greeting()}
+        </h1>
+        <p className="mt-3 text-base text-muted-foreground">
+          Wat wil je loslaten?
+        </p>
+
+        {/* Orb */}
+        <button
+          type="button"
+          onClick={handleOrb}
+          aria-label="Tik om te spreken"
+          className="relative my-12 flex h-56 w-56 items-center justify-center rounded-full focus:outline-none"
+        >
+          {/* outer glow */}
+          <motion.span
+            aria-hidden
+            className="absolute inset-[-30px] rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle at 30% 30%, rgba(200,182,217,0.55), rgba(232,212,220,0.35) 45%, rgba(240,225,212,0.1) 70%, transparent 80%)",
+              filter: "blur(20px)",
+            }}
+            animate={{ scale: active ? [1, 1.15, 1] : [1, 1.08, 1] }}
+            transition={{
+              duration: active ? 1.2 : 4,
+              repeat: Infinity,
+              ease: [0.4, 0, 0.2, 1],
+            }}
+          />
+          {/* main orb */}
+          <motion.span
+            aria-hidden
+            className="relative block h-44 w-44 rounded-full"
+            style={{
+              background:
+                "radial-gradient(circle at 35% 30%, #ffffff 0%, #f0e1d4 25%, #e8d4dc 55%, #c8b6d9 85%)",
+              boxShadow:
+                "inset -20px -30px 50px rgba(139, 126, 115, 0.18), inset 20px 20px 40px rgba(255,255,255,0.6), 0 20px 60px rgba(200,182,217,0.4)",
+            }}
+            animate={{ scale: active ? [1, 1.08, 1] : [1, 1.05, 1] }}
+            transition={{
+              duration: active ? 1.2 : 4,
+              repeat: Infinity,
+              ease: [0.4, 0, 0.2, 1],
+            }}
+          />
+          {/* highlight */}
+          <span
+            aria-hidden
+            className="absolute left-1/2 top-[28%] h-12 w-20 -translate-x-1/2 rounded-full bg-white/60 blur-xl"
+          />
+        </button>
+
+        <motion.p
+          className="text-sm font-medium tracking-wide text-muted-foreground"
+          animate={{ opacity: [0.6, 1, 0.6] }}
+          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+        >
+          Tik om te spreken
+        </motion.p>
+
+        {/* suggestion pills */}
+        <div className="mt-8 -mx-5 w-screen max-w-2xl overflow-x-auto px-5 pb-2">
+          <div className="flex gap-2.5 justify-center min-w-min">
+            {suggestions.map((s) => (
+              <Link
+                key={s.label}
+                to={s.to}
+                className="shrink-0 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] active:scale-95"
+              >
+                {s.label}
+              </Link>
+            ))}
+          </div>
         </div>
-        <Button asChild size="sm" className="rounded-full">
-          <Link to="/laat-los/nieuw">Iets loslaten</Link>
-        </Button>
       </div>
 
-      {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-24 w-full rounded-3xl" />
-          <Skeleton className="h-24 w-full rounded-3xl" />
-        </div>
-      ) : error ? (
-        <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-          Dit lukte nu even niet. Probeer het zo nog eens.
-        </Card>
-      ) : active.length === 0 && archived.length === 0 ? (
-        <Card className="rounded-3xl border-border/60 bg-card/60 p-10 text-center text-sm text-muted-foreground shadow-sm">
-          Niets om los te laten op dit moment.
-        </Card>
-      ) : (
-        <div className="space-y-10">
-          {active.length > 0 ? (
+      {/* recent items */}
+      {!loading && (activeItems.length > 0 || archived.length > 0) && (
+        <div className="mt-14 space-y-8">
+          {activeItems.length > 0 && (
             <section>
-              <h2 className="mb-4 text-sm text-muted-foreground">Actief</h2>
-              <ItemList list={active} />
+              <h2 className="mb-4 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                Recent losgelaten
+              </h2>
+              <ItemList list={activeItems.slice(0, 5)} />
             </section>
-          ) : (
-            <Card className="rounded-3xl border-border/60 bg-card/60 p-10 text-center text-sm text-muted-foreground shadow-sm">
-              Niets om los te laten op dit moment.
-            </Card>
           )}
 
           {archived.length > 0 && (
             <Collapsible>
-              <CollapsibleTrigger className="text-sm text-muted-foreground hover:text-foreground">
+              <CollapsibleTrigger className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground hover:text-foreground">
                 Gearchiveerd ({archived.length})
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4">
@@ -130,16 +194,22 @@ function LetGoPage() {
 function ItemList({ list, muted }: { list: Item[]; muted?: boolean }) {
   return (
     <div className="space-y-3">
-      {list.map((i) => (
-        <Link
+      {list.map((i, idx) => (
+        <motion.div
           key={i.id}
-          to="/laat-los/$id"
-          params={{ id: i.id }}
-          className="block"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            delay: idx * 0.04,
+            duration: 0.5,
+            ease: [0.4, 0, 0.2, 1],
+          }}
         >
-          <Card
-            className={`rounded-3xl border-border/60 p-6 shadow-sm transition-colors hover:bg-card ${
-              muted ? "bg-card/40" : "bg-card/70"
+          <Link
+            to="/laat-los/$id"
+            params={{ id: i.id }}
+            className={`block surface-glass rounded-[20px] p-5 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5 ${
+              muted ? "opacity-70" : ""
             }`}
           >
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
@@ -148,8 +218,8 @@ function ItemList({ list, muted }: { list: Item[]; muted?: boolean }) {
             <p className="mt-3 text-xs text-muted-foreground">
               {formatCreated(i.created_at)}
             </p>
-          </Card>
-        </Link>
+          </Link>
+        </motion.div>
       ))}
     </div>
   );

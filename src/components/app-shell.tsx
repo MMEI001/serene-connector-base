@@ -44,9 +44,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen pb-28">
       <AppHeader />
-      <main className="mx-auto max-w-2xl px-4 py-10">{children}</main>
+      <main className="mx-auto max-w-2xl px-5 py-10 animate-float-up">{children}</main>
       <BottomNav />
     </div>
   );
