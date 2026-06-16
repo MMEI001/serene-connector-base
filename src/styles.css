@@ -132,7 +132,8 @@
 
   html,
   body {
-    background: transparent;
+    background: var(--gradient-background);
+    background-attachment: fixed;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-weight: 400;
