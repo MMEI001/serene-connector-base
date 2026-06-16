@@ -92,38 +92,46 @@ function groupByDay(items: DisplayEvent[]) {
 
 function ApptList({ groups }: { groups: [string, DisplayEvent[]][] }) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {groups.map(([day, list]) => (
         <section key={day}>
-          <h2 className="mb-3 text-sm capitalize text-muted-foreground">
+          <h2 className="mb-4 font-display text-lg capitalize tracking-[-0.02em] text-foreground/90">
             {formatDay(day)}
           </h2>
           <div className="space-y-3">
             {list.map((a) => {
               const span = timeSpan(a);
+              const stripe = a.color ?? hashColor(a.sourceLabel);
               const inner = (
-                <Card className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm transition-colors hover:bg-card">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: a.color ?? hashColor(a.sourceLabel) }}
-                        aria-hidden
-                      />
-                      <h3 className="truncate text-base text-foreground">{a.title}</h3>
-                    </div>
+                <div className="relative overflow-hidden rounded-[20px] surface-glass p-5 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5">
+                  <span
+                    aria-hidden
+                    className="absolute inset-y-3 left-0 w-1 rounded-full"
+                    style={{ backgroundColor: stripe }}
+                  />
+                  <div className="ml-3 flex items-baseline justify-between gap-3">
+                    <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
+                      {a.title}
+                    </h3>
                     {span && (
-                      <span className="shrink-0 text-xs text-muted-foreground">
+                      <span className="shrink-0 text-mono text-xs text-foreground/70">
                         {span}
                       </span>
                     )}
                   </div>
-                  <div className="mt-2">
-                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="ml-3 mt-2">
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
+                    >
+                      <span
+                        aria-hidden
+                        className="h-1.5 w-1.5 rounded-full"
+                        style={{ backgroundColor: stripe }}
+                      />
                       {a.sourceLabel}
                     </span>
                   </div>
-                </Card>
+                </div>
               );
               return a.appointmentId ? (
                 <Link
