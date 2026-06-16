@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 
-export const Route = createFileRoute("/journal")({
+export const Route = createFileRoute("/notities/")({
   ssr: false,
   head: () => ({ meta: [{ title: "HoofdRust — Notities" }] }),
   component: JournalPage,
