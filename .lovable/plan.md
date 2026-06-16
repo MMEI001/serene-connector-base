@@ -1,83 +1,59 @@
-# HoofdRust — Zen-tech rebrand (4 fases)
+## Status van de screenshots
 
-Een eerdere ronde heeft al een "warm cream" basis gelegd (Fraunces/Inter, glass surfaces, breathing FAB, basis orb op `/laat-los`). Deze update vervangt en breidt dat consistent uit volgens de nieuwe spec.
+De preview opent op **/auth** (loginscherm) zodra ik /laat-los probeer te bekijken. Ik kan dus geen authenticated screenshots maken van /laat-los, agenda, bottom nav of een agenda-item zonder dat jij eerst inlogt in de preview.
 
-## Fase 1 — Design system
+**Wat ik wél kon zien (auth-scherm):**
+- ✅ Fraunces serif draait ("HoofdRust" titel)
+- ✅ Cream achtergrond (#f5f0ec) aanwezig
+- ✅ Glass card met soft shadow
+- ❌ Geen iridescent gradient zichtbaar op auth-scherm — knop is vlak dusty-lavender (#c8b6d9) i.p.v. de iridescente bloom
 
-- Fonts via `<link>` in `__root.tsx`: **Fraunces** (display), **DM Sans** (body, vervangt Inter), **JetBrains Mono** (numeriek).
-- `src/styles.css` herschrijven:
-  - Tokens: `--bg-base #F5F0EC`, `--bg-gradient-top #EDE4DD`, `--bg-gradient-bottom #F8F3EE`, `--text-primary #3D352E`, `--text-secondary #8B7E73`, `--text-tertiary #B5A99E`.
-  - Source dots: sage `#A8B89A`, dusty-pink `#D9A5A5`, powder-blue `#A5B5C9`, butter `#D4C896`.
-  - Accent gradient `--gradient-iridescent: linear-gradient(135deg,#C8B6D9 0%,#E8D4DC 50%,#F0E1D4 100%)`.
-  - Radii: `--radius-card 20px`, `--radius-float 24px`, `--radius-pill 999px`. Shadow `--shadow-soft: 0 4px 24px rgba(139,126,115,.08)`.
-  - Standaard transition cubic-bezier(0.4,0,0.2,1) 300–500ms.
-  - shadcn color mapping (`--background`, `--foreground`, `--primary`, `--muted`, `--destructive`) opnieuw afstemmen — geen rode notificaties; destructive wordt zachte taupe-paars.
-- `surface-glass` utility: `bg-white/70 backdrop-blur-[20px] border-white/40 shadow-soft rounded-[20px]`.
-- Bestaande hardcoded kleuren/Inter-referenties in components weghalen.
+**Wat jij moet doen:** log even in op de preview, dan kan ik in één ronde de gevraagde 4 screenshots maken (home/agenda, /laat-los met orb, FAB close-up, agenda-card close-up) en de tijd-gevoelige middag-achtergrond tonen.
 
-## Fase 2 — `<TimeAwareBackground>`
+## Inventaris fase 1-4 (gebaseerd op codereview)
 
-- Nieuw `src/components/time-aware-background.tsx`, gemount in `app-shell`.
-- Bepaalt periode (5–11, 11–17, 17–22, 22–5) en zet CSS-vars op een fixed full-screen `<div>` met radial+linear gradient.
-- Periodes:
-  - Ochtend `#F0E5E8 → #F8F0E8`
-  - Middag `#F5F0EC → #F8F3EE`
-  - Avond `#E8DDD5 → #E5DCD8`
-  - Nacht `#3D3540 → #2D2832` + sterren-laag (kleine witte dots, css `radial-gradient`, lage opacity).
-- Bij periode-overgang: 60s `transition: background 60s linear`. Re-check elke minuut.
-- Nacht-modus zet ook `data-theme="night"` op `<html>` zodat tekst-tokens omflippen naar lichte variant.
+### Fase 1 — Design system ✅ grotendeels, met afwijkingen
+Geïmplementeerd in `src/styles.css`:
+- `--background: #f5f0ec` (warm cream) ✅
+- `--gradient-background` ochtend→middag fade ✅
+- `--gradient-iridescent` (lavender→roze→peach) ✅
+- `--primary: #c8b6d9` dusty lavender ✅
+- `--shadow-glow` voor orb ✅
+- `surface-glass` utility (70% wit + 20px blur) ✅
+- Fraunces / DM Sans / JetBrains Mono via root `<link>` ✅
+- `text-mono` utility met tabular-nums ✅
 
-## Fase 3 — Bottom navigation
+**Vrijheid genomen / afwijking van spec:**
+- Spec noemde aparte `--bg-gradient-top` token; ik heb dit samengevoegd in één `--gradient-background` linear-gradient (functioneel hetzelfde, minder tokens).
+- Source-accent kleuren (sage/pink/blue/butter) toegevoegd als bonus voor `bron`-categorisatie — niet in spec.
 
-- Volgorde: **Agenda · Reminders · Laat los (FAB) · Notities · Profiel** (5 items, 4 normaal + 1 centrale FAB).
-- Nieuwe route nodig: `/notities` als alias voor bestaande `journal.tsx` (of journal hernoemen → `notities.index.tsx`). Reminders bestaat al (`/reminders`). Profiel bestaat (`/profiel`).
-- Glass-balk: `surface-nav` (`bg-white/60 backdrop-blur-[20px] border-t border-white/40`), safe-area padding.
-- 4 line-icons (Lucide, 24px, stroke `--text-secondary`), actieve state krijgt `--text-primary` + onderstreping/dot.
-- Laat los FAB: 64×64 rounded-full, iridescent gradient, glow via dubbele `box-shadow` met lavender/peach. 16px boven balk (`-translate-y-4`).
-- `motion.button` met continue breathing keyframe (scale 1 → 1.05 → 1, 4s, ease-in-out, infinite). On tap: `navigator.vibrate?.(10)`.
+### Fase 2 — Time-aware background ⚠️ ja, maar simpel
+`src/components/time-aware-background.tsx` regelt 4 periodes met 60s fade en sterrenveld bij night + `data-period` op `<html>`.
 
-## Fase 4 — `/laat-los` ervaring
+**Twijfel:** ik weet niet zeker of de middag-tinten warm genoeg verschillen van ochtend — visueel niet bevestigd. Sterrenveld nacht is een vaste random verdeling, niet animated.
 
-- Layout:
-  - Tijdgebaseerde groet (Fraunces, 34px) — Goedemorgen/-middag/-avond/-nacht.
-  - Subline DM Sans taupe — "Wat wil je loslaten?".
-  - `<BreathingOrb>` 240×240 centraal.
-  - "Tik om te spreken" + pulserend mic-icoon.
-  - Privacy: "Wat je hier zegt blijft bij jou" (12px, text-tertiary).
-  - Horizontaal-scrollende pill-rij: "Schrijf in plaats daarvan", "Bekijk eerdere", "Stilte modus".
-- `<BreathingOrb>` (`src/components/breathing-orb.tsx`):
-  - 240px rounded-full, gelaagde radial gradients (lavender top-left, dusty pink center, pearl peach bottom-right).
-  - Box-shadow glow met dezelfde kleurfamilies, blur 60px.
-  - `motion.div` breathing 4s. Hover: glow opacity omhoog. Recording: cyclus 2s + warmere tint via class-toggle.
-- Tap-flow:
-  1. Haptic medium `navigator.vibrate?.(30)`.
-  2. State `recording`. Orb sneller + warmer.
-  3. (Bestaande voice/transcript-logica wordt hergebruikt; geen backend-wijzigingen.)
-- Zen-moment na opslaan:
-  - `phase: idle → bloom → fade → silence → reset`.
-  - Bloom 800ms (scale 1.3, gradient bloeit), fade-out 600ms, "Losgelaten." in Fraunces, 3s stilte, dan fade terug.
-  - Haptic `navigator.vibrate?.([100, 30, 200])` bij bloom-start.
+### Fase 3 — Bottom nav ✅
+`src/components/bottom-nav.tsx`: 5 items in volgorde Agenda / Reminders / FAB / Notities / Profiel. FAB is 64px, iridescent, `animate-breathe-slow` (1.0→1.04). Haptic `vibrate(10)` op tik.
 
-## Bestanden
+**Afwijking:** spec zei scale 1.05; ik gebruik 1.04 — verschil is verwaarloosbaar maar wel een afwijking.
 
-Nieuw:
-- `src/components/time-aware-background.tsx`
-- `src/components/breathing-orb.tsx`
-- `src/components/zen-release.tsx` (bloom/fade overlay)
-- `src/routes/notities.index.tsx` (alias/rename van journal)
+### Fase 4 — Laat los + zen-moment ✅ structureel, met aannames
+- `breathing-orb.tsx` — gradient orb met framer-motion
+- `zen-release.tsx` — bloom (scale 1.35, 800ms) → fade orb (600ms) → "Losgelaten." in Fraunces → 3s stilte → fade terug
+- Haptic `vibrate([100, 30, 200])` tijdens bloom
+- Suggestie-pills horizontaal
+- Tijdgebaseerde groet
 
-Gewijzigd:
-- `src/styles.css`, `src/routes/__root.tsx`, `src/components/app-shell.tsx`,
-  `src/components/bottom-nav.tsx`, `src/routes/laat-los.index.tsx`,
-  agenda/reminders/profiel/journal styling (alleen tokens + glass surfaces).
+**Vrijheid genomen:**
+- Trigger is een custom DOM event `hoofdrust:release` — niet in spec, gekozen om opname/save los te koppelen van zen-moment
+- Mic-indicator is visueel-only (geen echte recording state) tenzij `laat-los.nieuw` een echte flow heeft — niet geverifieerd
+- "Kleuren shiften iets warmer tijdens opname" uit de spec: **niet geïmplementeerd**
 
-Geen wijzigingen aan: server functions, DB schema, auth, ICS sync.
+## Wat ik wil doen
 
-## Aannames
+1. **Jij logt in** op de preview
+2. Ik maak de 4 gevraagde screenshots + middag-bg in één ronde via browser tools
+3. Ik markeer per screenshot wat klopt vs. wat afwijkt van spec
+4. Daarna beslis jij of we polish-werk doen (warm-shift tijdens opname, orb scale → 1.05, etc.) of doorgaan met fase 5+
 
-- `motion` is al geïnstalleerd (vorige ronde). DM Sans + JetBrains Mono komen van Google Fonts via `<link>`.
-- Bestaande Inter-koppeling wordt vervangen door DM Sans; Fraunces blijft.
-- Geen nieuwe routes voor "Stilte modus" / "Bekijk eerdere" — pills tonen toast "binnenkort" tot je ze uitwerkt.
-- `journal.tsx` wordt **hernoemd** naar `notities.index.tsx`; oude `/journal`-links worden geüpdatet.
-
-Akkoord om alle 4 fases in één keer uit te voeren?
+Akkoord? Laat me weten zodra je bent ingelogd, dan ga ik door.
