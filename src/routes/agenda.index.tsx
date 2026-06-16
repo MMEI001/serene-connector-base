@@ -68,7 +68,7 @@ function hhmm(d: Date) {
 function hashColor(s: string): string {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  const palette = ["#60a5fa", "#34d399", "#f472b6", "#fbbf24", "#a78bfa", "#fb7185", "#22d3ee"];
+  const palette = ["#a8b89a", "#d9a5a5", "#a5b5c9", "#d4c896", "#c8b6d9", "#e8d4dc"];
   return palette[h % palette.length];
 }
 
