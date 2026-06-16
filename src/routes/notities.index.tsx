@@ -3,7 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useHaptic } from "@/lib/use-haptic";
 import { AppShell } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,6 +27,7 @@ type Note = {
 
 function JournalPage() {
   const { user } = useAuth();
+  const haptic = useHaptic();
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -69,12 +72,14 @@ function JournalPage() {
       if (error) throw error;
 
       toast.success("Je notitie is opgeslagen");
+      haptic.success();
       setTitle("");
       setContent("");
       await fetchNotes();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Opslaan lukte niet";
       console.error("[note save]", err);
+      haptic.error();
       toast.error(msg);
     } finally {
       setBusy(false);
@@ -129,9 +134,7 @@ function JournalPage() {
       <section className="mt-10">
         <h2 className="mb-4 text-lg text-foreground">Jouw notities</h2>
         {notes.length === 0 ? (
-          <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-            Nog geen notities. Schrijf hierboven je eerste.
-          </Card>
+          <EmptyState>Een lege bladzijde. Begin wanneer je wilt.</EmptyState>
         ) : (
           <div className="space-y-3">
             {notes.map((n) => (

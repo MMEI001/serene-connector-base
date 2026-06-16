@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { BrandMark } from "@/components/brand-mark";
+import { useHaptic } from "@/lib/use-haptic";
+import { MiniOrb } from "@/components/mini-orb";
+import { BreathPrologue, useBreathPrologueGate } from "@/components/breath-prologue";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +22,9 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const haptic = useHaptic();
   const { session, loading } = useAuth();
+  const { seen, markSeen } = useBreathPrologueGate();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -28,6 +33,8 @@ function AuthPage() {
   useEffect(() => {
     if (!loading && session) navigate({ to: "/" });
   }, [session, loading, navigate]);
+
+  const showPrologue = seen === false;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,6 +74,7 @@ function AuthPage() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Er ging iets mis";
       console.error("[auth]", err);
+      haptic.error();
       toast.error(msg);
     } finally {
       setBusy(false);
@@ -74,12 +82,30 @@ function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-screen items-center justify-center bg-background px-4 py-10">
+      <AnimatePresence>
+        {showPrologue && (
+          <BreathPrologue onDone={markSeen} onSkip={markSeen} />
+        )}
+      </AnimatePresence>
+
+      <motion.div
+        className="w-full max-w-sm"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{
+          opacity: showPrologue ? 0 : 1,
+          y: showPrologue ? 12 : 0,
+        }}
+        transition={{ duration: 0.8, ease: [0.4, 0, 0.2, 1] }}
+      >
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="mb-5 h-20 w-20 rounded-full bg-primary shadow-md ring-8 ring-primary/10" />
-          <BrandMark size={0} withWordmark={false} />
-          <h1 className="text-3xl text-foreground" style={{ fontFamily: "var(--font-display)" }}>
+          <div className="mb-5">
+            <MiniOrb size={80} glow />
+          </div>
+          <h1
+            className="text-3xl text-foreground"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             HoofdRust
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -138,7 +164,7 @@ function AuthPage() {
               : "Heb je al een account? Log in"}
           </button>
         </Card>
-      </div>
+      </motion.div>
     </div>
   );
 }

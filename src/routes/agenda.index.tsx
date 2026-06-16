@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { motion, useScroll, useTransform } from "motion/react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
+import { LoadingOrb } from "@/components/loading-orb";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Collapsible,
   CollapsibleContent,
@@ -72,13 +73,20 @@ function hashColor(s: string): string {
   return palette[h % palette.length];
 }
 
-function groupByDay(items: DisplayEvent[]) {
+function addDaysISO(iso: string, n: number) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return isoDateOf(d);
+}
+
+/** Group by day AND fill empty days between first and last with []. */
+function groupWithEmptyDays(items: DisplayEvent[]): [string, DisplayEvent[]][] {
+  if (items.length === 0) return [];
   const map = new Map<string, DisplayEvent[]>();
   for (const a of items) {
     if (!map.has(a.date)) map.set(a.date, []);
     map.get(a.date)!.push(a);
   }
-  // sort each day's events by start time (null first = all-day)
   for (const [, list] of map) {
     list.sort((a, b) => {
       if (a.startTime === b.startTime) return 0;
@@ -87,66 +95,104 @@ function groupByDay(items: DisplayEvent[]) {
       return a.startTime.localeCompare(b.startTime);
     });
   }
-  return Array.from(map.entries());
+  const sortedDates = [...map.keys()].sort();
+  const first = sortedDates[0];
+  const last = sortedDates[sortedDates.length - 1];
+  const result: [string, DisplayEvent[]][] = [];
+  for (let d = first; d <= last; d = addDaysISO(d, 1)) {
+    result.push([d, map.get(d) ?? []]);
+  }
+  return result;
 }
 
-function ApptList({ groups }: { groups: [string, DisplayEvent[]][] }) {
+function DayHeader({ day, today }: { day: string; today: string }) {
+  const isToday = day === today;
   return (
-    <div className="space-y-10">
+    <div className="sticky top-14 z-10 -mx-2 mb-3 flex items-baseline gap-3 bg-[color:var(--background)]/70 px-2 py-2 backdrop-blur-md">
+      <h2 className="font-display text-lg capitalize tracking-[-0.02em] text-foreground/90">
+        {formatDay(day)}
+      </h2>
+      {isToday && (
+        <span className="rounded-full bg-gradient-to-r from-[#c8b6d9] to-[#e8d4dc] px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-[#3d352e]">
+          Vandaag
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ApptList({
+  groups,
+  today,
+  fillEmpty = false,
+}: {
+  groups: [string, DisplayEvent[]][];
+  today: string;
+  fillEmpty?: boolean;
+}) {
+  return (
+    <div className="space-y-8">
       {groups.map(([day, list]) => (
         <section key={day}>
-          <h2 className="mb-4 font-display text-lg capitalize tracking-[-0.02em] text-foreground/90">
-            {formatDay(day)}
-          </h2>
-          <div className="space-y-3">
-            {list.map((a) => {
-              const span = timeSpan(a);
-              const stripe = a.color ?? hashColor(a.sourceLabel);
-              const inner = (
-                <div className="relative overflow-hidden rounded-[20px] surface-glass p-5 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5">
-                  <span
-                    aria-hidden
-                    className="absolute inset-y-3 left-0 w-1 rounded-full"
-                    style={{ backgroundColor: stripe }}
-                  />
-                  <div className="ml-3 flex items-baseline justify-between gap-3">
-                    <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
-                      {a.title}
-                    </h3>
-                    {span && (
-                      <span className="shrink-0 text-mono text-xs text-foreground/70">
-                        {span}
-                      </span>
-                    )}
-                  </div>
-                  <div className="ml-3 mt-2">
+          <DayHeader day={day} today={today} />
+          {list.length === 0 ? (
+            fillEmpty ? (
+              <p
+                className="px-2 py-4 text-center text-sm italic text-muted-foreground/80"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                Niets gepland. Ruimte om te ademen.
+              </p>
+            ) : null
+          ) : (
+            <div className="space-y-3">
+              {list.map((a) => {
+                const span = timeSpan(a);
+                const stripe = a.color ?? hashColor(a.sourceLabel);
+                const inner = (
+                  <div className="relative overflow-hidden rounded-[20px] surface-glass p-5 transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:-translate-y-0.5">
                     <span
-                      className="inline-flex items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground"
-                    >
-                      <span
-                        aria-hidden
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: stripe }}
-                      />
-                      {a.sourceLabel}
-                    </span>
+                      aria-hidden
+                      className="absolute inset-y-3 left-0 w-1 rounded-full"
+                      style={{ backgroundColor: stripe }}
+                    />
+                    <div className="ml-3 flex items-baseline justify-between gap-3">
+                      <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
+                        {a.title}
+                      </h3>
+                      {span && (
+                        <span className="shrink-0 text-mono text-xs text-foreground/70">
+                          {span}
+                        </span>
+                      )}
+                    </div>
+                    <div className="ml-3 mt-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/60 px-2.5 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground">
+                        <span
+                          aria-hidden
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: stripe }}
+                        />
+                        {a.sourceLabel}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              );
-              return a.appointmentId ? (
-                <Link
-                  key={a.id}
-                  to="/agenda/$id"
-                  params={{ id: a.appointmentId }}
-                  className="block"
-                >
-                  {inner}
-                </Link>
-              ) : (
-                <div key={a.id}>{inner}</div>
-              );
-            })}
-          </div>
+                );
+                return a.appointmentId ? (
+                  <Link
+                    key={a.id}
+                    to="/agenda/$id"
+                    params={{ id: a.appointmentId }}
+                    className="block"
+                  >
+                    {inner}
+                  </Link>
+                ) : (
+                  <div key={a.id}>{inner}</div>
+                );
+              })}
+            </div>
+          )}
         </section>
       ))}
     </div>
@@ -158,13 +204,14 @@ function AgendaPage() {
   const fetchIcs = useServerFn(listIcsEventsInRange);
   const [items, setItems] = useState<DisplayEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const { scrollY } = useScroll();
+  const titleY = useTransform(scrollY, (v) => v * 0.3);
 
   useEffect(() => {
     if (!user) return;
     (async () => {
       setLoading(true);
 
-      // Range: 60 days back to 180 days forward
       const now = new Date();
       const from = new Date(now);
       from.setDate(from.getDate() - 60);
@@ -218,7 +265,6 @@ function AgendaPage() {
         });
       }
 
-      // sort overall by date asc
       merged.sort((a, b) => a.date.localeCompare(b.date));
       setItems(merged);
       setLoading(false);
@@ -226,14 +272,30 @@ function AgendaPage() {
   }, [user, fetchIcs]);
 
   const today = todayISO();
-  const upcoming = items.filter((a) => a.date >= today);
-  const past = items.filter((a) => a.date < today).reverse();
+  const upcoming = useMemo(
+    () => items.filter((a) => a.date >= today),
+    [items, today],
+  );
+  const past = useMemo(
+    () => items.filter((a) => a.date < today).reverse(),
+    [items, today],
+  );
+  const upcomingGroups = useMemo(
+    () => groupWithEmptyDays(upcoming),
+    [upcoming],
+  );
+  const pastGroups = useMemo(() => groupWithEmptyDays(past), [past]);
 
   return (
     <AppShell>
-      <div className="mb-10 flex items-start justify-between gap-4">
+      <motion.div
+        style={{ y: titleY }}
+        className="mb-10 flex items-start justify-between gap-4"
+      >
         <div>
-          <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">Agenda</h1>
+          <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">
+            Agenda
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Je afspraken in rustig overzicht.
           </p>
@@ -245,26 +307,21 @@ function AgendaPage() {
         >
           <Link to="/agenda/nieuw">Nieuwe afspraak</Link>
         </Button>
-      </div>
+      </motion.div>
 
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-32 rounded-full" />
-          <Skeleton className="h-20 w-full rounded-3xl" />
-          <Skeleton className="h-20 w-full rounded-3xl" />
-        </div>
+        <LoadingOrb />
       ) : items.length === 0 ? (
-        <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-          Nog geen afspraken in je agenda.
-        </Card>
+        <EmptyState>
+          Nog geen agenda gekoppeld. Tik op &lsquo;Nieuwe afspraak&rsquo; om te
+          beginnen.
+        </EmptyState>
       ) : (
         <>
           {upcoming.length > 0 ? (
-            <ApptList groups={groupByDay(upcoming)} />
+            <ApptList groups={upcomingGroups} today={today} fillEmpty />
           ) : (
-            <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-              Geen aankomende afspraken.
-            </Card>
+            <EmptyState>Geen aankomende afspraken.</EmptyState>
           )}
 
           {past.length > 0 && (
@@ -273,7 +330,7 @@ function AgendaPage() {
                 Eerder ({past.length})
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4">
-                <ApptList groups={groupByDay(past)} />
+                <ApptList groups={pastGroups} today={today} />
               </CollapsibleContent>
             </Collapsible>
           )}
