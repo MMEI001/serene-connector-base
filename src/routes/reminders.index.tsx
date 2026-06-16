@@ -3,9 +3,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
+import { EmptyState } from "@/components/empty-state";
+import { LoadingOrb } from "@/components/loading-orb";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Collapsible,
   CollapsibleContent,
@@ -71,19 +72,15 @@ function RemindersPage() {
       </div>
 
       {loading ? (
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-32 rounded-full" />
-          <Skeleton className="h-20 w-full rounded-3xl" />
-          <Skeleton className="h-20 w-full rounded-3xl" />
-        </div>
+        <LoadingOrb />
       ) : error ? (
         <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
           Dit lukte nu even niet. Probeer het zo nog eens.
         </Card>
       ) : items.length === 0 ? (
-        <Card className="rounded-3xl border-border/60 bg-card/60 p-6 text-center text-sm text-muted-foreground shadow-sm">
-          Nog geen reminders.
-        </Card>
+        <EmptyState>
+          Nog geen reminders. Tik op de orb om er een toe te voegen.
+        </EmptyState>
       ) : (
         <div className="space-y-8">
           <Section title="Actief" list={active} />
