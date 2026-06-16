@@ -53,7 +53,7 @@
   --color-source-butter: #d4c896;
 
   --font-display: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
 
@@ -132,12 +132,20 @@
 
   html,
   body {
-    background: var(--gradient-background);
-    background-attachment: fixed;
+    background: transparent;
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-weight: 400;
     -webkit-font-smoothing: antialiased;
+  }
+
+  html[data-period="night"] {
+    --foreground: #f3ecea;
+    --card-foreground: #f3ecea;
+    --popover-foreground: #f3ecea;
+    --muted-foreground: #c9bdb8;
+    --border: rgba(245, 240, 236, 0.10);
+    color-scheme: dark;
   }
 
   h1, h2, h3, h4 {
