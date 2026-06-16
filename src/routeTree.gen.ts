@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SuggestiesRouteImport } from './routes/suggesties'
 import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
+import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
@@ -46,6 +47,11 @@ const ProfielRoute = ProfielRouteImport.update({
 const OnboardingRoute = OnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const JournalRoute = JournalRouteImport.update({
+  id: '/journal',
+  path: '/journal',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
@@ -152,6 +158,7 @@ const ApiPublicHooksSyncIcsRoute = ApiPublicHooksSyncIcsRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -177,6 +184,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -200,6 +208,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -252,6 +262,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -274,6 +285,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/auth'
+    | '/journal'
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
@@ -300,6 +312,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthRoute: typeof AuthRoute
+  JournalRoute: typeof JournalRoute
   OnboardingRoute: typeof OnboardingRoute
   ProfielRoute: typeof ProfielRoute
   SuggestiesRoute: typeof SuggestiesRoute
@@ -339,6 +352,13 @@ declare module '@tanstack/react-router' {
       path: '/onboarding'
       fullPath: '/onboarding'
       preLoaderRoute: typeof OnboardingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/journal': {
+      id: '/journal'
+      path: '/journal'
+      fullPath: '/journal'
+      preLoaderRoute: typeof JournalRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth': {
@@ -527,6 +547,7 @@ const RemindersIdRouteWithChildren = RemindersIdRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRoute,
+  JournalRoute: JournalRoute,
   OnboardingRoute: OnboardingRoute,
   ProfielRoute: ProfielRoute,
   SuggestiesRoute: SuggestiesRoute,
@@ -547,13 +568,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
