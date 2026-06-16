@@ -1,9 +1,13 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion } from "motion/react";
+import { Mic } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
+import { BreathingOrb } from "@/components/breathing-orb";
+import { ZenRelease } from "@/components/zen-release";
 import {
   Collapsible,
   CollapsibleContent,
@@ -23,12 +27,15 @@ type Item = {
   created_at: string;
 };
 
+type Phase = "idle" | "bloom" | "silence";
+
 function greeting() {
   const h = new Date().getHours();
-  if (h < 6) return "Goedenacht";
+  if (h < 5) return "Goedenacht";
   if (h < 12) return "Goedemorgen";
   if (h < 18) return "Goedemiddag";
-  return "Goedenavond";
+  if (h < 22) return "Goedenavond";
+  return "Goedenacht";
 }
 
 function formatCreated(iso: string) {
@@ -48,17 +55,24 @@ function preview(text: string) {
 }
 
 const suggestions = [
-  { label: "Schrijf in plaats daarvan", to: "/laat-los/nieuw" },
-  { label: "Bekijk eerdere", to: "/laat-los" },
-  { label: "Stilte modus", to: "/laat-los" },
-] as const;
+  { label: "Schrijf in plaats daarvan", to: "/laat-los/nieuw" as const },
+  { label: "Bekijk eerdere", to: "/laat-los" as const },
+  { label: "Stilte modus", to: "/laat-los" as const },
+];
+
+function vibrate(pattern: number | number[]) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    navigator.vibrate(pattern);
+  }
+}
 
 function LetGoPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [active, setActive] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
 
   useEffect(() => {
     if (!user) return;
@@ -78,82 +92,84 @@ function LetGoPage() {
   const archived = items.filter((i) => i.status === "archived");
 
   const handleOrb = () => {
-    setActive(true);
-    setTimeout(() => navigate({ to: "/laat-los/nieuw" }), 350);
+    vibrate(30);
+    setRecording(true);
+    // For now, route to the write form; voice flow can plug in later.
+    setTimeout(() => {
+      setRecording(false);
+      navigate({ to: "/laat-los/nieuw" });
+    }, 500);
   };
+
+  // Demo-friendly hook for callers: window-level trigger of the zen release.
+  useEffect(() => {
+    const onRelease = () => runZenRelease();
+    window.addEventListener("hoofdrust:release", onRelease);
+    return () => window.removeEventListener("hoofdrust:release", onRelease);
+  });
+
+  function runZenRelease() {
+    vibrate([100, 30, 200]);
+    setPhase("bloom");
+    window.setTimeout(() => setPhase("silence"), 1400);
+    window.setTimeout(() => setPhase("idle"), 1400 + 3000);
+  }
+
+  const period =
+    typeof document !== "undefined"
+      ? document.documentElement.dataset.period
+      : undefined;
+  const onNight = period === "night";
 
   return (
     <AppShell>
       <div className="flex flex-col items-center text-center">
-        <h1 className="font-display text-4xl tracking-[-0.02em] text-foreground">
+        <h1 className="font-display text-[34px] leading-tight tracking-[-0.02em] text-foreground">
           {greeting()}
         </h1>
-        <p className="mt-3 text-base text-muted-foreground">
+        <p className="mt-2 text-base text-muted-foreground">
           Wat wil je loslaten?
         </p>
 
-        {/* Orb */}
-        <button
-          type="button"
-          onClick={handleOrb}
-          aria-label="Tik om te spreken"
-          className="relative my-12 flex h-56 w-56 items-center justify-center rounded-full focus:outline-none"
-        >
-          {/* outer glow */}
-          <motion.span
-            aria-hidden
-            className="absolute inset-[-30px] rounded-full"
-            style={{
-              background:
-                "radial-gradient(circle at 30% 30%, rgba(200,182,217,0.55), rgba(232,212,220,0.35) 45%, rgba(240,225,212,0.1) 70%, transparent 80%)",
-              filter: "blur(20px)",
-            }}
-            animate={{ scale: active ? [1, 1.15, 1] : [1, 1.08, 1] }}
-            transition={{
-              duration: active ? 1.2 : 4,
-              repeat: Infinity,
-              ease: [0.4, 0, 0.2, 1],
-            }}
+        <div className="my-12">
+          <BreathingOrb
+            recording={recording}
+            blooming={phase === "bloom"}
+            onTap={handleOrb}
           />
-          {/* main orb */}
-          <motion.span
-            aria-hidden
-            className="relative block h-44 w-44 rounded-full"
-            style={{
-              background:
-                "radial-gradient(circle at 35% 30%, #ffffff 0%, #f0e1d4 25%, #e8d4dc 55%, #c8b6d9 85%)",
-              boxShadow:
-                "inset -20px -30px 50px rgba(139, 126, 115, 0.18), inset 20px 20px 40px rgba(255,255,255,0.6), 0 20px 60px rgba(200,182,217,0.4)",
-            }}
-            animate={{ scale: active ? [1, 1.08, 1] : [1, 1.05, 1] }}
-            transition={{
-              duration: active ? 1.2 : 4,
-              repeat: Infinity,
-              ease: [0.4, 0, 0.2, 1],
-            }}
-          />
-          {/* highlight */}
-          <span
-            aria-hidden
-            className="absolute left-1/2 top-[28%] h-12 w-20 -translate-x-1/2 rounded-full bg-white/60 blur-xl"
-          />
-        </button>
+        </div>
 
-        <motion.p
-          className="text-sm font-medium tracking-wide text-muted-foreground"
-          animate={{ opacity: [0.6, 1, 0.6] }}
+        <motion.div
+          className="flex items-center gap-2 text-sm font-medium tracking-wide text-muted-foreground"
+          animate={{ opacity: [0.55, 1, 0.55] }}
           transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
         >
-          Tik om te spreken
-        </motion.p>
+          <Mic className="h-4 w-4" strokeWidth={1.5} />
+          <span>Tik om te spreken</span>
+        </motion.div>
+
+        <p
+          className={`mt-3 text-xs ${
+            onNight ? "text-white/55" : "text-[#B5A99E]"
+          }`}
+        >
+          Wat je hier zegt blijft bij jou
+        </p>
 
         {/* suggestion pills */}
         <div className="mt-8 -mx-5 w-screen max-w-2xl overflow-x-auto px-5 pb-2">
-          <div className="flex gap-2.5 justify-center min-w-min">
+          <div className="flex min-w-min justify-center gap-2.5">
             {suggestions.map((s) => (
               <Link
                 key={s.label}
                 to={s.to}
+                onClick={() => {
+                  if (s.label === "Stilte modus") {
+                    toast("Stilte modus komt binnenkort", {
+                      description: "Een ademruimte zonder UI.",
+                    });
+                  }
+                }}
                 className="shrink-0 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] active:scale-95"
               >
                 {s.label}
@@ -187,6 +203,8 @@ function LetGoPage() {
           )}
         </div>
       )}
+
+      <ZenRelease phase={phase} />
     </AppShell>
   );
 }
