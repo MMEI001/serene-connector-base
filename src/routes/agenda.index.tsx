@@ -40,6 +40,8 @@ type DisplayEvent = {
   startTime: string | null; // HH:MM
   endTime: string | null;
   appointmentId: string | null;
+  description?: string | null;
+  location?: string | null;
 };
 
 function todayISO() {
