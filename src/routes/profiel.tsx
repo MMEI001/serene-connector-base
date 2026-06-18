@@ -443,6 +443,52 @@ function ProfilePage() {
       </Card>
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <h2 className="text-base text-foreground">Dagelijks loslaten-moment</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Een zacht signaal aan het eind van je dag.
+        </p>
+
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <Label htmlFor="ritual-toggle" className="text-sm text-foreground">
+            Herinner mij
+          </Label>
+          <Switch
+            id="ritual-toggle"
+            checked={ritualEnabled}
+            disabled={loading || ritualSaving}
+            onCheckedChange={handleRitualToggle}
+          />
+        </div>
+
+        {ritualEnabled && (
+          <div className="mt-5 space-y-2">
+            <Label htmlFor="ritual-time" className="text-sm text-foreground">
+              Op welk moment?
+            </Label>
+            <Input
+              id="ritual-time"
+              type="time"
+              step={1800}
+              value={ritualTime}
+              onChange={(e) => setRitualTime(e.target.value)}
+              onBlur={(e) => handleRitualTimeChange(e.target.value)}
+              className="rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground">
+              In stappen van 30 minuten. Meldingen verschijnen alleen als de app open is.
+            </p>
+          </div>
+        )}
+
+        {streak >= 2 && (
+          <p className="mt-5 text-sm text-muted-foreground">
+            Je hebt {streak} avonden achter elkaar losgelaten.
+          </p>
+        )}
+      </Card>
+
+
+      <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
         <h2 className="text-base text-foreground">Agenda's</h2>
         <p className="mt-1 text-sm text-muted-foreground">
           Koppel je Google Agenda zodat HoofdRust mee kan kijken.
