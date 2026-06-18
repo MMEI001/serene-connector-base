@@ -169,7 +169,14 @@ function ApptList({
                       className="absolute inset-y-3 left-0 w-1 rounded-full"
                       style={{ backgroundColor: stripe }}
                     />
-                    <div className="ml-3 flex items-baseline justify-between gap-3">
+                    {a.source === "ics" && (
+                      <Lock
+                        aria-label="Alleen-lezen agenda"
+                        className="absolute right-4 top-4 h-3.5 w-3.5 text-muted-foreground/70"
+                        strokeWidth={2}
+                      />
+                    )}
+                    <div className="ml-3 flex items-baseline justify-between gap-3 pr-6">
                       <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
                         {a.title}
                       </h3>
@@ -194,20 +201,29 @@ function ApptList({
                 const staggerStyle = {
                   ["--stagger" as never]: Math.min(idx, 8),
                 };
-                return a.appointmentId ? (
-                  <Link
+                if (a.appointmentId) {
+                  return (
+                    <Link
+                      key={a.id}
+                      to="/agenda/$id"
+                      params={{ id: a.appointmentId }}
+                      className="stagger-item block"
+                      style={staggerStyle}
+                    >
+                      {inner}
+                    </Link>
+                  );
+                }
+                return (
+                  <button
                     key={a.id}
-                    to="/agenda/$id"
-                    params={{ id: a.appointmentId }}
-                    className="stagger-item block"
+                    type="button"
+                    onClick={() => onIcsClick(a)}
+                    className="stagger-item block w-full text-left"
                     style={staggerStyle}
                   >
                     {inner}
-                  </Link>
-                ) : (
-                  <div key={a.id} className="stagger-item" style={staggerStyle}>
-                    {inner}
-                  </div>
+                  </button>
                 );
               })}
             </div>
