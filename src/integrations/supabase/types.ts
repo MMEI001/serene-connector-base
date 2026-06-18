@@ -408,6 +408,8 @@ export type Database = {
           preferred_help_area: string[] | null
           primary_goal: string[] | null
           reminder_style: string | null
+          ritual_enabled: boolean
+          ritual_time: string
           suggestion_count_preference: string | null
           support_style: string | null
           updated_at: string
@@ -425,6 +427,8 @@ export type Database = {
           preferred_help_area?: string[] | null
           primary_goal?: string[] | null
           reminder_style?: string | null
+          ritual_enabled?: boolean
+          ritual_time?: string
           suggestion_count_preference?: string | null
           support_style?: string | null
           updated_at?: string
@@ -442,6 +446,8 @@ export type Database = {
           preferred_help_area?: string[] | null
           primary_goal?: string[] | null
           reminder_style?: string | null
+          ritual_enabled?: boolean
+          ritual_time?: string
           suggestion_count_preference?: string | null
           support_style?: string | null
           updated_at?: string
