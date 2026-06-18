@@ -136,10 +136,12 @@ function ApptList({
   groups,
   today,
   fillEmpty = false,
+  onIcsClick,
 }: {
   groups: [string, DisplayEvent[]][];
   today: string;
   fillEmpty?: boolean;
+  onIcsClick: (e: DisplayEvent) => void;
 }) {
   return (
     <div className="space-y-8">
