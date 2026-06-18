@@ -115,6 +115,16 @@ function ProfilePage() {
   const [ritualTime, setRitualTime] = useState("19:30");
   const [ritualSaving, setRitualSaving] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [showDeniedHelp, setShowDeniedHelp] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotifPermission("unsupported");
+      return;
+    }
+    setNotifPermission(Notification.permission);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
