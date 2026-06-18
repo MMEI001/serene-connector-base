@@ -587,6 +587,42 @@ function ProfilePage() {
           Uitloggen
         </Button>
       </Card>
+
+      <Dialog open={showDeniedHelp} onOpenChange={setShowDeniedHelp}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-left font-display text-xl tracking-[-0.02em]">
+              Meldingen staan geblokkeerd
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              Je browser blokkeert meldingen voor HoofdRust. Zet ze als volgt aan:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-foreground/85">
+            <p>
+              <strong>Chrome / Edge / Android:</strong> tik op het slot-icoon links in de adresbalk →{" "}
+              <em>Site-instellingen</em> → <em>Meldingen</em> → kies <em>Toestaan</em>.
+            </p>
+            <p>
+              <strong>Safari (Mac):</strong> Safari → <em>Instellingen</em> → <em>Websites</em> →{" "}
+              <em>Meldingen</em> → zet HoofdRust op <em>Sta toe</em>.
+            </p>
+            <p>
+              <strong>Firefox:</strong> klik op het slot-icoon in de adresbalk → <em>Toestemmingen</em> →{" "}
+              <em>Meldingen verzenden</em> → <em>Toestaan</em>.
+            </p>
+            <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+              Laad de pagina opnieuw na het wijzigen en probeer de toggle opnieuw.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowDeniedHelp(false)} className="w-full rounded-full">
+              Begrepen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }
