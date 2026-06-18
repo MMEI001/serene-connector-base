@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { Calendar, Bell, NotebookPen, User, Sparkles } from "lucide-react";
+import { Calendar, Bell, NotebookPen, User } from "lucide-react";
 import { useHaptic } from "@/lib/use-haptic";
+import { MiniOrb } from "@/components/mini-orb";
 
 const leftItems = [
   { to: "/agenda", label: "Agenda", Icon: Calendar },
@@ -37,15 +38,14 @@ export function BottomNav() {
         </ul>
       </div>
 
-      {/* Floating FAB — outside the blurred surface so it stacks above and stays fully visible */}
+      {/* Floating mini-orb — the iridescent orb itself, no gradient ring */}
       <Link
         to="/laat-los"
         aria-label="Laat los"
         onClick={haptic.medium}
-        className="group pointer-events-auto absolute left-1/2 bottom-[calc(env(safe-area-inset-bottom)+2.25rem)] z-50 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full gradient-iridescent text-[#3d352e] shadow-[0_10px_36px_rgba(200,182,217,0.55),0_4px_18px_rgba(240,225,212,0.45),0_0_0_6px_rgba(255,255,255,0.55)] transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-95 animate-breathe-slow"
+        className="pointer-events-auto absolute left-1/2 bottom-[calc(env(safe-area-inset-bottom)+2.25rem)] z-50 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-95 drop-shadow-[0_10px_24px_rgba(200,182,217,0.5)]"
       >
-        <span className="absolute inset-0 rounded-full bg-white/30 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-        <Sparkles className="relative h-7 w-7" strokeWidth={1.5} />
+        <MiniOrb size={56} breathing glow />
       </Link>
     </nav>
   );

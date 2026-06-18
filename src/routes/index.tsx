@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { motion } from "motion/react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
+import { BreathingOrb } from "@/components/breathing-orb";
+import { TypewriterGreeting } from "@/components/typewriter-greeting";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,7 +34,6 @@ export const Route = createFileRoute("/")({
 type Appt = { id: string; title: string; start_time: string | null; date: string };
 type Reminder = { id: string; title: string; remind_at: string | null };
 
-
 function todayISO() {
   const d = new Date();
   const y = d.getFullYear();
@@ -40,15 +42,37 @@ function todayISO() {
   return `${y}-${m}-${day}`;
 }
 
+function greeting() {
+  const h = new Date().getHours();
+  if (h < 5) return "Goedenacht";
+  if (h < 12) return "Goedemorgen";
+  if (h < 18) return "Goedemiddag";
+  if (h < 22) return "Goedenavond";
+  return "Goedenacht";
+}
+
+const pills = [
+  { label: "Iets loslaten", to: "/laat-los" as const },
+  { label: "Een notitie maken", to: "/notities" as const },
+  { label: "Mijn agenda", to: "/agenda" as const },
+];
+
 function Dashboard() {
   const { user } = useAuth();
-  const [displayName, setDisplayName] = useState("");
   const [appts, setAppts] = useState<Appt[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [aiText, setAiText] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
+  const [greetDone, setGreetDone] = useState(false);
+  const [showPills, setShowPills] = useState(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
+
+  useEffect(() => {
+    if (!greetDone) return;
+    const t = window.setTimeout(() => setShowPills(true), 1000);
+    return () => window.clearTimeout(t);
+  }, [greetDone]);
 
   async function handleClassify() {
     const text = aiText.trim();
@@ -96,8 +120,7 @@ function Dashboard() {
     const startOfDay = `${today}T00:00:00`;
     const endOfDay = `${today}T23:59:59`;
     (async () => {
-      const [profile, a, r] = await Promise.all([
-        supabase.from("profiles").select("display_name").eq("id", user.id).maybeSingle(),
+      const [a, r] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, title, start_time, date")
@@ -112,33 +135,46 @@ function Dashboard() {
           .or(`remind_at.is.null,and(remind_at.gte.${startOfDay},remind_at.lte.${endOfDay})`)
           .order("remind_at", { ascending: true, nullsFirst: true }),
       ]);
-      setDisplayName(profile.data?.display_name ?? "");
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
       void loadSuggestions();
-      if (typeof window !== "undefined" && !sessionStorage.getItem("hr_welcomed")) {
-        sessionStorage.setItem("hr_welcomed", "1");
-        void speakText("Welkom terug. Ik wens je een rustige dag.");
-      }
     })();
   }, [user, loadSuggestions]);
 
   return (
     <AppShell>
-      <section className="mb-10">
-        <p className="text-sm text-muted-foreground">Fijn dat je er bent</p>
-        <h1 className="mt-1 text-3xl text-foreground">
-          {displayName ? `Welkom, ${displayName}` : "Welkom"}
+      <section className="flex flex-col items-center pt-2 text-center">
+        <h1 className="font-display text-[34px] leading-tight tracking-[-0.02em] text-foreground">
+          {greeting()}
         </h1>
-        <p className="mt-3 max-w-md text-muted-foreground">
-          Neem even een momentje voor jezelf. Hieronder vind je je dag in rust.
-        </p>
-        <Button asChild className="mt-6 rounded-full px-6" size="lg">
-          <Link to="/notities">Nieuwe notitie schrijven</Link>
-        </Button>
+
+        <div className="my-10">
+          <BreathingOrb size={200} ariaLabel="HoofdRust" />
+        </div>
+
+        <div className="min-h-[3.5rem] px-2">
+          <TypewriterGreeting onDone={() => setGreetDone(true)} />
+        </div>
+
+        <motion.div
+          className="mt-6 flex flex-wrap justify-center gap-2.5"
+          initial={{ opacity: 0, y: 8 }}
+          animate={showPills ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+          transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+        >
+          {pills.map((p) => (
+            <Link
+              key={p.label}
+              to={p.to}
+              className="shrink-0 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] active:scale-95"
+            >
+              {p.label}
+            </Link>
+          ))}
+        </motion.div>
       </section>
 
-      <section className="mb-10">
+      <section className="mt-14 mb-10">
         <Card className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
           <Textarea
             value={aiText}
