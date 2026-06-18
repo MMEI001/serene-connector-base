@@ -297,6 +297,8 @@ function AgendaPage() {
           startTime: e.is_all_day ? null : hhmm(start),
           endTime: e.is_all_day || !end ? null : hhmm(end),
           appointmentId: null,
+          description: e.description ?? null,
+          location: e.location ?? null,
         });
       }
 
