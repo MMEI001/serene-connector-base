@@ -10,7 +10,12 @@ function getPeriod(d = new Date()): Period {
   return "night";
 }
 
-const gradients: Record<Period, string> = {
+function isWeekend(d = new Date()): boolean {
+  const dow = d.getDay();
+  return dow === 0 || dow === 6;
+}
+
+const weekdayGradients: Record<Period, string> = {
   morning:
     "linear-gradient(180deg, #F0E5E8 0%, #F4EAE4 50%, #F8F0E8 100%)",
   afternoon:
@@ -21,11 +26,22 @@ const gradients: Record<Period, string> = {
     "linear-gradient(180deg, #3D3540 0%, #34303A 50%, #2D2832 100%)",
 };
 
+const weekendGradients: Record<Period, string> = {
+  morning: "linear-gradient(180deg, #F4E4D9 0%, #F6EAE0 50%, #F8ECE0 100%)",
+  afternoon: "linear-gradient(180deg, #F4E4D9 0%, #F7E9DE 50%, #F8ECE0 100%)",
+  evening: "linear-gradient(180deg, #EDD6C8 0%, #F2DED2 50%, #F5E4D8 100%)",
+  night: weekdayGradients.night,
+};
+
 export function TimeAwareBackground() {
   const [period, setPeriod] = useState<Period>(() => getPeriod());
+  const [weekend, setWeekend] = useState<boolean>(() => isWeekend());
 
   useEffect(() => {
-    const tick = () => setPeriod(getPeriod());
+    const tick = () => {
+      setPeriod(getPeriod());
+      setWeekend(isWeekend());
+    };
     tick();
     const id = window.setInterval(tick, 60_000);
     return () => window.clearInterval(id);
@@ -34,10 +50,18 @@ export function TimeAwareBackground() {
   useEffect(() => {
     const root = document.documentElement;
     root.dataset.period = period;
+    if (weekend) root.dataset.weekend = "true";
+    else delete root.dataset.weekend;
     return () => {
       delete root.dataset.period;
+      delete root.dataset.weekend;
     };
-  }, [period]);
+  }, [period, weekend]);
+
+  const gradient =
+    weekend && period !== "night"
+      ? weekendGradients[period]
+      : weekdayGradients[period];
 
   return (
     <>
@@ -45,7 +69,7 @@ export function TimeAwareBackground() {
         aria-hidden
         className="pointer-events-none fixed inset-0 -z-20"
         style={{
-          background: gradients[period],
+          background: gradient,
           transition: "background 60s linear",
         }}
       />
@@ -67,4 +91,16 @@ export function TimeAwareBackground() {
       )}
     </>
   );
+}
+
+export function useIsWeekend(): boolean {
+  const [weekend, setWeekend] = useState<boolean>(() =>
+    typeof window === "undefined" ? false : isWeekend(),
+  );
+  useEffect(() => {
+    setWeekend(isWeekend());
+    const id = window.setInterval(() => setWeekend(isWeekend()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+  return weekend;
 }
