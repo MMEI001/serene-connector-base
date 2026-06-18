@@ -531,8 +531,33 @@ function ProfilePage() {
             <p className="text-xs text-muted-foreground">
               In stappen van 30 minuten. Meldingen verschijnen alleen als de app open is.
             </p>
+            {notifPermission === "granted" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestNotification}
+                className="mt-2 rounded-full"
+              >
+                Test melding
+              </Button>
+            )}
           </div>
         )}
+
+        {notifPermission === "denied" && (
+          <div className="mt-4 rounded-2xl bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+            Meldingen staan geblokkeerd in je browser.{" "}
+            <button
+              type="button"
+              onClick={() => setShowDeniedHelp(true)}
+              className="underline hover:text-foreground"
+            >
+              Hoe zet ik ze aan?
+            </button>
+          </div>
+        )}
+
 
         {streak >= 2 && (
           <p className="mt-5 text-sm text-muted-foreground">
