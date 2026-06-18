@@ -146,7 +146,7 @@ function ApptList({
             ) : null
           ) : (
             <div className="space-y-3">
-              {list.map((a) => {
+              {list.map((a, idx) => {
                 const span = timeSpan(a);
                 const stripe = a.color ?? hashColor(a.sourceLabel);
                 const inner = (
@@ -178,17 +178,23 @@ function ApptList({
                     </div>
                   </div>
                 );
+                const staggerStyle = {
+                  ["--stagger" as never]: Math.min(idx, 8),
+                };
                 return a.appointmentId ? (
                   <Link
                     key={a.id}
                     to="/agenda/$id"
                     params={{ id: a.appointmentId }}
-                    className="block"
+                    className="stagger-item block"
+                    style={staggerStyle}
                   >
                     {inner}
                   </Link>
                 ) : (
-                  <div key={a.id}>{inner}</div>
+                  <div key={a.id} className="stagger-item" style={staggerStyle}>
+                    {inner}
+                  </div>
                 );
               })}
             </div>

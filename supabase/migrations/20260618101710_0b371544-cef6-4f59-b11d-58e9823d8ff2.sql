@@ -1,0 +1,3 @@
+ALTER TABLE public.user_profiles
+  ADD COLUMN IF NOT EXISTS ritual_enabled BOOLEAN NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS ritual_time TEXT NOT NULL DEFAULT '19:30';

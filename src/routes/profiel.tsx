@@ -15,8 +15,10 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
+import { notifyRitualChanged, requestRitualPermission } from "@/lib/daily-ritual";
 
 const VOICE_OPTIONS = [
   { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
@@ -101,6 +103,10 @@ function ProfilePage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
   const [voiceId, setVoiceId] = useState<string>(DEFAULT_VOICE_ID);
+  const [ritualEnabled, setRitualEnabled] = useState(false);
+  const [ritualTime, setRitualTime] = useState("19:30");
+  const [ritualSaving, setRitualSaving] = useState(false);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -108,12 +114,17 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id" as "*",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id, ritual_enabled, ritual_time" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
       if (data) {
-        const d = data as typeof data & { voice_enabled?: boolean | null; voice_id?: string | null };
+        const d = data as typeof data & {
+          voice_enabled?: boolean | null;
+          voice_id?: string | null;
+          ritual_enabled?: boolean | null;
+          ritual_time?: string | null;
+        };
         setPrefs({
           primary_goal: d.primary_goal ?? [],
           main_difficulty: d.main_difficulty ?? [],
@@ -131,10 +142,94 @@ function ProfilePage() {
         const vid = d.voice_id || DEFAULT_VOICE_ID;
         setVoiceId(vid);
         setVoiceIdCache(vid);
+        setRitualEnabled(Boolean(d.ritual_enabled));
+        setRitualTime(d.ritual_time || "19:30");
       }
       setLoading(false);
     })();
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const since = new Date();
+      since.setDate(since.getDate() - 120);
+      const { data } = await supabase
+        .from("let_go_items")
+        .select("created_at")
+        .eq("user_id", user.id)
+        .gte("created_at", since.toISOString())
+        .order("created_at", { ascending: false });
+      if (!data) return;
+      const days = new Set(
+        data.map((r) => new Date(r.created_at).toDateString()),
+      );
+      const today = new Date();
+      let n = 0;
+      const cursor = new Date(today);
+      // Allow today OR yesterday as the starting point
+      if (!days.has(cursor.toDateString())) {
+        cursor.setDate(cursor.getDate() - 1);
+        if (!days.has(cursor.toDateString())) {
+          setStreak(0);
+          return;
+        }
+      }
+      while (days.has(cursor.toDateString())) {
+        n += 1;
+        cursor.setDate(cursor.getDate() - 1);
+      }
+      setStreak(n);
+    })();
+  }, [user]);
+
+  async function handleRitualToggle(next: boolean) {
+    if (!user || ritualSaving) return;
+    setRitualSaving(true);
+    if (next) {
+      const perm = await requestRitualPermission();
+      if (perm !== "granted") {
+        setRitualSaving(false);
+        toast.error("Geef HoofdRust toestemming voor meldingen.");
+        return;
+      }
+    }
+    const prev = ritualEnabled;
+    setRitualEnabled(next);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ ritual_enabled: next } as never)
+      .eq("user_id", user.id);
+    setRitualSaving(false);
+    if (error) {
+      setRitualEnabled(prev);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    notifyRitualChanged();
+    toast.success(next ? "Het ritueel staat aan." : "Het ritueel staat uit.");
+  }
+
+  async function handleRitualTimeChange(value: string) {
+    if (!user) return;
+    // Snap to 30-min steps
+    const [h, m] = value.split(":");
+    const minutes = Math.round((Number(m) || 0) / 30) * 30;
+    const normalized = `${(h || "00").padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+    const hour = minutes === 60 ? String((Number(h) + 1) % 24).padStart(2, "0") : (h || "00").padStart(2, "0");
+    const snapped = `${hour}:${String(minutes % 60).padStart(2, "0")}`;
+    setRitualTime(snapped);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ ritual_time: snapped } as never)
+      .eq("user_id", user.id);
+    if (error) {
+      toast.error("Dit lukte nu even niet.");
+      return;
+    }
+    notifyRitualChanged();
+  }
+
 
   async function handleVoiceToggle(next: boolean) {
     if (!user || voiceSaving) return;
@@ -346,6 +441,52 @@ function ProfilePage() {
           </div>
         )}
       </Card>
+
+      <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
+        <h2 className="text-base text-foreground">Dagelijks loslaten-moment</h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Een zacht signaal aan het eind van je dag.
+        </p>
+
+        <div className="mt-5 flex items-center justify-between gap-4">
+          <Label htmlFor="ritual-toggle" className="text-sm text-foreground">
+            Herinner mij
+          </Label>
+          <Switch
+            id="ritual-toggle"
+            checked={ritualEnabled}
+            disabled={loading || ritualSaving}
+            onCheckedChange={handleRitualToggle}
+          />
+        </div>
+
+        {ritualEnabled && (
+          <div className="mt-5 space-y-2">
+            <Label htmlFor="ritual-time" className="text-sm text-foreground">
+              Op welk moment?
+            </Label>
+            <Input
+              id="ritual-time"
+              type="time"
+              step={1800}
+              value={ritualTime}
+              onChange={(e) => setRitualTime(e.target.value)}
+              onBlur={(e) => handleRitualTimeChange(e.target.value)}
+              className="rounded-xl"
+            />
+            <p className="text-xs text-muted-foreground">
+              In stappen van 30 minuten. Meldingen verschijnen alleen als de app open is.
+            </p>
+          </div>
+        )}
+
+        {streak >= 2 && (
+          <p className="mt-5 text-sm text-muted-foreground">
+            Je hebt {streak} avonden achter elkaar losgelaten.
+          </p>
+        )}
+      </Card>
+
 
       <Card className="mt-6 rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
         <h2 className="text-base text-foreground">Agenda's</h2>
