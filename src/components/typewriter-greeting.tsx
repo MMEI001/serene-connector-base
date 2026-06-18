@@ -39,6 +39,17 @@ const POOL: Record<Period, string[]> = {
 
 const RECENT_VARIANTS = ["Daar ben je weer.", "Welkom terug."];
 const FREQUENT_VARIANTS = ["Fijn dat je terugkomt.", "Ik ben er."];
+const WEEKEND_POOL = [
+  "Het weekend. Niets moet.",
+  "Adem maar uit.",
+  "Geen agenda vandaag.",
+  "Tijd om te zijn, niet om te doen.",
+];
+
+function isWeekend(): boolean {
+  const d = new Date().getDay();
+  return d === 0 || d === 6;
+}
 
 function pickGreeting(): string {
   const now = Date.now();
@@ -66,6 +77,8 @@ function pickGreeting(): string {
     pool = RECENT_VARIANTS;
   } else if (count >= 3) {
     pool = FREQUENT_VARIANTS;
+  } else if (isWeekend()) {
+    pool = WEEKEND_POOL;
   } else {
     pool = POOL[currentPeriod()];
   }
