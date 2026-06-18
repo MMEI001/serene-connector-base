@@ -115,10 +115,16 @@ function Section({ title, list }: { title: string; list: Reminder[] }) {
 function ReminderList({ list, muted }: { list: Reminder[]; muted?: boolean }) {
   return (
     <div className="space-y-3">
-      {list.map((r) => {
+      {list.map((r, idx) => {
         const when = formatRemindAt(r.remind_at);
         return (
-          <Link key={r.id} to="/reminders/$id" params={{ id: r.id }} className="block">
+          <Link
+            key={r.id}
+            to="/reminders/$id"
+            params={{ id: r.id }}
+            className="stagger-item block"
+            style={{ ["--stagger" as never]: Math.min(idx, 8) }}
+          >
             <Card
               className={`rounded-3xl border-border/60 p-5 shadow-sm transition-colors hover:bg-card ${
                 muted ? "bg-card/50" : "bg-card/80"

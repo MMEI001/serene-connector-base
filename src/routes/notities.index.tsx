@@ -137,10 +137,11 @@ function JournalPage() {
           <EmptyState>Een lege bladzijde. Begin wanneer je wilt.</EmptyState>
         ) : (
           <div className="space-y-3">
-            {notes.map((n) => (
+            {notes.map((n, idx) => (
               <Card
                 key={n.id}
-                className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm"
+                className="stagger-item rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm"
+                style={{ ["--stagger" as never]: Math.min(idx, 8) }}
               >
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-base text-foreground">
