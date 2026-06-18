@@ -18,7 +18,15 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
-import { notifyRitualChanged, requestRitualPermission } from "@/lib/daily-ritual";
+import { notifyRitualChanged, requestRitualPermission, fireRitualNotification } from "@/lib/daily-ritual";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const VOICE_OPTIONS = [
   { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
@@ -107,6 +115,16 @@ function ProfilePage() {
   const [ritualTime, setRitualTime] = useState("19:30");
   const [ritualSaving, setRitualSaving] = useState(false);
   const [streak, setStreak] = useState(0);
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
+  const [showDeniedHelp, setShowDeniedHelp] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      setNotifPermission("unsupported");
+      return;
+    }
+    setNotifPermission(Notification.permission);
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -185,14 +203,34 @@ function ProfilePage() {
 
   async function handleRitualToggle(next: boolean) {
     if (!user || ritualSaving) return;
-    setRitualSaving(true);
     if (next) {
-      const perm = await requestRitualPermission();
-      if (perm !== "granted") {
-        setRitualSaving(false);
-        toast.error("Geef HoofdRust toestemming voor meldingen.");
+      if (typeof window === "undefined" || !("Notification" in window)) {
+        toast.error("Je browser ondersteunt geen meldingen.");
         return;
       }
+      if (Notification.permission === "denied") {
+        setNotifPermission("denied");
+        setShowDeniedHelp(true);
+        return;
+      }
+      setRitualSaving(true);
+      try {
+        const perm = await requestRitualPermission();
+        setNotifPermission(perm);
+        if (perm !== "granted") {
+          setRitualSaving(false);
+          if (perm === "denied") setShowDeniedHelp(true);
+          else toast.error("Geen toestemming gegeven voor meldingen.");
+          return;
+        }
+      } catch (err) {
+        console.error("[ritual] permission error", err);
+        setRitualSaving(false);
+        toast.error(err instanceof Error ? err.message : "Onbekende fout bij meldingen.");
+        return;
+      }
+    } else {
+      setRitualSaving(true);
     }
     const prev = ritualEnabled;
     setRitualEnabled(next);
@@ -209,6 +247,22 @@ function ProfilePage() {
     notifyRitualChanged();
     toast.success(next ? "Het ritueel staat aan." : "Het ritueel staat uit.");
   }
+
+  async function handleTestNotification() {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") {
+      toast.error("Geef eerst toestemming voor meldingen.");
+      return;
+    }
+    try {
+      await fireRitualNotification();
+      toast.success("Test-melding verstuurd.");
+    } catch (err) {
+      console.error("[ritual] test failed", err);
+      toast.error(err instanceof Error ? err.message : "Test-melding lukte niet.");
+    }
+  }
+
 
   async function handleRitualTimeChange(value: string) {
     if (!user) return;
@@ -477,8 +531,33 @@ function ProfilePage() {
             <p className="text-xs text-muted-foreground">
               In stappen van 30 minuten. Meldingen verschijnen alleen als de app open is.
             </p>
+            {notifPermission === "granted" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleTestNotification}
+                className="mt-2 rounded-full"
+              >
+                Test melding
+              </Button>
+            )}
           </div>
         )}
+
+        {notifPermission === "denied" && (
+          <div className="mt-4 rounded-2xl bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+            Meldingen staan geblokkeerd in je browser.{" "}
+            <button
+              type="button"
+              onClick={() => setShowDeniedHelp(true)}
+              className="underline hover:text-foreground"
+            >
+              Hoe zet ik ze aan?
+            </button>
+          </div>
+        )}
+
 
         {streak >= 2 && (
           <p className="mt-5 text-sm text-muted-foreground">
@@ -508,6 +587,42 @@ function ProfilePage() {
           Uitloggen
         </Button>
       </Card>
+
+      <Dialog open={showDeniedHelp} onOpenChange={setShowDeniedHelp}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-left font-display text-xl tracking-[-0.02em]">
+              Meldingen staan geblokkeerd
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              Je browser blokkeert meldingen voor HoofdRust. Zet ze als volgt aan:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-foreground/85">
+            <p>
+              <strong>Chrome / Edge / Android:</strong> tik op het slot-icoon links in de adresbalk →{" "}
+              <em>Site-instellingen</em> → <em>Meldingen</em> → kies <em>Toestaan</em>.
+            </p>
+            <p>
+              <strong>Safari (Mac):</strong> Safari → <em>Instellingen</em> → <em>Websites</em> →{" "}
+              <em>Meldingen</em> → zet HoofdRust op <em>Sta toe</em>.
+            </p>
+            <p>
+              <strong>Firefox:</strong> klik op het slot-icoon in de adresbalk → <em>Toestemmingen</em> →{" "}
+              <em>Meldingen verzenden</em> → <em>Toestaan</em>.
+            </p>
+            <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+              Laad de pagina opnieuw na het wijzigen en probeer de toggle opnieuw.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowDeniedHelp(false)} className="w-full rounded-full">
+              Begrepen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }

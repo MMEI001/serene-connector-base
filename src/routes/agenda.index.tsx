@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, useScroll, useTransform } from "motion/react";
+import { Lock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -13,6 +14,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { listIcsEventsInRange } from "@/lib/ics-calendar.functions";
 
 export const Route = createFileRoute("/agenda/")({
@@ -31,6 +40,8 @@ type DisplayEvent = {
   startTime: string | null; // HH:MM
   endTime: string | null;
   appointmentId: string | null;
+  description?: string | null;
+  location?: string | null;
 };
 
 function todayISO() {
@@ -125,10 +136,12 @@ function ApptList({
   groups,
   today,
   fillEmpty = false,
+  onIcsClick,
 }: {
   groups: [string, DisplayEvent[]][];
   today: string;
   fillEmpty?: boolean;
+  onIcsClick: (e: DisplayEvent) => void;
 }) {
   return (
     <div className="space-y-8">
@@ -156,7 +169,14 @@ function ApptList({
                       className="absolute inset-y-3 left-0 w-1 rounded-full"
                       style={{ backgroundColor: stripe }}
                     />
-                    <div className="ml-3 flex items-baseline justify-between gap-3">
+                    {a.source === "ics" && (
+                      <Lock
+                        aria-label="Alleen-lezen agenda"
+                        className="absolute right-4 top-4 h-3.5 w-3.5 text-muted-foreground/70"
+                        strokeWidth={2}
+                      />
+                    )}
+                    <div className="ml-3 flex items-baseline justify-between gap-3 pr-6">
                       <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
                         {a.title}
                       </h3>
@@ -181,20 +201,29 @@ function ApptList({
                 const staggerStyle = {
                   ["--stagger" as never]: Math.min(idx, 8),
                 };
-                return a.appointmentId ? (
-                  <Link
+                if (a.appointmentId) {
+                  return (
+                    <Link
+                      key={a.id}
+                      to="/agenda/$id"
+                      params={{ id: a.appointmentId }}
+                      className="stagger-item block"
+                      style={staggerStyle}
+                    >
+                      {inner}
+                    </Link>
+                  );
+                }
+                return (
+                  <button
                     key={a.id}
-                    to="/agenda/$id"
-                    params={{ id: a.appointmentId }}
-                    className="stagger-item block"
+                    type="button"
+                    onClick={() => onIcsClick(a)}
+                    className="stagger-item block w-full text-left"
                     style={staggerStyle}
                   >
                     {inner}
-                  </Link>
-                ) : (
-                  <div key={a.id} className="stagger-item" style={staggerStyle}>
-                    {inner}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -212,6 +241,8 @@ function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const { scrollY } = useScroll();
   const titleY = useTransform(scrollY, (v) => v * 0.3);
+  const [icsDetail, setIcsDetail] = useState<DisplayEvent | null>(null);
+
 
   useEffect(() => {
     if (!user) return;
@@ -268,6 +299,8 @@ function AgendaPage() {
           startTime: e.is_all_day ? null : hhmm(start),
           endTime: e.is_all_day || !end ? null : hhmm(end),
           appointmentId: null,
+          description: e.description ?? null,
+          location: e.location ?? null,
         });
       }
 
@@ -325,7 +358,7 @@ function AgendaPage() {
       ) : (
         <>
           {upcoming.length > 0 ? (
-            <ApptList groups={upcomingGroups} today={today} fillEmpty />
+            <ApptList groups={upcomingGroups} today={today} fillEmpty onIcsClick={setIcsDetail} />
           ) : (
             <EmptyState>Geen aankomende afspraken.</EmptyState>
           )}
@@ -336,12 +369,67 @@ function AgendaPage() {
                 Eerder ({past.length})
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4">
-                <ApptList groups={pastGroups} today={today} />
+                <ApptList groups={pastGroups} today={today} onIcsClick={setIcsDetail} />
               </CollapsibleContent>
             </Collapsible>
           )}
         </>
       )}
+
+      <Dialog open={!!icsDetail} onOpenChange={(open) => !open && setIcsDetail(null)}>
+        <DialogContent className="max-w-md rounded-3xl">
+          {icsDetail && (
+            <>
+              <DialogHeader>
+                <div className="mb-2 flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground/80" strokeWidth={2} />
+                  <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Alleen lezen
+                  </span>
+                </div>
+                <DialogTitle className="text-left text-2xl font-display tracking-[-0.02em]">
+                  {icsDetail.title}
+                </DialogTitle>
+                <DialogDescription className="text-left capitalize">
+                  {formatDay(icsDetail.date)}
+                  {icsDetail.startTime
+                    ? ` · ${icsDetail.startTime}${icsDetail.endTime ? ` – ${icsDetail.endTime}` : ""}`
+                    : " · Hele dag"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 text-sm">
+                {icsDetail.location && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Locatie</div>
+                    <div className="mt-0.5 text-foreground/90">{icsDetail.location}</div>
+                  </div>
+                )}
+                {icsDetail.description && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Beschrijving</div>
+                    <div className="mt-0.5 whitespace-pre-wrap text-foreground/90">{icsDetail.description}</div>
+                  </div>
+                )}
+                <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+                  Dit is een afspraak uit je {icsDetail.sourceLabel}. Wijzig deze in de oorspronkelijke agenda-app.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full"
+                  onClick={() => setIcsDetail(null)}
+                >
+                  Sluiten
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }

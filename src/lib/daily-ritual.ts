@@ -50,7 +50,7 @@ export async function requestRitualPermission(): Promise<NotificationPermission>
   }
 }
 
-async function fireRitualNotification() {
+export async function fireRitualNotification() {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
   const body = RITUAL_BODIES[Math.floor(Math.random() * RITUAL_BODIES.length)];
