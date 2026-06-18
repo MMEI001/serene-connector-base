@@ -203,14 +203,34 @@ function ProfilePage() {
 
   async function handleRitualToggle(next: boolean) {
     if (!user || ritualSaving) return;
-    setRitualSaving(true);
     if (next) {
-      const perm = await requestRitualPermission();
-      if (perm !== "granted") {
-        setRitualSaving(false);
-        toast.error("Geef HoofdRust toestemming voor meldingen.");
+      if (typeof window === "undefined" || !("Notification" in window)) {
+        toast.error("Je browser ondersteunt geen meldingen.");
         return;
       }
+      if (Notification.permission === "denied") {
+        setNotifPermission("denied");
+        setShowDeniedHelp(true);
+        return;
+      }
+      setRitualSaving(true);
+      try {
+        const perm = await requestRitualPermission();
+        setNotifPermission(perm);
+        if (perm !== "granted") {
+          setRitualSaving(false);
+          if (perm === "denied") setShowDeniedHelp(true);
+          else toast.error("Geen toestemming gegeven voor meldingen.");
+          return;
+        }
+      } catch (err) {
+        console.error("[ritual] permission error", err);
+        setRitualSaving(false);
+        toast.error(err instanceof Error ? err.message : "Onbekende fout bij meldingen.");
+        return;
+      }
+    } else {
+      setRitualSaving(true);
     }
     const prev = ritualEnabled;
     setRitualEnabled(next);
@@ -227,6 +247,22 @@ function ProfilePage() {
     notifyRitualChanged();
     toast.success(next ? "Het ritueel staat aan." : "Het ritueel staat uit.");
   }
+
+  async function handleTestNotification() {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") {
+      toast.error("Geef eerst toestemming voor meldingen.");
+      return;
+    }
+    try {
+      await fireRitualNotification();
+      toast.success("Test-melding verstuurd.");
+    } catch (err) {
+      console.error("[ritual] test failed", err);
+      toast.error(err instanceof Error ? err.message : "Test-melding lukte niet.");
+    }
+  }
+
 
   async function handleRitualTimeChange(value: string) {
     if (!user) return;
