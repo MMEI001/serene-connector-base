@@ -358,7 +358,7 @@ function AgendaPage() {
       ) : (
         <>
           {upcoming.length > 0 ? (
-            <ApptList groups={upcomingGroups} today={today} fillEmpty />
+            <ApptList groups={upcomingGroups} today={today} fillEmpty onIcsClick={setIcsDetail} />
           ) : (
             <EmptyState>Geen aankomende afspraken.</EmptyState>
           )}
@@ -369,12 +369,67 @@ function AgendaPage() {
                 Eerder ({past.length})
               </CollapsibleTrigger>
               <CollapsibleContent className="mt-4">
-                <ApptList groups={pastGroups} today={today} />
+                <ApptList groups={pastGroups} today={today} onIcsClick={setIcsDetail} />
               </CollapsibleContent>
             </Collapsible>
           )}
         </>
       )}
+
+      <Dialog open={!!icsDetail} onOpenChange={(open) => !open && setIcsDetail(null)}>
+        <DialogContent className="max-w-md rounded-3xl">
+          {icsDetail && (
+            <>
+              <DialogHeader>
+                <div className="mb-2 flex items-center gap-2">
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground/80" strokeWidth={2} />
+                  <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Alleen lezen
+                  </span>
+                </div>
+                <DialogTitle className="text-left text-2xl font-display tracking-[-0.02em]">
+                  {icsDetail.title}
+                </DialogTitle>
+                <DialogDescription className="text-left capitalize">
+                  {formatDay(icsDetail.date)}
+                  {icsDetail.startTime
+                    ? ` · ${icsDetail.startTime}${icsDetail.endTime ? ` – ${icsDetail.endTime}` : ""}`
+                    : " · Hele dag"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-3 text-sm">
+                {icsDetail.location && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Locatie</div>
+                    <div className="mt-0.5 text-foreground/90">{icsDetail.location}</div>
+                  </div>
+                )}
+                {icsDetail.description && (
+                  <div>
+                    <div className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">Beschrijving</div>
+                    <div className="mt-0.5 whitespace-pre-wrap text-foreground/90">{icsDetail.description}</div>
+                  </div>
+                )}
+                <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+                  Dit is een afspraak uit je {icsDetail.sourceLabel}. Wijzig deze in de oorspronkelijke agenda-app.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  className="w-full rounded-full"
+                  onClick={() => setIcsDetail(null)}
+                >
+                  Sluiten
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </AppShell>
+
   );
 }
