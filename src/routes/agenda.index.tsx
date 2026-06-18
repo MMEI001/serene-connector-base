@@ -241,6 +241,8 @@ function AgendaPage() {
   const [loading, setLoading] = useState(true);
   const { scrollY } = useScroll();
   const titleY = useTransform(scrollY, (v) => v * 0.3);
+  const [icsDetail, setIcsDetail] = useState<DisplayEvent | null>(null);
+
 
   useEffect(() => {
     if (!user) return;
