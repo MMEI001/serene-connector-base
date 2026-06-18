@@ -1,13 +1,15 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "./app-header";
 import { BottomNav } from "./bottom-nav";
 import { TimeAwareBackground } from "./time-aware-background";
+import { useDailyRitual } from "@/lib/daily-ritual";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, loading } = useAuth();
   const [checkingProfile, setCheckingProfile] = useState(true);
 
@@ -36,6 +38,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [user, navigate]);
 
+  useDailyRitual(user?.id);
+
   if (loading || !user || checkingProfile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -48,7 +52,12 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="relative min-h-screen pb-28">
       <TimeAwareBackground />
       <AppHeader />
-      <main className="mx-auto max-w-2xl px-5 py-10 animate-float-up">{children}</main>
+      <main
+        key={location.pathname}
+        className="mx-auto max-w-2xl px-5 py-10 animate-page-enter"
+      >
+        {children}
+      </main>
       <BottomNav />
     </div>
   );
