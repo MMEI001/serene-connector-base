@@ -40,7 +40,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         user_id: userId,
         transcription_id: data.transcription_id,
         intent: action.intent,
-        payload: action.payload,
+        payload: action.payload as never,
         result_table: result.ref?.table ?? null,
         result_id: result.ref?.id ?? null,
         status: result.status,
