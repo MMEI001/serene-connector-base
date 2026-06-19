@@ -17,19 +17,23 @@ export function BottomNav() {
   const haptic = useHaptic();
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 pointer-events-none">
-      <div className="surface-nav pointer-events-auto relative overflow-visible pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="surface-nav pointer-events-auto pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <ul className="mx-auto grid max-w-2xl grid-cols-5 items-end px-3">
           {leftItems.map(({ to, label, Icon }) => (
             <NavItem key={to} to={to} label={label} Icon={Icon} onTap={haptic.light} />
           ))}
-          <li className="flex justify-center pt-7">
+          <li className="flex justify-center">
             <Link
               to="/laat-los"
-              onClick={haptic.light}
-              className="text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground"
+              aria-label="Laat los"
+              onClick={haptic.medium}
+              className="flex flex-col items-center gap-1 text-muted-foreground transition-colors hover:text-foreground"
               activeProps={{ className: "text-foreground" }}
             >
-              Laat los
+              <span className="flex h-6 w-6 items-center justify-center">
+                <MiniOrb size={28} breathing glow />
+              </span>
+              <span className="text-[10px] font-medium tracking-wide">Laat los</span>
             </Link>
           </li>
           {rightItems.map(({ to, label, Icon }) => (
@@ -37,16 +41,6 @@ export function BottomNav() {
           ))}
         </ul>
       </div>
-
-      {/* Floating mini-orb — the iridescent orb itself, no gradient ring */}
-      <Link
-        to="/laat-los"
-        aria-label="Laat los"
-        onClick={haptic.medium}
-        className="pointer-events-auto absolute left-1/2 bottom-[calc(env(safe-area-inset-bottom)+2.25rem)] z-50 flex h-16 w-16 -translate-x-1/2 items-center justify-center rounded-full transition-transform duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] active:scale-95 drop-shadow-[0_10px_24px_rgba(200,182,217,0.5)]"
-      >
-        <MiniOrb size={56} breathing glow />
-      </Link>
     </nav>
   );
 }

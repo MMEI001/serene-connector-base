@@ -117,6 +117,18 @@ function ProfilePage() {
   const [streak, setStreak] = useState(0);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
   const [showDeniedHelp, setShowDeniedHelp] = useState(false);
+  const [showIosHelp, setShowIosHelp] = useState(false);
+
+  function isIosNonStandalone() {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isIos = /iPad|iPhone|iPod/.test(ua);
+    const nav = navigator as Navigator & { standalone?: boolean };
+    const standalone =
+      nav.standalone === true ||
+      (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches);
+    return isIos && !standalone;
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -205,7 +217,11 @@ function ProfilePage() {
     if (!user || ritualSaving) return;
     if (next) {
       if (typeof window === "undefined" || !("Notification" in window)) {
-        toast.error("Je browser ondersteunt geen meldingen.");
+        if (isIosNonStandalone()) {
+          setShowIosHelp(true);
+        } else {
+          toast.error("Je browser ondersteunt geen meldingen.");
+        }
         return;
       }
       if (Notification.permission === "denied") {
