@@ -1,0 +1,25 @@
+{
+  "name": "HoofdRust",
+  "short_name": "HoofdRust",
+  "description": "Een rustige, warme plek voor je dagelijkse notities en stemming.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1a0f0a",
+  "theme_color": "#1a0f0a",
+  "icons": [
+    {
+      "src": "/orb-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

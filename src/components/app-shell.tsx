@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppHeader } from "./app-header";
 import { BottomNav } from "./bottom-nav";
 import { TimeAwareBackground } from "./time-aware-background";
+import { InstallPrompt } from "./install-prompt";
 import { useDailyRitual } from "@/lib/daily-ritual";
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -59,6 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {children}
       </main>
       <BottomNav />
+      <InstallPrompt />
     </div>
   );
 }

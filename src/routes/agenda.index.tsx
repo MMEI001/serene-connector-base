@@ -442,7 +442,27 @@ function AgendaPage() {
                 })()}
               </div>
 
-              <DialogFooter>
+              <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+                {(() => {
+                  if (typeof navigator === "undefined") return null;
+                  const isApple = /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+                  if (!isApple) return null;
+                  const [y, m, d] = icsDetail.date.split("-").map(Number);
+                  const hhmm = (icsDetail.startTime ?? "00:00").split(":").map(Number);
+                  const eventMs = new Date(y, (m ?? 1) - 1, d ?? 1, hhmm[0] ?? 0, hhmm[1] ?? 0).getTime();
+                  // calshow: takes seconds since 2001-01-01 UTC (978307200)
+                  const calSeconds = Math.floor(eventMs / 1000) - 978307200;
+                  return (
+                    <Button
+                      className="w-full rounded-full"
+                      onClick={() => {
+                        window.location.href = `calshow:${calSeconds}`;
+                      }}
+                    >
+                      Open in Agenda
+                    </Button>
+                  );
+                })()}
                 <Button
                   variant="outline"
                   className="w-full rounded-full"
