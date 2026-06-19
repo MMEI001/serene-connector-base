@@ -47,24 +47,40 @@ export const transcribeAudio = createServerFn({ method: "POST" })
       );
     }
 
-    // Forward naar OpenAI Whisper
-    const upstream = new FormData();
-    upstream.append("file", data.file, data.name);
-    upstream.append("model", "whisper-1");
-    upstream.append("language", "nl");
-    upstream.append("response_format", "verbose_json");
+    // Forward naar OpenAI Whisper, met retry op 429/503.
+    const buildBody = () => {
+      const fd = new FormData();
+      fd.append("file", data.file, data.name);
+      fd.append("model", "whisper-1");
+      fd.append("language", "nl");
+      fd.append("response_format", "verbose_json");
+      return fd;
+    };
 
-    const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}` },
-      body: upstream,
-    });
+    const MAX_ATTEMPTS = 3;
+    const BACKOFF_MS = [1000, 2000, 4000];
+    let res: Response | null = null;
+    let lastErrText = "";
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: buildBody(),
+      });
+      if (res.ok) break;
+      const retriable = res.status === 429 || res.status === 503 || res.status >= 500;
+      lastErrText = await res.text().catch(() => "");
+      console.error("[transcribe] OpenAI", res.status, lastErrText, "attempt", attempt + 1);
+      if (!retriable || attempt === MAX_ATTEMPTS - 1) break;
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
+    }
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      console.error("[transcribe] OpenAI error", res.status, errText);
-      if (res.status === 429) throw new Error("Even te druk bij OpenAI. Probeer opnieuw.");
-      if (res.status === 401) throw new Error("Spraak-naar-tekst is niet correct geconfigureerd.");
+    if (!res || !res.ok) {
+      const status = res?.status ?? 0;
+      if (status === 429 || status === 503) {
+        throw new Error("Even te druk bij OpenAI. Probeer zo opnieuw.");
+      }
+      if (status === 401) throw new Error("Spraak-naar-tekst is niet correct geconfigureerd.");
       throw new Error("Transcriptie lukte niet. Probeer opnieuw.");
     }
 
