@@ -638,6 +638,34 @@ function ProfilePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <Dialog open={showIosHelp} onOpenChange={setShowIosHelp}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-left font-display text-xl tracking-[-0.02em]">
+              Zet HoofdRust op je beginscherm
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              Meldingen werken op iPhone alleen als je HoofdRust toevoegt aan je beginscherm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-foreground/85">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>Tik op het deel-icoon onderin Safari.</li>
+              <li>Kies <em>'Zet op beginscherm'</em>.</li>
+              <li>Open HoofdRust vanaf je beginscherm.</li>
+              <li>Daarna kun je hier meldingen aanzetten.</li>
+            </ol>
+            <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+              Dit is een eenmalige stap. Daarna voelt de app als een echte app.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowIosHelp(false)} className="w-full rounded-full">
+              Begrepen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppShell>
 
   );
