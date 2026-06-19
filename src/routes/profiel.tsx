@@ -117,6 +117,18 @@ function ProfilePage() {
   const [streak, setStreak] = useState(0);
   const [notifPermission, setNotifPermission] = useState<NotificationPermission | "unsupported">("default");
   const [showDeniedHelp, setShowDeniedHelp] = useState(false);
+  const [showIosHelp, setShowIosHelp] = useState(false);
+
+  function isIosNonStandalone() {
+    if (typeof window === "undefined" || typeof navigator === "undefined") return false;
+    const ua = navigator.userAgent || "";
+    const isIos = /iPad|iPhone|iPod/.test(ua);
+    const nav = navigator as Navigator & { standalone?: boolean };
+    const standalone =
+      nav.standalone === true ||
+      (typeof window.matchMedia === "function" && window.matchMedia("(display-mode: standalone)").matches);
+    return isIos && !standalone;
+  }
 
   useEffect(() => {
     if (typeof window === "undefined" || !("Notification" in window)) {
@@ -205,7 +217,11 @@ function ProfilePage() {
     if (!user || ritualSaving) return;
     if (next) {
       if (typeof window === "undefined" || !("Notification" in window)) {
-        toast.error("Je browser ondersteunt geen meldingen.");
+        if (isIosNonStandalone()) {
+          setShowIosHelp(true);
+        } else {
+          toast.error("Je browser ondersteunt geen meldingen.");
+        }
         return;
       }
       if (Notification.permission === "denied") {
@@ -617,6 +633,34 @@ function ProfilePage() {
           </div>
           <DialogFooter>
             <Button onClick={() => setShowDeniedHelp(false)} className="w-full rounded-full">
+              Begrepen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={showIosHelp} onOpenChange={setShowIosHelp}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader>
+            <DialogTitle className="text-left font-display text-xl tracking-[-0.02em]">
+              Zet HoofdRust op je beginscherm
+            </DialogTitle>
+            <DialogDescription className="text-left">
+              Meldingen werken op iPhone alleen als je HoofdRust toevoegt aan je beginscherm.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm text-foreground/85">
+            <ol className="list-decimal space-y-2 pl-5">
+              <li>Tik op het deel-icoon onderin Safari.</li>
+              <li>Kies <em>'Zet op beginscherm'</em>.</li>
+              <li>Open HoofdRust vanaf je beginscherm.</li>
+              <li>Daarna kun je hier meldingen aanzetten.</li>
+            </ol>
+            <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+              Dit is een eenmalige stap. Daarna voelt de app als een echte app.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowIosHelp(false)} className="w-full rounded-full">
               Begrepen
             </Button>
           </DialogFooter>

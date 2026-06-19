@@ -42,7 +42,27 @@ type DisplayEvent = {
   appointmentId: string | null;
   description?: string | null;
   location?: string | null;
+  calendarUrl?: string | null;
 };
+
+type IcsProvider = {
+  source: string;
+  app: string;
+};
+
+function detectIcsProvider(url: string | null | undefined, fallbackName: string): IcsProvider {
+  const u = (url ?? "").toLowerCase();
+  if (u.includes("icloud.com") || u.includes("me.com")) {
+    return { source: "iCloud", app: "je Apple Agenda" };
+  }
+  if (u.includes("google.com") || u.includes("googleusercontent.com")) {
+    return { source: "Google Agenda", app: "Google Agenda" };
+  }
+  if (u.includes("outlook.") || u.includes("live.com") || u.includes("office.com") || u.includes("office365.com")) {
+    return { source: "Outlook", app: "Microsoft Outlook" };
+  }
+  return { source: fallbackName, app: "de oorspronkelijke agenda-app" };
+}
 
 function todayISO() {
   const d = new Date();
@@ -301,6 +321,7 @@ function AgendaPage() {
           appointmentId: null,
           description: e.description ?? null,
           location: e.location ?? null,
+          calendarUrl: (e as { calendar_url?: string | null }).calendar_url ?? null,
         });
       }
 
@@ -411,9 +432,14 @@ function AgendaPage() {
                     <div className="mt-0.5 whitespace-pre-wrap text-foreground/90">{icsDetail.description}</div>
                   </div>
                 )}
-                <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
-                  Dit is een afspraak uit je {icsDetail.sourceLabel}. Wijzig deze in de oorspronkelijke agenda-app.
-                </p>
+                {(() => {
+                  const p = detectIcsProvider(icsDetail.calendarUrl, icsDetail.sourceLabel);
+                  return (
+                    <p className="rounded-2xl bg-muted/40 px-4 py-3 text-xs italic text-muted-foreground">
+                      Dit is een afspraak uit {p.source}. Wijzig deze in {p.app}.
+                    </p>
+                  );
+                })()}
               </div>
 
               <DialogFooter>
