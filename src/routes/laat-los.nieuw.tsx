@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { VoiceInputButton } from "@/components/voice-input-button";
 
 export const Route = createFileRoute("/laat-los/nieuw")({
   ssr: false,
@@ -59,7 +60,15 @@ function NewLetGoPage() {
       <Card className="rounded-3xl border-border/60 bg-card/80 p-6 shadow-sm">
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="content">Wat wil je loslaten?</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="content">Wat wil je loslaten?</Label>
+              <VoiceInputButton
+                disabled={busy}
+                onTranscript={(text) =>
+                  setContent((prev) => (prev ? `${prev.trimEnd()} ${text}` : text).slice(0, 4000))
+                }
+              />
+            </div>
             <Textarea
               id="content"
               value={content}
@@ -68,7 +77,7 @@ function NewLetGoPage() {
               maxLength={4000}
               autoFocus
               className="rounded-2xl"
-              placeholder="Wat wil je loslaten?"
+              placeholder="Wat wil je loslaten? Typ of tik op 'Inspreken'."
             />
           </div>
 
