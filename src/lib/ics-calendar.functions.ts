@@ -162,11 +162,11 @@ export const listIcsEventsInRange = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: cals, error: calErr } = await context.supabase
       .from("ics_calendars")
-      .select("id, name, color");
+      .select("id, name, color, url");
     if (calErr) throw new Error(calErr.message);
 
-    const calMap = new Map<string, { name: string; color: string | null }>();
-    for (const c of cals ?? []) calMap.set(c.id, { name: c.name, color: c.color });
+    const calMap = new Map<string, { name: string; color: string | null; url: string | null }>();
+    for (const c of cals ?? []) calMap.set(c.id, { name: c.name, color: c.color, url: c.url });
     const ids = (cals ?? []).map((c) => c.id);
     if (ids.length === 0) return [];
 
@@ -183,5 +183,6 @@ export const listIcsEventsInRange = createServerFn({ method: "POST" })
       ...e,
       calendar_name: calMap.get(e.calendar_id)?.name ?? "Agenda",
       calendar_color: calMap.get(e.calendar_id)?.color ?? null,
+      calendar_url: calMap.get(e.calendar_id)?.url ?? null,
     }));
   });
