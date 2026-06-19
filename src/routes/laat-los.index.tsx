@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useCallback, useEffect, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { Mic } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
-import { BreathingOrb } from "@/components/breathing-orb";
+import { VoiceOrb } from "@/components/voice-orb";
 import { ZenRelease } from "@/components/zen-release";
 import {
   Collapsible,
@@ -68,45 +67,28 @@ function vibrate(pattern: number | number[]) {
 
 function LetGoPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recording, setRecording] = useState(false);
   const [phase, setPhase] = useState<Phase>("idle");
 
-  useEffect(() => {
+  const loadItems = useCallback(async () => {
     if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from("let_go_items")
-        .select("id, content, status, created_at")
-        .eq("user_id", user.id)
-        .in("status", ["active", "archived"])
-        .order("created_at", { ascending: false });
-      setItems((data ?? []) as Item[]);
-      setLoading(false);
-    })();
+    const { data } = await supabase
+      .from("let_go_items")
+      .select("id, content, status, created_at")
+      .eq("user_id", user.id)
+      .in("status", ["active", "archived"])
+      .order("created_at", { ascending: false });
+    setItems((data ?? []) as Item[]);
+    setLoading(false);
   }, [user]);
+
+  useEffect(() => {
+    loadItems();
+  }, [loadItems]);
 
   const activeItems = items.filter((i) => i.status === "active");
   const archived = items.filter((i) => i.status === "archived");
-
-  const handleOrb = () => {
-    vibrate(30);
-    setRecording(true);
-    // For now, route to the write form; voice flow can plug in later.
-    setTimeout(() => {
-      setRecording(false);
-      navigate({ to: "/laat-los/nieuw" });
-    }, 500);
-  };
-
-  // Demo-friendly hook for callers: window-level trigger of the zen release.
-  useEffect(() => {
-    const onRelease = () => runZenRelease();
-    window.addEventListener("hoofdrust:release", onRelease);
-    return () => window.removeEventListener("hoofdrust:release", onRelease);
-  });
 
   function runZenRelease() {
     vibrate([100, 30, 200]);
@@ -114,6 +96,13 @@ function LetGoPage() {
     window.setTimeout(() => setPhase("silence"), 1400);
     window.setTimeout(() => setPhase("idle"), 1400 + 3000);
   }
+
+  // Demo-friendly hook for callers: window-level trigger of the zen release.
+  useEffect(() => {
+    const onRelease = () => runZenRelease();
+    window.addEventListener("hoofdrust:release", onRelease);
+    return () => window.removeEventListener("hoofdrust:release", onRelease);
+  });
 
   const period =
     typeof document !== "undefined"
@@ -131,25 +120,17 @@ function LetGoPage() {
           Wat wil je loslaten?
         </p>
 
-        <div className="my-12">
-          <BreathingOrb
-            recording={recording}
-            blooming={phase === "bloom"}
-            onTap={handleOrb}
+        <div className="my-10">
+          <VoiceOrb
+            onCompleted={() => {
+              runZenRelease();
+              loadItems();
+            }}
           />
         </div>
 
-        <motion.div
-          className="flex items-center gap-2 text-sm font-medium tracking-wide text-muted-foreground"
-          animate={{ opacity: [0.55, 1, 0.55] }}
-          transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
-        >
-          <Mic className="h-4 w-4" strokeWidth={1.5} />
-          <span>Tik om te spreken</span>
-        </motion.div>
-
         <p
-          className={`mt-3 text-xs ${
+          className={`mt-1 text-xs ${
             onNight ? "text-white/55" : "text-[#B5A99E]"
           }`}
         >

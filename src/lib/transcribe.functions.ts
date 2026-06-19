@@ -75,16 +75,25 @@ export const transcribeAudio = createServerFn({ method: "POST" })
     const estCost = duration != null ? Number((duration * COST_PER_SECOND).toFixed(6)) : null;
 
     // Kosten-logging
-    const { error: logErr } = await supabase.from("voice_transcriptions").insert({
-      user_id: userId,
-      duration_seconds: duration,
-      estimated_cost_usd: estCost,
-      bytes,
-      model: "whisper-1",
-    });
+    const { data: logRow, error: logErr } = await supabase
+      .from("voice_transcriptions")
+      .insert({
+        user_id: userId,
+        duration_seconds: duration,
+        estimated_cost_usd: estCost,
+        bytes,
+        model: "whisper-1",
+      })
+      .select("id")
+      .single();
     if (logErr) {
       console.error("[transcribe] log insert failed", logErr);
     }
 
-    return { text, duration_seconds: duration, estimated_cost_usd: estCost };
+    return {
+      text,
+      duration_seconds: duration,
+      estimated_cost_usd: estCost,
+      transcription_id: (logRow?.id as string | undefined) ?? null,
+    };
   });
