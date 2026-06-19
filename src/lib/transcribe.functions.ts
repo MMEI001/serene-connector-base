@@ -8,12 +8,12 @@ const COST_PER_SECOND = 0.006 / 60;
 
 export const transcribeAudio = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((data: unknown) => {
+  .inputValidator((data: FormData) => {
     if (!(data instanceof FormData)) {
       throw new Error("Verwacht een audio-upload.");
     }
     const file = data.get("file");
-    if (!(file instanceof File) && !(file instanceof Blob)) {
+    if (!(file instanceof Blob)) {
       throw new Error("Geen audio-bestand ontvangen.");
     }
     if (file.size < 512) {
@@ -22,7 +22,8 @@ export const transcribeAudio = createServerFn({ method: "POST" })
     if (file.size > MAX_BYTES) {
       throw new Error("Opname te groot (max 25 MB).");
     }
-    return { file: file as Blob, name: (file as File).name || "recording.webm" };
+    const name = file instanceof File ? file.name : "recording.webm";
+    return { file, name: name || "recording.webm" };
   })
   .handler(async ({ data, context }) => {
     const apiKey = process.env.OPENAI_API_KEY;
