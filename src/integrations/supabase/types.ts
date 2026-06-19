@@ -457,6 +457,53 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_actions: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          intent: Database["public"]["Enums"]["voice_intent"]
+          payload: Json
+          result_id: string | null
+          result_table: string | null
+          status: Database["public"]["Enums"]["voice_action_status"]
+          transcription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          intent: Database["public"]["Enums"]["voice_intent"]
+          payload?: Json
+          result_id?: string | null
+          result_table?: string | null
+          status?: Database["public"]["Enums"]["voice_action_status"]
+          transcription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          intent?: Database["public"]["Enums"]["voice_intent"]
+          payload?: Json
+          result_id?: string | null
+          result_table?: string | null
+          status?: Database["public"]["Enums"]["voice_action_status"]
+          transcription_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "voice_actions_transcription_id_fkey"
+            columns: ["transcription_id"]
+            isOneToOne: false
+            referencedRelation: "voice_transcriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       voice_transcriptions: {
         Row: {
           bytes: number | null
@@ -506,6 +553,18 @@ export type Database = {
       let_go_status: "active" | "archived" | "processed"
       reminder_status: "active" | "done" | "snoozed" | "deleted"
       suggestion_status: "pending" | "accepted" | "dismissed" | "deleted"
+      voice_action_status:
+        | "completed"
+        | "needs_confirmation"
+        | "failed"
+        | "skipped"
+      voice_intent:
+        | "release"
+        | "reminder"
+        | "note"
+        | "event"
+        | "query"
+        | "checkin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -645,6 +704,20 @@ export const Constants = {
       let_go_status: ["active", "archived", "processed"],
       reminder_status: ["active", "done", "snoozed", "deleted"],
       suggestion_status: ["pending", "accepted", "dismissed", "deleted"],
+      voice_action_status: [
+        "completed",
+        "needs_confirmation",
+        "failed",
+        "skipped",
+      ],
+      voice_intent: [
+        "release",
+        "reminder",
+        "note",
+        "event",
+        "query",
+        "checkin",
+      ],
     },
   },
 } as const
