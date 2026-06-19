@@ -457,6 +457,36 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_transcriptions: {
+        Row: {
+          bytes: number | null
+          created_at: string
+          duration_seconds: number | null
+          estimated_cost_usd: number | null
+          id: string
+          model: string
+          user_id: string
+        }
+        Insert: {
+          bytes?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          estimated_cost_usd?: number | null
+          id?: string
+          model?: string
+          user_id: string
+        }
+        Update: {
+          bytes?: number | null
+          created_at?: string
+          duration_seconds?: number | null
+          estimated_cost_usd?: number | null
+          id?: string
+          model?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
