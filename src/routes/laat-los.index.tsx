@@ -137,18 +137,20 @@ function LetGoPage() {
         </p>
 
         {/* context hint — wat je kunt zeggen tegen de orb */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-2">
-          <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground/70">
+        <div className="mt-8 flex flex-col items-center gap-3 px-4">
+          <span className="text-xs italic text-muted-foreground/70">
             Zeg bijvoorbeeld
           </span>
-          {voiceHints.map((h, i) => (
-            <span
-              key={h}
-              className="text-xs text-foreground/60"
-            >
-              "{h}"{i < voiceHints.length - 1 ? "," : ""}
-            </span>
-          ))}
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            {voiceHints.map((h) => (
+              <span
+                key={h}
+                className="rounded-full bg-foreground/[0.04] px-3 py-1 text-xs text-foreground/65 shadow-[0_1px_2px_rgba(0,0,0,0.03)]"
+              >
+                {h}
+              </span>
+            ))}
+          </div>
         </div>
 
         <Link
