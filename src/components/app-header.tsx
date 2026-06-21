@@ -2,10 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { BrandMark } from "./brand-mark";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { useIsWeekend } from "./time-aware-background";
 
 export function AppHeader() {
-  const weekend = useIsWeekend();
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = "/auth";
@@ -16,13 +14,6 @@ export function AppHeader() {
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
           <BrandMark size={28} />
-          {weekend && (
-            <span
-              aria-label="Weekend"
-              title="Weekend"
-              className="h-2 w-2 rounded-full bg-[#E8B89A] shadow-[0_0_6px_rgba(232,184,154,0.7)]"
-            />
-          )}
         </Link>
         <Button
           variant="ghost"
