@@ -12,7 +12,7 @@ export function AppHeader() {
   };
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-10 border-b border-border/60 bg-background/80 backdrop-blur pt-[env(safe-area-inset-top)]">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2">
           <BrandMark size={28} />

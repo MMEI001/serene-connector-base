@@ -53,10 +53,10 @@ function preview(text: string) {
   return f.length <= 100 ? f : f.slice(0, 97) + "…";
 }
 
-const suggestions = [
-  { label: "Schrijf in plaats daarvan", to: "/laat-los/nieuw" as const },
-  { label: "Bekijk eerdere", to: "/laat-los" as const },
-  { label: "Stilte modus", to: "/laat-los" as const },
+const voiceHints = [
+  "Iets loslaten",
+  "Een notitie maken",
+  "Mijn agenda",
 ];
 
 function vibrate(pattern: number | number[]) {
@@ -137,27 +137,27 @@ function LetGoPage() {
           Wat je hier zegt blijft bij jou
         </p>
 
-        {/* suggestion pills */}
-        <div className="mt-8 -mx-5 w-screen max-w-2xl overflow-x-auto px-5 pb-2">
-          <div className="flex min-w-min justify-center gap-2.5">
-            {suggestions.map((s) => (
-              <Link
-                key={s.label}
-                to={s.to}
-                onClick={() => {
-                  if (s.label === "Stilte modus") {
-                    toast("Stilte modus komt binnenkort", {
-                      description: "Een ademruimte zonder UI.",
-                    });
-                  }
-                }}
-                className="shrink-0 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] active:scale-95"
-              >
-                {s.label}
-              </Link>
-            ))}
-          </div>
+        {/* context hint — wat je kunt zeggen tegen de orb */}
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 px-2">
+          <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground/70">
+            Zeg bijvoorbeeld
+          </span>
+          {voiceHints.map((h, i) => (
+            <span
+              key={h}
+              className="text-xs text-foreground/60"
+            >
+              "{h}"{i < voiceHints.length - 1 ? "," : ""}
+            </span>
+          ))}
         </div>
+
+        <Link
+          to="/laat-los/nieuw"
+          className="mt-6 text-xs text-muted-foreground/80 underline-offset-4 hover:underline hover:text-foreground"
+        >
+          Liever typen?
+        </Link>
       </div>
 
       {/* recent items */}
