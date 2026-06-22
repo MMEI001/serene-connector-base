@@ -82,13 +82,18 @@ export const transcribeAudio = createServerFn({ method: "POST" })
 
     if (!result) {
       const status = lastErr?.status ?? 0;
-      await logVoiceError(
-        supabase,
-        userId,
-        provider.name,
-        status || null,
-        lastErr?.providerCode ?? null,
-      );
+      await supabase
+        .from("voice_errors")
+        .insert({
+          user_id: userId,
+          provider: provider.name,
+          http_status: status || null,
+          error_code: lastErr?.providerCode ?? null,
+          stage: "transcribe",
+        })
+        .then(({ error }) => {
+          if (error) console.error("[transcribe] voice_errors log failed", error);
+        });
 
       // Soft-warning: 3+ fouten in laatste 5 min
       const since = new Date(Date.now() - SOFT_WARN_WINDOW_MS).toISOString();
