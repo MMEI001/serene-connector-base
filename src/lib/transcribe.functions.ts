@@ -11,26 +11,6 @@ const RETRY_BACKOFF_MS = [1000, 3000, 7000]; // 3 pogingen totaal
 const SOFT_WARN_WINDOW_MS = 5 * 60 * 1000;
 const SOFT_WARN_THRESHOLD = 3;
 
-async function logVoiceError(
-  supabase: ReturnType<typeof requireSupabaseAuth> extends never ? never : any,
-  userId: string,
-  provider: string,
-  status: number | null,
-  code: string | null,
-  stage = "transcribe",
-) {
-  try {
-    await supabase.from("voice_errors").insert({
-      user_id: userId,
-      provider,
-      http_status: status,
-      error_code: code,
-      stage,
-    });
-  } catch (e) {
-    console.error("[transcribe] voice_errors log failed", e);
-  }
-}
 
 export const transcribeAudio = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
