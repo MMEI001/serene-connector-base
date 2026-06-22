@@ -504,6 +504,36 @@ export type Database = {
           },
         ]
       }
+      voice_errors: {
+        Row: {
+          created_at: string
+          error_code: string | null
+          http_status: number | null
+          id: string
+          provider: string
+          stage: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          error_code?: string | null
+          http_status?: number | null
+          id?: string
+          provider: string
+          stage?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          error_code?: string | null
+          http_status?: number | null
+          id?: string
+          provider?: string
+          stage?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       voice_transcriptions: {
         Row: {
           bytes: number | null
