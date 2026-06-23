@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const RECENT_KEY = "hoofdrust:greetings-recent";
 const LAST_OPEN_KEY = "hoofdrust:last-open";
@@ -112,6 +112,11 @@ export function TypewriterGreeting({ onDone, speed = 40 }: Props) {
   const [shown, setShown] = useState(0);
   const [done, setDone] = useState(false);
 
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
+
   useEffect(() => {
     const reduced =
       typeof window !== "undefined" &&
@@ -119,7 +124,7 @@ export function TypewriterGreeting({ onDone, speed = 40 }: Props) {
     if (reduced) {
       setShown(text.length);
       setDone(true);
-      onDone?.();
+      onDoneRef.current?.();
       return;
     }
     let i = 0;
@@ -129,11 +134,11 @@ export function TypewriterGreeting({ onDone, speed = 40 }: Props) {
       if (i >= text.length) {
         window.clearInterval(id);
         setDone(true);
-        onDone?.();
+        onDoneRef.current?.();
       }
     }, speed);
     return () => window.clearInterval(id);
-  }, [text, speed, onDone]);
+  }, [text, speed]);
 
   const skip = () => {
     if (done) return;
