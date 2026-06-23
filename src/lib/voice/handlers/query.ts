@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionResult, QueryItem } from "../types";
+import type { UserPersona } from "../persona";
 
 type Ctx = { supabase: SupabaseClient; userId: string };
 
@@ -78,6 +79,7 @@ function formatIcsWhen(iso: string): string {
 export async function handleQuery(
   ctx: Ctx,
   payload: Record<string, unknown>,
+  persona?: UserPersona,
 ): Promise<ActionResult> {
   const scope = (typeof payload.scope === "string" ? payload.scope : "today") as Scope;
   const dateStr = typeof payload.date === "string" ? payload.date : undefined;
@@ -149,18 +151,38 @@ export async function handleQuery(
 
   items.sort((a, b) => a.when.localeCompare(b.when));
 
-  const count = items.length;
-  const intro =
-    count === 0
-      ? `${label} staat er niets in de agenda.`
-      : count === 1
-        ? `${label} staat er één ding:`
-        : `${label} staan er ${count} dingen:`;
+  // Persona-cap: respecteer max suggesties (bv. "Eén tegelijk" → 1)
+  const cap = persona?.hints.maxSuggestions ?? items.length;
+  const visibleItems = items.slice(0, cap);
+  const truncated = items.length - visibleItems.length;
+  const tone = persona?.hints.tone ?? "soft";
+
+  const count = visibleItems.length;
+  const totalCount = items.length;
+
+  let intro: string;
+  if (totalCount === 0) {
+    intro =
+      tone === "brief" || tone === "minimal"
+        ? `${label}: niets.`
+        : `${label} staat er niets in de agenda.`;
+  } else if (tone === "minimal") {
+    intro = `${label}: ${totalCount}.`;
+  } else if (tone === "brief") {
+    intro = `${label}: ${totalCount} ${totalCount === 1 ? "ding" : "dingen"}.`;
+  } else if (count === 1 && totalCount === 1) {
+    intro = `${label} staat er één ding:`;
+  } else {
+    intro =
+      truncated > 0
+        ? `${label} staan er ${totalCount} dingen — ik laat de eerste ${count} zien:`
+        : `${label} staan er ${totalCount} dingen:`;
+  }
 
   return {
     intent: "query",
     status: "completed",
     confirmation: intro,
-    query_result: { intro, items },
+    query_result: { intro, items: visibleItems },
   };
 }

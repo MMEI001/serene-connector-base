@@ -1,4 +1,5 @@
 import type { VoiceAction, VoiceIntent } from "./types";
+import type { UserPersona } from "./persona";
 
 /**
  * Fase B + multi-action classifier via Lovable AI Gateway.
@@ -102,8 +103,9 @@ const TOOL = {
   },
 };
 
-function systemPrompt(nowIso: string) {
-  return `Je bent de intent-classifier van HoofdRust, een rustige Nederlandse spraak-app.
+function systemPrompt(nowIso: string, persona?: UserPersona) {
+  const personaBlock = persona?.promptFragment ? `\n\n${persona.promptFragment}` : "";
+  return `Je bent de intent-classifier van HoofdRust, een rustige Nederlandse spraak-app.${personaBlock}
 De gebruiker spreekt één korte zin in. Splits 'm in 1..${MAX_ACTIONS} acties — meestal één, maar bij samengestelde commando's één per actie.
 
 INTENTS:
@@ -129,7 +131,7 @@ ALGEMENE REGELS:
 - Antwoord uitsluitend via de classify-tool.`;
 }
 
-export async function processVoiceInput(text: string): Promise<ClassifyResult> {
+export async function processVoiceInput(text: string, persona?: UserPersona): Promise<ClassifyResult> {
   const trimmed = text.trim();
   const fallback = (intent: VoiceIntent, payload: Record<string, unknown>, conf = 0.2): ClassifyResult => ({
     actions: [{ intent, payload, confidence: conf }],
@@ -156,7 +158,7 @@ export async function processVoiceInput(text: string): Promise<ClassifyResult> {
       body: JSON.stringify({
         model: MODEL,
         messages: [
-          { role: "system", content: systemPrompt(nowIso) },
+          { role: "system", content: systemPrompt(nowIso, persona) },
           { role: "user", content: trimmed },
         ],
         tools: [TOOL],

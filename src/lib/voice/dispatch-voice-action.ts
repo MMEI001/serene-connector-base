@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionResult, ActionPreview, VoiceAction, VoiceIntent } from "./types";
+import type { UserPersona } from "./persona";
 import { handleRelease } from "./handlers/release";
 import { previewReminder, commitReminder } from "./handlers/reminder";
 import { handleNote } from "./handlers/note";
@@ -7,7 +8,7 @@ import { previewEvent, commitEvent } from "./handlers/event";
 import { handleQuery } from "./handlers/query";
 import { handleCheckin } from "./handlers/checkin";
 
-type Ctx = { supabase: SupabaseClient; userId: string };
+type Ctx = { supabase: SupabaseClient; userId: string; persona?: UserPersona };
 
 const CONFIRM_INTENTS = new Set<VoiceIntent>(["reminder", "event"]);
 
@@ -63,7 +64,7 @@ async function dispatchSingle(ctx: Ctx, action: VoiceAction): Promise<ActionResu
     case "note":
       return handleNote(ctx, action.payload);
     case "query":
-      return handleQuery(ctx, action.payload);
+      return handleQuery(ctx, action.payload, ctx.persona);
     case "checkin":
       return handleCheckin(ctx, action.payload);
     case "reminder":
