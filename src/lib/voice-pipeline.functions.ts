@@ -29,8 +29,11 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       return { intent: "release", status: "skipped", confirmation: "" };
     }
 
-    // 1. GPT-classify → 1..3 actions
-    const { actions, meta } = await processVoiceInput(text);
+    // 0. Persona laden uit user_profiles (RLS-actief via supabase-client van auth-middleware)
+    const persona = await loadUserPersona(supabase, userId);
+
+    // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
+    const { actions, meta } = await processVoiceInput(text, persona);
 
     // 2. Log intent-classificatie (één rij per zin, met alle actions in payload)
     const primary = actions[0];
@@ -42,7 +45,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         model: meta.model,
         intent: primary.intent,
         confidence: primary.confidence,
-        payload: { actions } as never,
+        payload: { actions, persona_signature: persona.signature } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
         total_tokens: meta.total_tokens,
@@ -54,8 +57,8 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         if (error) console.error("[pipeline] voice_intents log", error);
       });
 
-    // 3. Dispatch bundle
-    const result = await dispatchVoiceBundle({ supabase, userId }, actions);
+    // 3. Dispatch bundle (persona doorgegeven voor query-handler caps + toon)
+    const result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
 
     if (result.status === "skipped") return result;
 
