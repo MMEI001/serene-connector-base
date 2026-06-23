@@ -5,6 +5,20 @@ export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
 let currentAudio: HTMLAudioElement | null = null;
+let ttsUnavailableUntil = 0; // epoch ms; skip ElevenLabs until then
+
+function browserSpeak(text: string) {
+  try {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "nl-NL";
+    utter.rate = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  } catch {
+    // ignore
+  }
+}
 
 export function resetVoicePreferenceCache() {
   cachedEnabled = null;
