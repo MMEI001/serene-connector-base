@@ -144,12 +144,8 @@ function Dashboard() {
   return (
     <AppShell>
       <section className="flex flex-col items-center pt-2 text-center">
-        <h1 className="font-display text-[34px] leading-tight tracking-[-0.02em] text-foreground">
-          {greeting()}
-        </h1>
-
-        <div className="my-10">
-          <BreathingOrb size={200} ariaLabel="HoofdRust" />
+        <div className="my-6">
+          <VoiceOrb onCompleted={() => void loadSuggestions()} />
         </div>
 
         <div className="min-h-[3.5rem] px-2">
