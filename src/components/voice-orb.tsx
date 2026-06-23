@@ -69,6 +69,11 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [revive, setRevive] = useState<Confirming>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDateTime, setEditDateTime] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
