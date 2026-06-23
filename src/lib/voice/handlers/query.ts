@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ActionResult, QueryItem } from "../types";
+import type { UserPersona } from "../persona";
 
 type Ctx = { supabase: SupabaseClient; userId: string };
 
