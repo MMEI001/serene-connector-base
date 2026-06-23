@@ -33,6 +33,10 @@ export async function commitReminder(
   const iso = typeof payload.iso_datetime === "string" ? payload.iso_datetime : "";
   const description =
     typeof payload.description === "string" ? payload.description : null;
+  const relatedAppointmentId =
+    typeof payload.related_appointment_id === "string"
+      ? payload.related_appointment_id
+      : null;
   if (!title || !iso) {
     return {
       intent: "reminder",
@@ -42,16 +46,19 @@ export async function commitReminder(
     };
   }
 
+  const insertRow: Record<string, unknown> = {
+    user_id: ctx.userId,
+    title,
+    description,
+    remind_at: iso,
+    status: "active",
+    source: "confirmed_from_ai",
+  };
+  if (relatedAppointmentId) insertRow.related_appointment_id = relatedAppointmentId;
+
   const { data, error } = await ctx.supabase
     .from("reminders")
-    .insert({
-      user_id: ctx.userId,
-      title,
-      description,
-      remind_at: iso,
-      status: "active",
-      source: "confirmed_from_ai",
-    })
+    .insert(insertRow as never)
     .select("id")
     .single();
 
