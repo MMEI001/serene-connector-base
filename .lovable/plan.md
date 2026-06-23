@@ -1,78 +1,61 @@
-## Doel
+## Root cause
 
-Instrumenteer de volledige TTS-flow in `src/lib/speak.ts` en zorg dat de gebruiker vrijwel altijd audio hoort, met automatische retry + browser-TTS fallback bij stilte.
+`loadPrefs()` in `src/lib/speak.ts` cached **`false`** voor de hele sessie en gebruikt dat daarna onvoorwaardelijk.
 
-## Diagnose
+Twee paden waarlangs een onterechte `false` in de cache komt:
 
-Console toont herhaaldelijk:
-- `NotAllowedError` ("user agent or platform … denied permission") na een succesvolle 200 van de edge function
-- `AbortError` na een nieuwe TTS-call die de vorige onderbreekt
+1. **`supabase.auth.getUser()` faalt met 403** (precies wat je in het netwerk ziet op `/auth/v1/user`). `getUser()` doet een netwerkcall en valideert het token server-side; bij een tijdelijke 403 / refresh-race retourneert dit `user = null`. De huidige code doet dan:
+   ```ts
+   if (!user) return { enabled: false, ... }
+   ```
+   Daarna wordt deze waarde **niet** gecached (terecht), maar bij de andere tak (`maybeSingle()` geeft `data = null` door bv. een latente RLS-race of een lege response):
+   ```ts
+   const enabled = Boolean(row?.voice_enabled);
+   cachedEnabled = enabled;  // ← false wordt voor de hele sessie vastgezet
+   ```
+   Vanaf dat moment retourneert `loadPrefs()` altijd `false`, ook als de DB intussen `true` zegt en het profiel correct laadt.
 
-Hoofdoorzaak: `audio.play()` wordt aangeroepen ná meerdere `await`s (`loadPrefs` → `getSession` → `fetch` → `res.blob()`), dus de browser ziet geen user-gesture meer en blokkeert autoplay. Tweede oorzaak: de vorige `currentAudio` wordt gepauzeerd zonder de bijbehorende `play()`-promise op te vangen → `AbortError`.
+2. **`speakText` draait vóór de profielroute** (jij zit nu op `/laat-los`, niet `/profiel`). Alleen `profiel.tsx` roept `setVoicePreferenceCache(true)` aan na het ophalen van het profiel. Op andere routes vult de eerste `loadPrefs()`-call de cache met wat de eerste poging ook teruggeeft — als die poging samenvalt met de 403, blijft `false` plakken.
 
-## Wijzigingen — alleen `src/lib/speak.ts`
+DB-check bevestigd: er is **1** rij voor jouw `user_id` met `voice_enabled = true`. Geen duplicaten, geen RLS-probleem op de tabel zelf. Het probleem zit volledig in de client-side prefs-loader.
 
-### 1. Instrumentatie
+## Plan
 
-Nieuwe helper `logTts(event, details?)` die `console.log` doet met vast prefix `[TTS]` en `event`-naam, plus stabiele velden (`intent?`, `provider`, `voice_id`, `voice_enabled`, timings).
+Alleen `src/lib/speak.ts` aanpassen — kleine, gerichte wijziging, geen nieuwe bestanden.
 
-`speakText` krijgt optionele `intent`-param:
-```ts
-speakText(text, opts?: { force?, voiceId?, intent? })
-```
+### 1. Vervang `getUser()` door `getSession()` in `loadPrefs`
+`getSession()` is lokaal (geen netwerk, geen 403). De `user_profiles`-query gebruikt al RLS via de session; we hebben geen server-side user-revalidatie nodig voor het ophalen van een UI-voorkeur.
 
-Te loggen events (in volgorde):
-- `speakText_called` — `{ intent, length, force }`
-- `prefs_loaded` — `{ voice_enabled, voice_provider, voice_id }`
-- `skipped_disabled` — wanneer voice uit staat
-- `cooldown_active` — als ElevenLabs-cooldown actief is
-- `tts_request_started` — `{ intent, voice_provider, voice_id, t0 }`
-- `tts_request_completed` — `{ intent, status, ok, contentType, duration_ms }`
-- `tts_request_failed` — `{ intent, status, error }`
-- `audio_play_started` — `{ intent, ttfa_ms }` *(ttfa = time-to-first-audio = play-start − speakText-called)*
-- `audio_play_success` — `{ intent, ttfa_ms }` *(emit op `playing` event)*
-- `audio_play_ended` — `{ intent, duration_ms }`
-- `audio_play_failed` — `{ intent, reason, error }`
-- `retry_attempt` — `{ intent, attempt }`
-- `fallback_browser` — `{ intent, reason }`
+### 2. Cache alleen bij een echt geslaagde load
+- Geen session → return default (`enabled:false`), **niet cachen**.
+- Query error → log + return default, **niet cachen**.
+- `data === null` (geen rij gevonden) → log + return default, **niet cachen** (laat een latere call het opnieuw proberen zodra het profiel er is).
+- Alleen bij een succesvolle response met een rij: `cachedEnabled = row.voice_enabled` opslaan.
 
-Bestaande losse `console.log("[TTS] …")` regels vervangen door deze events (semantisch hetzelfde, gestructureerder).
+### 3. Uitgebreide logging in `prefs_loaded`
+Voeg toe aan het bestaande `prefs_loaded` event én een nieuw `prefs_load_failed` event:
+- `user_id`
+- `profile_id` (de `id` kolom van `user_profiles`)
+- `voice_enabled_db` (ruwe waarde uit DB, kan `null` zijn)
+- `voice_enabled_effective` (wat `speak.ts` daadwerkelijk gebruikt)
+- `source`: `"cache" | "db" | "default_no_session" | "default_no_row" | "default_query_error"`
+- bij error: `error_message`, `error_code`
 
-### 2. Retry + fallback
+Selecteer dus ook `id` in de query.
 
-Wrap audio-playback in `playWithRetry(blob, intent, t0)`:
+### 4. Auth-state listener die de cache leeggooit
+Eenmalig bij module-load een `supabase.auth.onAuthStateChange` registreren die `resetVoicePreferenceCache()` aanroept bij `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED` en `USER_UPDATED`. Voorkomt dat een stale `false` blijft hangen na een token-refresh die de 403 oploste.
 
-1. Maak `Audio` aan, attach listeners (`playing`, `ended`, `error`).
-2. Roep `audio.play()` aan. Start een 2000 ms timeout.
-3. Als `playing`-event vóór de timeout vuurt → log `audio_play_started` + clear timeout. Klaar.
-4. Als `play()`-promise rejected **of** timeout vuurt zonder `playing`:
-   - Eerste keer → `retry_attempt {attempt:1}`, maak nieuw `Audio`-object van dezelfde blob-URL, probeer opnieuw met dezelfde 2 s window.
-   - Tweede mislukking → `fallback_browser {reason:"playback_timeout"|"not_allowed"|err.name}` en roep `browserSpeak(text, intent)` aan.
+### 5. `skipped_disabled`-log uitbreiden
+Zodat we direct zien waarom geskipt werd: `{ intent, voice_enabled, source }`.
 
-`browserSpeak` krijgt ook instrumentatie: `fallback_browser` + listen op `onstart`/`onend` voor `audio_play_started`/`audio_play_ended` met `provider:"browser"`.
+### Niet in scope
+- Edge function, retry/fallback in `playWithRetry`, andere providers — die werken al.
+- Profielroute (`profiel.tsx`) — die zet de cache al correct na load, blijft ongewijzigd.
+- DB / RLS-wijzigingen — niet nodig, data is correct.
 
-### 3. AbortError voorkomen
-
-Voor we de nieuwe audio starten:
-- Als `currentAudio` bestaat: `currentAudio.onerror = null; currentAudio.pause(); URL.revokeObjectURL(currentAudio.src)`, en negeer de eventueel afgewezen vorige `play()`-promise (we vangen 'm al via een `.catch(() => {})` op het moment van play-aanroep).
-
-### 4. Call-sites (voice-orb)
-
-`speakText(...)` wordt op 3 plekken aangeroepen vanuit `voice-orb.tsx` (needs_confirmation, completed, query_intro). Voeg `intent` mee:
-- needs_confirmation → `{ intent: "confirm" }` (of `"assistant_chat_confirm"` als `assistant_reply` aanwezig)
-- completed → `{ intent: result.intent }` (bv. `"assistant_chat"`, `"query"`, `"reminder"`)
-
-Geen verdere gedrags­veranderingen in voice-orb.
-
-### 5. Niet in scope
-
-- Edge function (`text-to-speech`) gedrag/wijzigingen
-- Andere providers dan ElevenLabs / browser-fallback
-- Wijzigingen aan de orb-state machine of UI
-- Caching van audio-blobs (kan later)
-
-## Verificatie
-
-1. Spreek een testzin in. Verwacht in console (volgorde): `speakText_called` → `prefs_loaded` → `tts_request_started` → `tts_request_completed` (status 200) → `audio_play_started` → `audio_play_success` met `ttfa_ms`.
-2. Forceer NotAllowed door autoplay-policy te triggeren: verwacht na timeout `retry_attempt {attempt:1}` → bij blijvende mislukking `fallback_browser` + hoorbare Nederlandse browser-TTS.
-3. Snel twee voice-acties achter elkaar: geen unhandled `AbortError` meer; tweede afspeelactie start zonder error.
+### Verificatie
+1. Hard refresh op `/laat-los`, voice-action triggeren → console moet tonen:
+   `prefs_loaded { source:"db", voice_enabled_db:true, voice_enabled_effective:true, user_id, profile_id }` en daarna `tts_request_started`.
+2. Console-trick: `await (await import('/src/lib/speak.ts')).resetVoicePreferenceCache()` simuleren door manueel auth-event te triggeren → volgende call laadt opnieuw uit DB.
+3. Forceer de 403-situatie door even offline te gaan tijdens de eerste call → log moet `prefs_load_failed` tonen en bij de volgende poging opnieuw proberen (niet permanent `false` cachen).

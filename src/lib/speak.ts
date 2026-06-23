@@ -55,25 +55,100 @@ export function setVoiceIdCache(voiceId: string) {
   cachedVoiceId = voiceId;
 }
 
-async function loadPrefs(): Promise<{ enabled: boolean; voiceId: string; provider: string }> {
+let authListenerAttached = false;
+function ensureAuthListener() {
+  if (authListenerAttached) return;
+  if (typeof window === "undefined") return;
+  try {
+    supabase.auth.onAuthStateChange((event) => {
+      if (
+        event === "SIGNED_IN" ||
+        event === "SIGNED_OUT" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
+        logTts("auth_event_reset_cache", { event });
+        resetVoicePreferenceCache();
+      }
+    });
+    authListenerAttached = true;
+  } catch {
+    // ignore
+  }
+}
+
+async function loadPrefs(
+  intent?: string,
+): Promise<{ enabled: boolean; voiceId: string; provider: string }> {
+  ensureAuthListener();
   if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
+    logTts("prefs_loaded", {
+      intent,
+      source: "cache",
+      voice_enabled_effective: cachedEnabled,
+      voice_provider: cachedProvider,
+      voice_id: cachedVoiceId,
+    });
     return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
   }
-  const { data: userData } = await supabase.auth.getUser();
-  const user = userData.user;
-  if (!user) return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
-  const { data } = await supabase
+  // getSession() is lokaal en doet geen netwerkcall — geen 403-risico.
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user) {
+    logTts("prefs_load_failed", {
+      intent,
+      source: "default_no_session",
+      voice_enabled_effective: false,
+    });
+    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+  }
+  const { data, error } = await supabase
     .from("user_profiles")
-    .select("voice_enabled, voice_provider, voice_id" as "*")
+    .select("id, voice_enabled, voice_provider, voice_id" as "*")
     .eq("user_id", user.id)
     .maybeSingle();
-  const row = data as { voice_enabled?: boolean; voice_provider?: string; voice_id?: string } | null;
-  const enabled = Boolean(row?.voice_enabled);
-  const provider = row?.voice_provider || "elevenlabs";
-  const voiceId = row?.voice_id || DEFAULT_VOICE_ID;
+  if (error) {
+    logTts("prefs_load_failed", {
+      intent,
+      source: "default_query_error",
+      user_id: user.id,
+      voice_enabled_effective: false,
+      error_message: error.message,
+      error_code: error.code,
+    });
+    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+  }
+  const row = data as {
+    id?: string;
+    voice_enabled?: boolean | null;
+    voice_provider?: string | null;
+    voice_id?: string | null;
+  } | null;
+  if (!row) {
+    logTts("prefs_load_failed", {
+      intent,
+      source: "default_no_row",
+      user_id: user.id,
+      voice_enabled_effective: false,
+    });
+    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+  }
+  const enabled = Boolean(row.voice_enabled);
+  const provider = row.voice_provider || "elevenlabs";
+  const voiceId = row.voice_id || DEFAULT_VOICE_ID;
   cachedEnabled = enabled;
   cachedVoiceId = voiceId;
   cachedProvider = provider;
+  logTts("prefs_loaded", {
+    intent,
+    source: "db",
+    user_id: user.id,
+    profile_id: row.id,
+    voice_enabled_db: row.voice_enabled ?? null,
+    voice_enabled_effective: enabled,
+    voice_provider: provider,
+    voice_id: voiceId,
+  });
   return { enabled, voiceId, provider };
 }
 
@@ -170,17 +245,22 @@ export async function speakText(
     let provider = "elevenlabs";
     let enabled = true;
     if (!opts?.voiceId) {
-      const prefs = await loadPrefs();
+      const prefs = await loadPrefs(intent);
       enabled = prefs.enabled;
       voiceId = prefs.voiceId;
       provider = prefs.provider;
-      logTts("prefs_loaded", { intent, voice_enabled: enabled, voice_provider: provider, voice_id: voiceId });
       if (!opts?.force && !enabled) {
-        logTts("skipped_disabled", { intent });
+        logTts("skipped_disabled", { intent, voice_enabled: enabled, voice_provider: provider });
         return;
       }
     } else {
-      logTts("prefs_loaded", { intent, voice_enabled: true, voice_provider: provider, voice_id: voiceId, source: "override" });
+      logTts("prefs_loaded", {
+        intent,
+        source: "override",
+        voice_enabled_effective: true,
+        voice_provider: provider,
+        voice_id: voiceId,
+      });
     }
 
     const SUPABASE_URL =
