@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
-import { BreathingOrb } from "@/components/breathing-orb";
+import { VoiceOrb } from "@/components/voice-orb";
 import { TypewriterGreeting } from "@/components/typewriter-greeting";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
