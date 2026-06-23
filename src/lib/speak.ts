@@ -4,6 +4,7 @@ export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
+let cachedProvider: string | null = null;
 let currentAudio: HTMLAudioElement | null = null;
 let ttsUnavailableUntil = 0; // epoch ms; skip ElevenLabs until then
 
@@ -24,6 +25,7 @@ function browserSpeak(text: string) {
 export function resetVoicePreferenceCache() {
   cachedEnabled = null;
   cachedVoiceId = null;
+  cachedProvider = null;
 }
 
 export function setVoicePreferenceCache(enabled: boolean) {
@@ -35,8 +37,8 @@ export function setVoiceIdCache(voiceId: string) {
 }
 
 async function loadPrefs(): Promise<{ enabled: boolean; voiceId: string; provider: string }> {
-  if (cachedEnabled !== null && cachedVoiceId !== null) {
-    return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: "elevenlabs" };
+  if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
+    return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
   }
   const { data: userData } = await supabase.auth.getUser();
   const user = userData.user;
@@ -55,6 +57,7 @@ async function loadPrefs(): Promise<{ enabled: boolean; voiceId: string; provide
   console.log("[TTS] voice_id", voiceId);
   cachedEnabled = enabled;
   cachedVoiceId = voiceId;
+  cachedProvider = provider;
   return { enabled, voiceId, provider };
 }
 
