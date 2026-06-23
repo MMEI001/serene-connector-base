@@ -147,7 +147,9 @@ export function VoiceOrb({ onCompleted }: Props) {
           intent: result.intent,
           preview: result.preview ?? result.confirmation,
           expires_at: result.expires_at ?? new Date(Date.now() + CONFIRM_TIMEOUT_MS).toISOString(),
+          editable: result.editable,
         });
+        setIsEditing(false);
         setRevive(null);
         dispatch({ type: "NEEDS_CONFIRMATION" });
         // 30s "snoozen" — daarna blijft 'm 5 min revive-baar via getPending
