@@ -3,6 +3,48 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { commitVoiceBundle } from "@/lib/voice/dispatch-voice-action";
 import type { ActionResult, VoiceAction } from "@/lib/voice/types";
 
+type Overrides = {
+  title?: string;
+  iso_datetime?: string;
+  date?: string;
+  start_time?: string;
+};
+
+const validateConfirm = (data: { action_id: string; overrides?: Overrides }) => {
+  if (!data || typeof data.action_id !== "string" || !data.action_id) {
+    throw new Error("action_id required");
+  }
+  const out: { action_id: string; overrides?: Overrides } = { action_id: data.action_id };
+  const o = data.overrides;
+  if (o && typeof o === "object") {
+    const ov: Overrides = {};
+    if (typeof o.title === "string") {
+      const t = o.title.trim();
+      if (t.length < 1 || t.length > 200) throw new Error("titel ongeldig");
+      ov.title = t;
+    }
+    if (typeof o.iso_datetime === "string") {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(o.iso_datetime)) {
+        throw new Error("iso_datetime ongeldig");
+      }
+      const t = new Date(o.iso_datetime).getTime();
+      if (Number.isNaN(t)) throw new Error("iso_datetime onleesbaar");
+      if (t < Date.now() - 60_000) throw new Error("tijd ligt in het verleden");
+      ov.iso_datetime = o.iso_datetime;
+    }
+    if (typeof o.date === "string") {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date)) throw new Error("date ongeldig");
+      ov.date = o.date;
+    }
+    if (typeof o.start_time === "string") {
+      if (!/^\d{2}:\d{2}$/.test(o.start_time)) throw new Error("start_time ongeldig");
+      ov.start_time = o.start_time;
+    }
+    if (Object.keys(ov).length > 0) out.overrides = ov;
+  }
+  return out;
+};
+
 const validateId = (data: { action_id: string }) => {
   if (!data || typeof data.action_id !== "string" || !data.action_id) {
     throw new Error("action_id required");
@@ -12,7 +54,7 @@ const validateId = (data: { action_id: string }) => {
 
 export const confirmVoiceAction = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator(validateId)
+  .inputValidator(validateConfirm)
   .handler(async ({ data, context }): Promise<ActionResult> => {
     const { supabase, userId } = context;
 
@@ -41,7 +83,7 @@ export const confirmVoiceAction = createServerFn({ method: "POST" })
     }
 
     const payload = (row.payload as Record<string, unknown>) ?? {};
-    const actions: VoiceAction[] = Array.isArray(
+    let actions: VoiceAction[] = Array.isArray(
       (payload as { actions?: unknown }).actions,
     )
       ? ((payload as { actions: VoiceAction[] }).actions)
@@ -52,6 +94,16 @@ export const confirmVoiceAction = createServerFn({ method: "POST" })
             confidence: 1,
           },
         ];
+
+    // Apply overrides to the first confirmable action.
+    if (data.overrides && actions.length > 0) {
+      const idx = actions.findIndex((a) => a.intent === "reminder" || a.intent === "event");
+      if (idx >= 0) {
+        actions = actions.map((a, i) =>
+          i === idx ? { ...a, payload: { ...a.payload, ...data.overrides } } : a,
+        );
+      }
+    }
 
     const result = await commitVoiceBundle({ supabase, userId }, actions);
 
@@ -64,6 +116,7 @@ export const confirmVoiceAction = createServerFn({ method: "POST" })
         error: result.error ?? null,
         confirmation_text: result.confirmation,
         expires_at: null,
+        payload: { actions } as never,
       })
       .eq("id", row.id);
 

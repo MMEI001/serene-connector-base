@@ -101,6 +101,38 @@ function deriveTitleFromReply(reply: string): string {
   return words || "Herinnering";
 }
 
+const ACTION_VERBS = [
+  "kopen", "halen", "bellen", "sturen", "regelen", "brengen", "maken",
+  "boeken", "reserveren", "plannen", "afspreken", "bestellen", "ophalen",
+  "schrijven", "mailen", "appen", "betalen", "inpakken", "bezoeken",
+];
+
+/** Leid een korte actie-titel af uit het transcript van de gebruiker. */
+function deriveTitleFromTranscript(transcript: string): string {
+  const text = transcript.toLowerCase().replace(/[?!.,;:]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return "Herinnering";
+  const tokens = text.split(" ");
+  // Zoek "<woord(en)> <werkwoord>" patroon (max 3 woorden vóór werkwoord).
+  for (let i = 0; i < tokens.length; i++) {
+    if (ACTION_VERBS.includes(tokens[i])) {
+      const start = Math.max(0, i - 2);
+      const phrase = tokens.slice(start, i + 1).join(" ");
+      return capitalize(phrase);
+    }
+  }
+  // Geen werkwoord-match → fallback op kernwoord (eerste zelfstandig nw na "een"/"de"/"het" of "mijn").
+  const articleIdx = tokens.findIndex((t) => ["een", "de", "het", "mijn", "m'n"].includes(t));
+  if (articleIdx >= 0 && tokens[articleIdx + 1]) {
+    return capitalize(tokens.slice(articleIdx + 1, articleIdx + 3).join(" "));
+  }
+  return "Herinnering";
+}
+
+function capitalize(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 const MIN_WORDS = 2;
 const PENDING_TTL_MS = 5 * 60 * 1000;
 
@@ -153,13 +185,13 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
                 : {};
 
               // Vul slimme defaults in zodat preview niet faalt op ontbrekende velden.
-              const replyForTitle = assistantReply ?? "Herinnering";
+              const titleFromTranscript = deriveTitleFromTranscript(text);
               if (intent === "reminder") {
                 const iso = typeof payload.iso_datetime === "string" ? payload.iso_datetime : "";
                 const validIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso);
                 if (!validIso) payload.iso_datetime = deriveDefaultIso(text);
                 const title = typeof payload.title === "string" ? payload.title.trim() : "";
-                if (!title) payload.title = deriveTitleFromReply(replyForTitle);
+                if (!title) payload.title = titleFromTranscript;
               } else if (intent === "event") {
                 const date = typeof payload.date === "string" ? payload.date : "";
                 const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
@@ -169,18 +201,28 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
                 }
                 if (!payload.start_time) payload.start_time = "09:00";
                 const title = typeof payload.title === "string" ? payload.title.trim() : "";
-                if (!title) payload.title = deriveTitleFromReply(replyForTitle);
+                if (!title) payload.title = titleFromTranscript;
               } else if (intent === "note") {
                 const t = typeof payload.text === "string" ? payload.text.trim() : "";
-                if (!t) payload.text = replyForTitle;
+                if (!t) payload.text = assistantReply ?? titleFromTranscript;
               }
 
               return { intent, payload, confidence: 0.7 };
             })
             .filter((x): x is VoiceAction => !!x)
         : [];
-      if (suggested.length > 0) {
-        actions = suggested;
+      // Dedupe op intent + tijd + titel; cap op max 2.
+      const seen = new Set<string>();
+      const deduped: VoiceAction[] = [];
+      for (const a of suggested) {
+        const key = `${a.intent}|${String(a.payload.iso_datetime ?? a.payload.date ?? "")}|${String(a.payload.title ?? a.payload.text ?? "").toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(a);
+        if (deduped.length >= 2) break;
+      }
+      if (deduped.length > 0) {
+        actions = deduped;
       } else {
         actions = [primary];
       }
@@ -256,7 +298,26 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           error: error?.message ?? "pending insert failed",
         };
       }
-      return { ...result, action_id: row.id as string, expires_at: expiresAt };
+      // Bewerkbare velden: alleen bij precies één confirmable actie.
+      let editable: PipelineResult["editable"] | undefined;
+      if (actions.length === 1) {
+        const a = actions[0];
+        if (a.intent === "reminder") {
+          editable = {
+            intent: "reminder",
+            title: String(a.payload.title ?? ""),
+            iso_datetime: typeof a.payload.iso_datetime === "string" ? a.payload.iso_datetime : undefined,
+          };
+        } else if (a.intent === "event") {
+          editable = {
+            intent: "event",
+            title: String(a.payload.title ?? ""),
+            date: typeof a.payload.date === "string" ? a.payload.date : undefined,
+            start_time: typeof a.payload.start_time === "string" ? a.payload.start_time : undefined,
+          };
+        }
+      }
+      return { ...result, action_id: row.id as string, expires_at: expiresAt, editable };
     }
 
     // 4b. completed/failed → audit-log

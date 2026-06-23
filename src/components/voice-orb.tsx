@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RotateCcw, Check, X } from "lucide-react";
+import { RotateCcw, Check, X, Pencil } from "lucide-react";
 import { BreathingOrb } from "@/components/breathing-orb";
 import { QueryResultCard } from "@/components/voice-query-result";
 import { orbReducer, type OrbState } from "@/lib/voice/orb-state";
@@ -39,11 +39,19 @@ function blobExt(mimeType: string) {
 
 type Props = { onCompleted?: () => void };
 type Pending = { id: string; blob: Blob; mimeType: string } | null;
+type Editable = {
+  intent: "reminder" | "event";
+  title: string;
+  iso_datetime?: string;
+  date?: string;
+  start_time?: string;
+};
 type Confirming = {
   action_id: string;
   intent: string;
   preview: string;
   expires_at: string;
+  editable?: Editable;
 } | null;
 
 export function VoiceOrb({ onCompleted }: Props) {
@@ -61,6 +69,11 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [revive, setRevive] = useState<Confirming>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDateTime, setEditDateTime] = useState("");
+  const [editDate, setEditDate] = useState("");
+  const [editTime, setEditTime] = useState("");
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -134,7 +147,9 @@ export function VoiceOrb({ onCompleted }: Props) {
           intent: result.intent,
           preview: result.preview ?? result.confirmation,
           expires_at: result.expires_at ?? new Date(Date.now() + CONFIRM_TIMEOUT_MS).toISOString(),
+          editable: result.editable,
         });
+        setIsEditing(false);
         setRevive(null);
         dispatch({ type: "NEEDS_CONFIRMATION" });
         // 30s "snoozen" — daarna blijft 'm 5 min revive-baar via getPending
@@ -306,14 +321,18 @@ export function VoiceOrb({ onCompleted }: Props) {
   }, []);
 
   const handleConfirm = useCallback(
-    async (actionId: string) => {
+    async (
+      actionId: string,
+      overrides?: { title?: string; iso_datetime?: string; date?: string; start_time?: string },
+    ) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setRevive(null);
+      setIsEditing(false);
       dispatch({ type: "CONFIRM" });
       setConfirmation("Even verwerken…");
       try {
-        const result = await confirmFn({ data: { action_id: actionId } });
+        const result = await confirmFn({ data: { action_id: actionId, overrides } });
         handleResult(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Er ging iets mis.";
@@ -330,12 +349,72 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setRevive(null);
+      setIsEditing(false);
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
     },
     [cancelFn],
   );
+
+  const openEditor = useCallback(() => {
+    if (!confirming?.editable) return;
+    const e = confirming.editable;
+    setEditTitle(e.title ?? "");
+    if (e.intent === "reminder" && e.iso_datetime) {
+      // ISO met tz-offset → local "YYYY-MM-DDTHH:mm" voor datetime-local input.
+      const d = new Date(e.iso_datetime);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setEditDateTime(
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      );
+    } else {
+      setEditDateTime("");
+    }
+    setEditDate(e.date ?? "");
+    setEditTime(e.start_time ?? "");
+    setIsEditing(true);
+  }, [confirming]);
+
+  const saveEdit = useCallback(() => {
+    if (!confirming?.editable) return;
+    const title = editTitle.trim();
+    if (!title) {
+      toast.error("Geef een korte titel.");
+      return;
+    }
+    const overrides: { title?: string; iso_datetime?: string; date?: string; start_time?: string } = { title };
+    if (confirming.editable.intent === "reminder") {
+      if (!editDateTime) {
+        toast.error("Kies een datum en tijd.");
+        return;
+      }
+      // datetime-local is lokale tijd; converteer naar ISO met Europe/Amsterdam offset.
+      const [datePart, timePart] = editDateTime.split("T");
+      const [y, m, d] = datePart.split("-").map(Number);
+      const [hh, mm] = timePart.split(":").map(Number);
+      const utc = Date.UTC(y, m - 1, d, hh, mm);
+      const dt = new Date(utc);
+      const tzName = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Amsterdam",
+        timeZoneName: "shortOffset",
+      }).formatToParts(dt).find((p) => p.type === "timeZoneName")?.value ?? "GMT+1";
+      const off = tzName.match(/GMT([+-]\d+)/);
+      const oh = off ? parseInt(off[1], 10) : 1;
+      const sign = oh >= 0 ? "+" : "-";
+      const pad = (n: number) => String(n).padStart(2, "0");
+      overrides.iso_datetime = `${y}-${pad(m)}-${pad(d)}T${pad(hh)}:${pad(mm)}:00${sign}${pad(Math.abs(oh))}:00`;
+    } else {
+      if (!editDate || !editTime) {
+        toast.error("Kies een datum en tijd.");
+        return;
+      }
+      overrides.date = editDate;
+      overrides.start_time = editTime;
+    }
+    void handleConfirm(confirming.action_id, overrides);
+  }, [confirming, editTitle, editDateTime, editDate, editTime, handleConfirm]);
+
 
   const handleTap = useCallback(() => {
     if (state === "confirming") return; // alleen via knoppen
@@ -377,29 +456,103 @@ export function VoiceOrb({ onCompleted }: Props) {
         {hint}
       </p>
 
-      {state === "confirming" && confirming && (
+      {state === "confirming" && confirming && !isEditing && (
         <div className="mt-4 flex flex-col items-center gap-3">
           {confirming.preview.includes("\n") && (
             <div className="max-w-xs rounded-2xl bg-white/60 px-4 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] whitespace-pre-line text-left">
               {confirming.preview}
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
             <button
               type="button"
               onClick={() => handleCancel(confirming.action_id)}
-              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-5 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
             >
               <X className="h-4 w-4" />
               Annuleer
             </button>
+            {confirming.editable && (
+              <button
+                type="button"
+                onClick={openEditor}
+                className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+              >
+                <Pencil className="h-4 w-4" />
+                Bewerken
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleConfirm(confirming.action_id)}
-              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
             >
               <Check className="h-4 w-4" />
               Bevestig
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === "confirming" && confirming && isEditing && confirming.editable && (
+        <div className="mt-4 flex flex-col items-stretch gap-3 w-full max-w-xs">
+          <label className="flex flex-col gap-1 text-left">
+            <span className="text-xs text-muted-foreground">Titel</span>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+              autoFocus
+            />
+          </label>
+          {confirming.editable.intent === "reminder" ? (
+            <label className="flex flex-col gap-1 text-left">
+              <span className="text-xs text-muted-foreground">Datum en tijd</span>
+              <input
+                type="datetime-local"
+                value={editDateTime}
+                onChange={(e) => setEditDateTime(e.target.value)}
+                className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+              />
+            </label>
+          ) : (
+            <div className="flex gap-2">
+              <label className="flex flex-col gap-1 text-left flex-1">
+                <span className="text-xs text-muted-foreground">Datum</span>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-left flex-1">
+                <span className="text-xs text-muted-foreground">Tijd</span>
+                <input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </label>
+            </div>
+          )}
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 transition-transform duration-200 active:scale-95"
+            >
+              Terug
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+            >
+              <Check className="h-4 w-4" />
+              Opslaan & bevestig
             </button>
           </div>
         </div>

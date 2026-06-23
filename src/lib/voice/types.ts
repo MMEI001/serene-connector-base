@@ -74,6 +74,15 @@ export type ActionResult = {
   // ---- assistant_chat extras ----
   /** Korte, adviserende reactie van de assistent (voor TTS + UI). */
   assistant_reply?: string;
+
+  // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
+  editable?: {
+    intent: "reminder" | "event";
+    title: string;
+    iso_datetime?: string;
+    date?: string;
+    start_time?: string;
+  };
 };
 
 export type PipelineResult = ActionResult;

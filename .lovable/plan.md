@@ -1,43 +1,64 @@
-# Bevindingen Assistant Mode
+# Assistant Mode: dedupe preview + Bewerken/Annuleer/Bevestig
 
-## Laatste 5 `voice_actions` rijen (jouw user_id)
+Twee verbeteringen op de assistant_chat-flow.
 
-Alle 5 zijn vóór 11:41 UTC opgeslagen — identiek patroon:
+## 1. Duplicate preview-regels
 
-| created_at (UTC) | intent | status | error | confirmation_text | payload |
-|---|---|---|---|---|---|
-| 11:35:12 | assistant_chat | failed | missing_fields | "Ik miste de tijd of het onderwerp." | `{actions:[{intent:reminder, confidence:0.7, payload:{}}, …]}` |
-| 11:34:47 | assistant_chat | failed | missing_fields | idem | idem (3 lege reminders) |
-| 11:32:12 | assistant_chat | failed | missing_fields | idem | idem (3 lege reminders) |
-| 11:31:52 | assistant_chat | failed | missing_fields | idem | `{actions:[{intent:reminder, confidence:0.7, payload:{}}]}` |
-| 11:31:38 | assistant_chat | failed | missing_fields | idem | idem (1 lege reminder) |
+**Oorzaak:** GPT geeft vaak 2-3 identieke `suggested_actions` terug. Onze server-side defaults vullen ze allemaal met dezelfde `iso_datetime` en dezelfde titel (afgeleid uit de hele `assistant_reply`), dus de preview krijgt 3× dezelfde regel.
 
-Daarvoor: gewone reminder/query rijen, alle `completed`.
+**Fix in `src/lib/voice-pipeline.functions.ts`:**
+- Nieuwe `deriveTitleFromTranscript(transcript)`: zoekt korte actie-frase met patroon `<zelfstandig nw> + (kopen|halen|bellen|sturen|regelen|brengen|maken|boeken|reserveren|plannen)`. Geen match → eerste werkwoord + object, max 4 woorden. Geen match → "Herinnering".
+- Bij suggested_action defaults: titel afleiden uit het **transcript** (de vraag van de gebruiker), **niet** uit `assistant_reply`. Voorbeeld: *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"* → titel `Bloemen kopen`, niet `Bloemen zijn een uitstekend idee voor`.
+- Dedupe na normalisatie: `Map` op key `intent|iso_datetime|title.toLowerCase()`, neem eerste. Cap op max 2 acties.
 
-## De preview heeft de fix nog niet getest
+## 2. Bewerken-knop
 
-- `src/lib/voice-pipeline.functions.ts` en `src/lib/voice/process-voice-input.ts` zijn voor het laatst gewijzigd om **11:41:00 / 11:41:17 UTC**.
-- Jouw laatste test was **11:35:12 UTC** — dus **6 minuten vóór** de fix in de sandbox stond.
-- Sinds 11:41 zijn er **0 nieuwe `voice_actions` rijen**. De fix is dus nog niet getest.
+**Doel:** bij een voorstel: `Annuleer | Bewerken | Bevestig`. Bewerken opent een klein formulier waar titel + datum/tijd aangepast kunnen worden, daarna pas opslaan.
 
-De fix is wel aanwezig in de source (geverifieerd):
-- `amsterdamIso` + `deriveDefaultIso` aanwezig in `voice-pipeline.functions.ts` (regels 16, 52, 88)
-- `assistant_chat` failsafe + reply-meesturen aanwezig (regels 140–187, 213–230)
-- Lege `payload.iso_datetime` wordt automatisch ingevuld via `deriveDefaultIso(text)` (regel 160)
-- Lege `title` wordt afgeleid uit `assistantReply` (regel 162)
+### Server (`src/lib/voice-confirm.functions.ts`)
+Breid `confirmVoiceAction` uit met optionele `overrides`:
+```ts
+{ action_id: string; overrides?: { title?: string; iso_datetime?: string; date?: string; start_time?: string } }
+```
+Indien aanwezig: merge in de payload van de **eerste** confirmable action vóór `commitVoiceBundle`. Validatie:
+- `title`: trim, min 1 char, max 200.
+- `iso_datetime`: regex `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/`. Niet in verleden (> nu − 1 min).
+- `date`: `/^\d{4}-\d{2}-\d{2}$/`. `start_time`: `/^\d{2}:\d{2}$/`.
+Ongeldig → return `failed` met heldere melding (geen exception).
 
-De `Unable to post message to https://lovable.dev` console-melding is niet gerelateerd — dat is een onschuldige cross-origin postMessage uit de Lovable preview-wrapper.
+### Pipeline result uitbreiden
+- `PipelineResult.editable?: { intent: "reminder" | "event"; title: string; iso_datetime?: string; date?: string; start_time?: string }` (alleen gevuld voor needs_confirmation met precies één confirmable action — de assistant_chat-case na dedupe).
+- Pipeline vult deze in `voice-pipeline.functions.ts` voor het needs_confirmation-pad.
 
-## Plan
+### Types (`src/lib/voice/types.ts`)
+- `editable?` veld toevoegen aan `ActionResult` (optional, geen breaking change).
 
-1. **Hard refresh in de preview** (Cmd+Shift+R / Ctrl+Shift+R) zodat HMR de nieuwe `voice-pipeline.functions.ts` zeker laadt.
-2. **Hertest** met exact dezelfde zin: *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"*
-3. **Ik haal direct daarna** de nieuwste `voice_actions` rij op en plak intent / status / error / confirmation_text / payload terug — dan zien we of de defaults effectief zijn ingevuld.
-4. **Als het opnieuw `failed / missing_fields` is** voeg ik in build-mode extra `console.log` toe rond:
-   - `processVoiceInput` return-shape (loggen welke `suggested_actions` GPT teruggeeft)
-   - Het normalisatieblok in `voice-pipeline.functions.ts` (vóór en ná defaults)
-   - `dispatchVoiceBundle` per-action result
-   En kijk ik via `stack_modern--server-function-logs` mee.
-5. **Als GPT überhaupt geen `suggested_actions` teruggeeft** voor advies-zinnen, scherp ik de prompt verder aan zodat assistant_chat zonder suggested_actions ook accepteert wordt (alleen reply → completed, geen bevestigingskaart).
+### UI (`src/components/voice-orb.tsx`)
+- `Confirming` type krijgt optioneel `editable` veld (uit `result.editable`).
+- Knoppenrij in `state === "confirming"`:
+  - **Annuleer** (bestaand, links, secondary).
+  - **Bewerken** (nieuw, midden, secondary, `Pencil` icoon).
+  - **Bevestig** (bestaand, rechts, primary).
+- Bewerken-paneel (nieuwe state `isEditing: boolean`, alleen tonen als `confirming.editable` aanwezig):
+  - `<input type="text">` voor titel (prefill `editable.title`).
+  - Voor `reminder`: `<input type="datetime-local">` (prefill `editable.iso_datetime` → naar local string).
+  - Voor `event`: `<input type="date">` + `<input type="time">`.
+  - Twee knoppen: **Terug** (sluit editor zonder wijzigingen) en **Opslaan & bevestig** (roept `confirmFn` met `overrides`).
+  - Converteer `datetime-local` (lokale tijd in browser, NL-tz aanname) terug naar ISO met Amsterdam-offset via dezelfde helper als pipeline (gewoon `new Date(localStr).toISOString()` werkt niet voor DST-correctheid — gebruik een kleine inline helper die `+02:00`/`+01:00` plakt o.b.v. `Intl`).
+- Geen TTS bij openen van editor (alleen UI-actie).
+- `handleConfirm` accepteert nu een tweede arg `overrides?` en geeft die door.
 
-Geen code-wijzigingen in deze stap — eerst hertest na hard refresh + nieuwe DB-rij ophalen.
+### Geen wijzigingen aan
+- `dispatch-voice-action.ts` (commit-pad blijft identiek).
+- `getPendingVoiceAction` (revive-knop blijft simpele bevestiging — geen editor in revive-pad).
+- Reminder/event handlers (`previewReminder` / `commitReminder` etc.) — geheel hergebruikt.
+- TTS gedrag voor confirm-stap (advies blijft uitgesproken).
+
+## Verificatie
+
+Met test *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"*:
+- Preview toont **één** regel: `vrijdag 09:00 — Bloemen kopen`.
+- Drie knoppen zichtbaar: Annuleer / Bewerken / Bevestig.
+- Klikken op Bewerken: titel-veld bevat `Bloemen kopen`, datum/tijd-veld bevat vrijdag 09:00. Aanpassen + Opslaan slaat de reminder met aangepaste waarden op (controle via `voice_actions` row + nieuwe `reminders` row).
+- Klikken op Annuleer: `voice_actions.status = failed`, error `cancelled`. Geen reminder aangemaakt.
+- Klikken op Bevestig zonder bewerken: zoals nu — reminder met `Bloemen kopen` op vrijdag 09:00.
