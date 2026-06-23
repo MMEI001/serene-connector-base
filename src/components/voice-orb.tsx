@@ -141,7 +141,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         const spokenConfirm = result.assistant_reply?.trim()
           ? `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`
           : "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-        void speakText(spokenConfirm);
+        void speakText(spokenConfirm, { intent: result.assistant_reply ? "assistant_chat_confirm" : "confirm" });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -179,7 +179,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
-      void speakText(spoken);
+      void speakText(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
       onCompleted?.();
