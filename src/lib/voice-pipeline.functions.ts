@@ -149,8 +149,31 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
               const intent = typeof obj.intent === "string" ? (obj.intent as VoiceIntent) : null;
               if (!intent || !CONFIRMABLE_SUGGESTED.has(intent)) return null;
               const payload = obj.payload && typeof obj.payload === "object"
-                ? (obj.payload as Record<string, unknown>)
+                ? { ...(obj.payload as Record<string, unknown>) }
                 : {};
+
+              // Vul slimme defaults in zodat preview niet faalt op ontbrekende velden.
+              if (intent === "reminder") {
+                const iso = typeof payload.iso_datetime === "string" ? payload.iso_datetime : "";
+                const validIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso);
+                if (!validIso) payload.iso_datetime = deriveDefaultIso(text);
+                const title = typeof payload.title === "string" ? payload.title.trim() : "";
+                if (!title) payload.title = deriveTitleFromReply(assistantReply);
+              } else if (intent === "event") {
+                const date = typeof payload.date === "string" ? payload.date : "";
+                const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
+                if (!validDate) {
+                  const d = deriveDefaultDate(text);
+                  payload.date = d.date;
+                }
+                if (!payload.start_time) payload.start_time = "09:00";
+                const title = typeof payload.title === "string" ? payload.title.trim() : "";
+                if (!title) payload.title = deriveTitleFromReply(assistantReply);
+              } else if (intent === "note") {
+                const t = typeof payload.text === "string" ? payload.text.trim() : "";
+                if (!t) payload.text = assistantReply;
+              }
+
               return { intent, payload, confidence: 0.7 };
             })
             .filter((x): x is VoiceAction => !!x)
