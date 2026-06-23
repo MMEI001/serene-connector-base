@@ -7,7 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
-import { BreathingOrb } from "@/components/breathing-orb";
+import { VoiceOrb } from "@/components/voice-orb";
 import { TypewriterGreeting } from "@/components/typewriter-greeting";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,14 +42,6 @@ function todayISO() {
   return `${y}-${m}-${day}`;
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return "Goedenacht";
-  if (h < 12) return "Goedemorgen";
-  if (h < 18) return "Goedemiddag";
-  if (h < 22) return "Goedenavond";
-  return "Goedenacht";
-}
 
 const pills = [
   { label: "Iets loslaten", to: "/laat-los" as const },
@@ -144,12 +136,8 @@ function Dashboard() {
   return (
     <AppShell>
       <section className="flex flex-col items-center pt-2 text-center">
-        <h1 className="font-display text-[34px] leading-tight tracking-[-0.02em] text-foreground">
-          {greeting()}
-        </h1>
-
-        <div className="my-10">
-          <BreathingOrb size={200} ariaLabel="HoofdRust" />
+        <div className="my-6">
+          <VoiceOrb onCompleted={() => void loadSuggestions()} />
         </div>
 
         <div className="min-h-[3.5rem] px-2">
@@ -179,7 +167,7 @@ function Dashboard() {
           <Textarea
             value={aiText}
             onChange={(e) => setAiText(e.target.value)}
-            placeholder="Wat speelt er in je hoofd? Typ het hier."
+            placeholder="Liever typen? Schrijf het hier."
             rows={3}
             disabled={aiBusy}
             className="resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0"
