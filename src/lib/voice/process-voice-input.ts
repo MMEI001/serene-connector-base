@@ -149,9 +149,15 @@ ASSISTANT_CHAT REGELS:
 - reply: kort, rustig, adviserend Nederlands. Max 2 zinnen. Beantwoord eerst de vraag (ja/nee/tip). Geen lijstjes, geen markdown.
 - NOOIT om ontbrekende tijd of onderwerp vragen bij een adviesvraag. Geen ambiguous=true en geen clarification_question voor assistant_chat.
 - suggested_actions: ALLEEN toevoegen als er een logische vervolgactie is. Max ${MAX_ACTIONS}. Vul altijd zelf slimme defaults in — vraag NIETS terug.
-  - Ontbrekende tijd voor een reminder → default 09:00 Europe/Amsterdam op een logische dag (bv. de werkdag vóór een weekend-afspraak, of "vrijdag 09:00" als de gebruiker iets voor zaterdag voorbereidt).
+  - VERPLICHTE velden per intent moeten ALTIJD ingevuld zijn, anders weglaten:
+    * reminder → { title (kort, imperatief), iso_datetime (volledig ISO 8601 met Europe/Amsterdam offset, bv. "2026-06-26T09:00:00+02:00"), description? }
+    * event    → { action:"create", title, date (YYYY-MM-DD), start_time (HH:MM), end_time? }
+    * note     → { text }
+  - iso_datetime NOOIT als natuurlijke taal ("morgenochtend", "vrijdag 09:00") — alleen ISO 8601 met offset.
+  - Ontbrekende tijd voor een reminder → default 09:00 Europe/Amsterdam op een logische dag (bv. de werkdag vóór een weekend-afspraak: "vrijdag 09:00" als de gebruiker iets voor zaterdag voorbereidt).
   - Ontbrekende titel → leid hem af uit de vraag, kort en imperatief ("Bloemen kopen", "Cadeau inpakken").
   - Verwijs in de reply naar de voorgestelde tijd ("Ik kan je vrijdag om 09:00 herinneren om ze te kopen.").
+  - Voorbeeld: "Ik heb zaterdag een verjaardag, zal ik bloemen kopen?" → reply: "Ja, bloemen zijn een fijn idee. Ik kan je vrijdag om 09:00 herinneren om ze te halen." + suggested_actions: [{ intent:"reminder", payload:{ title:"Bloemen kopen", iso_datetime:"<vrijdag 09:00 ISO>" } }]
 - suggested_actions worden NOOIT direct uitgevoerd — de gebruiker bevestigt eerst via de bevestigingskaart. Gebruik exact dezelfde payload-velden als gewone reminder/event/note.
 - Bij twijfel tussen query en assistant_chat: kies query als er een agenda/reminder-antwoord is, anders assistant_chat.
 
