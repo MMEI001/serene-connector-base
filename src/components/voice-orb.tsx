@@ -456,29 +456,103 @@ export function VoiceOrb({ onCompleted }: Props) {
         {hint}
       </p>
 
-      {state === "confirming" && confirming && (
+      {state === "confirming" && confirming && !isEditing && (
         <div className="mt-4 flex flex-col items-center gap-3">
           {confirming.preview.includes("\n") && (
             <div className="max-w-xs rounded-2xl bg-white/60 px-4 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] whitespace-pre-line text-left">
               {confirming.preview}
             </div>
           )}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-wrap justify-center">
             <button
               type="button"
               onClick={() => handleCancel(confirming.action_id)}
-              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-5 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
             >
               <X className="h-4 w-4" />
               Annuleer
             </button>
+            {confirming.editable && (
+              <button
+                type="button"
+                onClick={openEditor}
+                className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+              >
+                <Pencil className="h-4 w-4" />
+                Bewerken
+              </button>
+            )}
             <button
               type="button"
               onClick={() => handleConfirm(confirming.action_id)}
-              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
             >
               <Check className="h-4 w-4" />
               Bevestig
+            </button>
+          </div>
+        </div>
+      )}
+
+      {state === "confirming" && confirming && isEditing && confirming.editable && (
+        <div className="mt-4 flex flex-col items-stretch gap-3 w-full max-w-xs">
+          <label className="flex flex-col gap-1 text-left">
+            <span className="text-xs text-muted-foreground">Titel</span>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+              autoFocus
+            />
+          </label>
+          {confirming.editable.intent === "reminder" ? (
+            <label className="flex flex-col gap-1 text-left">
+              <span className="text-xs text-muted-foreground">Datum en tijd</span>
+              <input
+                type="datetime-local"
+                value={editDateTime}
+                onChange={(e) => setEditDateTime(e.target.value)}
+                className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+              />
+            </label>
+          ) : (
+            <div className="flex gap-2">
+              <label className="flex flex-col gap-1 text-left flex-1">
+                <span className="text-xs text-muted-foreground">Datum</span>
+                <input
+                  type="date"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                  className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-left flex-1">
+                <span className="text-xs text-muted-foreground">Tijd</span>
+                <input
+                  type="time"
+                  value={editTime}
+                  onChange={(e) => setEditTime(e.target.value)}
+                  className="rounded-xl bg-white/70 px-3 py-2 text-sm border border-white/60 outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </label>
+            </div>
+          )}
+          <div className="flex items-center gap-2 justify-end">
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-4 py-2 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 transition-transform duration-200 active:scale-95"
+            >
+              Terug
+            </button>
+            <button
+              type="button"
+              onClick={saveEdit}
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-4 py-2 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+            >
+              <Check className="h-4 w-4" />
+              Opslaan & bevestig
             </button>
           </div>
         </div>
