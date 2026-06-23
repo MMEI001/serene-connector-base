@@ -208,7 +208,15 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       });
 
     // 3. Dispatch bundle (persona doorgegeven voor query-handler caps + toon)
-    const result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
+    let result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
+
+    // 3a. Failsafe: bij assistant_chat met gefaalde suggested actions, val terug
+    //     op alleen het adviserende antwoord — gebruiker hoort dan minimaal de tip.
+    if (assistantReply && result.status === "failed" && primary?.intent === "assistant_chat") {
+      console.warn("[pipeline] assistant_chat suggested actions failed, falling back to reply-only", result.error);
+      actions = [primary];
+      result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
+    }
 
     // 3b. assistant_chat reply altijd meesturen voor TTS/UI.
     if (assistantReply) {
