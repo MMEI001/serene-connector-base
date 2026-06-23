@@ -123,7 +123,8 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
-        void speakText(result.confirmation);
+        // Korte gesproken vraag — niet de hele preview voorlezen.
+        void speakText("Wil je dit zo bevestigen?");
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -152,9 +153,14 @@ export function VoiceOrb({ onCompleted }: Props) {
         scheduleReset();
         return;
       }
-      // completed
+      // completed — korte gesproken bevestiging.
       setConfirmation(result.confirmation);
-      void speakText(result.confirmation);
+      // Voor query: alleen de korte intro (bv. "Je hebt 2 afspraken vandaag.").
+      // Anders: de korte confirmation-tekst van de handler ("Staat erin.", "Losgelaten." etc.).
+      const spoken = result.query_result?.intro?.trim()
+        || result.confirmation
+        || "Staat erin.";
+      void speakText(spoken);
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
       onCompleted?.();
