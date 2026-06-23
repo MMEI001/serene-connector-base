@@ -1,4 +1,4 @@
-// Contracten voor de voice-pipeline (fase B).
+// Contracten voor de voice-pipeline (fase B + multi-action).
 
 export type VoiceIntent =
   | "release"
@@ -29,7 +29,7 @@ export type QueryItem = {
   title: string;
   /** Geformatteerde Nederlandse tijd-/datum-tekst, bv. "vrijdag 14:00". */
   when: string;
-  source: string; // 'manual' | 'ics' | naam van externe agenda
+  source: string;
   source_label?: string | null;
   external_url?: string | null;
 };
@@ -37,6 +37,13 @@ export type QueryItem = {
 export type QueryResult = {
   intro: string;
   items: QueryItem[];
+};
+
+/** Eén preview-lijn in een (mogelijk samengestelde) bevestigingsbundle. */
+export type ActionPreview = {
+  intent: VoiceIntent;
+  /** Korte preview-regel, bv. "Woensdag 1 juli — Partijtje dochter". */
+  preview: string;
 };
 
 export type ActionResult = {
@@ -52,14 +59,15 @@ export type ActionResult = {
   // ---- needs_confirmation extras ----
   /** voice_actions.id om later te bevestigen / annuleren. */
   action_id?: string;
-  /** Korte preview-tekst boven Bevestig/Annuleer ("Reminder morgen 09:00 — tandarts"). */
+  /** Korte preview-tekst (eventueel multi-line, één regel per actie). */
   preview?: string;
+  /** Gestructureerde previews — UI rendert als lijst. */
+  previews?: ActionPreview[];
   /** Wanneer verloopt deze pending actie (ISO). */
   expires_at?: string;
 
   // ---- query extras ----
   query_result?: QueryResult;
-  /** Voor 'open in externe agenda'-flow op ICS-events. */
   external_url?: string | null;
 };
 

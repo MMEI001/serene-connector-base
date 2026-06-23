@@ -1,16 +1,14 @@
 import type { VoiceAction, VoiceIntent } from "./types";
 
 /**
- * Fase B intent-classifier via Lovable AI Gateway (OpenAI-compatible).
- * Eén call → één intent + payload. Datum/tijd worden in NL geïnterpreteerd
- * t.o.v. een meegegeven "now" en `Europe/Amsterdam`-tijdzone.
- *
- * Bij gateway-fout valt 'm terug op release(text) met confidence=0.2 — de
- * pipeline behandelt dat als zachte fallback i.p.v. een harde error.
+ * Fase B + multi-action classifier via Lovable AI Gateway.
+ * Eén call → 1..3 acties. De model splitst samengestelde zinnen
+ * (bv. "afspraak woensdag + reminder 2 dagen ervoor") in losse acties.
  */
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
+const MAX_ACTIONS = 3;
 
 type ClassifyMeta = {
   model: string;
@@ -20,7 +18,7 @@ type ClassifyMeta = {
 };
 
 export type ClassifyResult = {
-  action: VoiceAction;
+  actions: VoiceAction[];
   meta: ClassifyMeta;
 };
 
@@ -38,77 +36,103 @@ const TOOL = {
   function: {
     name: "classify",
     description:
-      "Classificeer wat de gebruiker tegen de spraak-orb zei en extraheer de payload.",
+      "Classificeer wat de gebruiker tegen de spraak-orb zei. Splits samengestelde zinnen in losse acties (max 3).",
     parameters: {
       type: "object",
       properties: {
-        intent: { type: "string", enum: INTENT_VALUES },
-        confidence: { type: "number", minimum: 0, maximum: 1 },
-        ambiguous: { type: "boolean" },
-        clarification_question: {
-          type: "string",
-          description:
-            "Korte NL-vervolgvraag als de input dubbelzinnig is (datum, tijdstip). Anders leeg.",
-        },
-        payload: {
-          type: "object",
-          description:
-            "Intent-specifieke velden. Zie systeem-prompt voor schema per intent.",
-          properties: {
-            text: { type: "string" },
-            title: { type: "string" },
-            description: { type: "string" },
-            iso_datetime: {
-              type: "string",
-              description: "ISO 8601 in Europe/Amsterdam (bv. 2026-06-24T09:00:00+02:00).",
+        actions: {
+          type: "array",
+          minItems: 1,
+          maxItems: MAX_ACTIONS,
+          items: {
+            type: "object",
+            properties: {
+              intent: { type: "string", enum: INTENT_VALUES },
+              confidence: { type: "number", minimum: 0, maximum: 1 },
+              ambiguous: { type: "boolean" },
+              clarification_question: {
+                type: "string",
+                description: "Korte NL-vervolgvraag bij dubbelzinnige datum/tijd.",
+              },
+              payload: {
+                type: "object",
+                description:
+                  "Intent-specifieke velden. Zie systeem-prompt voor schema per intent.",
+                properties: {
+                  text: { type: "string" },
+                  title: { type: "string" },
+                  description: { type: "string" },
+                  iso_datetime: {
+                    type: "string",
+                    description: "ISO 8601 in Europe/Amsterdam.",
+                  },
+                  date: { type: "string", description: "YYYY-MM-DD" },
+                  start_time: { type: "string", description: "HH:MM (24u)" },
+                  end_time: { type: "string", description: "HH:MM (24u)" },
+                  scope: {
+                    type: "string",
+                    enum: [
+                      "today",
+                      "tomorrow",
+                      "this_week",
+                      "next_week",
+                      "specific_date",
+                    ],
+                  },
+                  action: {
+                    type: "string",
+                    enum: ["create", "delete", "move"],
+                  },
+                  /** Verwijzing naar een eerdere actie in dezelfde bundle (index 0..n-1). */
+                  related_to_index: {
+                    type: "integer",
+                    minimum: 0,
+                    description:
+                      "Index van een eerdere actie in deze bundle waar deze reminder bij hoort.",
+                  },
+                },
+              },
             },
-            date: { type: "string", description: "YYYY-MM-DD" },
-            start_time: { type: "string", description: "HH:MM (24u)" },
-            end_time: { type: "string", description: "HH:MM (24u)" },
-            scope: {
-              type: "string",
-              enum: ["today", "tomorrow", "this_week", "next_week", "specific_date"],
-            },
-            action: { type: "string", enum: ["create", "delete", "move"] },
+            required: ["intent", "confidence", "payload"],
           },
         },
       },
-      required: ["intent", "confidence", "payload"],
+      required: ["actions"],
     },
   },
 };
 
 function systemPrompt(nowIso: string) {
   return `Je bent de intent-classifier van HoofdRust, een rustige Nederlandse spraak-app.
-De gebruiker spreekt één korte zin in. Bepaal de intent en extraheer een payload.
+De gebruiker spreekt één korte zin in. Splits 'm in 1..${MAX_ACTIONS} acties — meestal één, maar bij samengestelde commando's één per actie.
 
 INTENTS:
-- release   → iets loslaten/luchten ("ik baal van...", "laat los", emotie spuien).
-              payload: { text }
-- reminder  → herinnering met tijdstip ("herinner me morgen om 9 aan tandarts").
-              payload: { title, iso_datetime, description? }
-- event     → afspraak in agenda. action="create" voor nieuw, "delete" voor verwijderen.
-              payload: { action, title, date, start_time?, end_time?, description? }
-- query     → vraag over agenda/reminders ("wat staat er morgen?", "wanneer is de meeting?").
-              payload: { scope, date? }     // date bij scope="specific_date"
-- note      → losse notitie ("noteer: ...", "schrijf op dat...").
-              payload: { text }
-- checkin   → korte stemmings-check zonder duidelijk doel.
-              payload: { text }
+- release   → iets loslaten/luchten. payload: { text }
+- reminder  → herinnering met tijdstip. payload: { title, iso_datetime, description?, related_to_index? }
+- event     → afspraak. payload: { action="create", title, date, start_time?, end_time?, description? }
+- query     → vraag over agenda/reminders. payload: { scope, date? }
+- note      → losse notitie. payload: { text }
+- checkin   → stemmings-check. payload: { text }
 
-Regels:
-- "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam. Reken datums/tijden hier vandaan.
-- Geef ALTIJD een ISO-datetime mét tijdzone-offset voor reminders.
-- Bij twijfel over datum/tijd: zet ambiguous=true en clarification_question (NL, kort).
-- Bij geen duidelijke intent → release met de originele tekst.
-- confidence 0..1 — wees eerlijk laag bij twijfel.
-- Antwoord uitsluitend via de classify-tool, nooit als tekst.`;
+MULTI-ACTION REGELS:
+- "Zet een afspraak X EN herinner me Y" → 2 acties: [event, reminder].
+- Bij "X dagen/uur van tevoren": bereken iso_datetime = event-datum − X dagen/uur. Zonder kloktijd → default 09:00 Europe/Amsterdam.
+- Zet related_to_index op de reminder naar de index van het event in de actions-array (meestal 0).
+- Voor de reminder-title: kort en imperatief ("Cadeau kopen", "Tandartsbezoek voorbereiden") — niet de event-naam herhalen.
+
+ALGEMENE REGELS:
+- "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam.
+- ISO-datetime altijd mét tijdzone-offset.
+- Bij twijfel over datum/tijd: ambiguous=true + clarification_question (kort, NL).
+- Geen duidelijke intent → één action: release met originele tekst.
+- confidence 0..1 — eerlijk laag bij twijfel.
+- Antwoord uitsluitend via de classify-tool.`;
 }
 
 export async function processVoiceInput(text: string): Promise<ClassifyResult> {
   const trimmed = text.trim();
   const fallback = (intent: VoiceIntent, payload: Record<string, unknown>, conf = 0.2): ClassifyResult => ({
-    action: { intent, payload, confidence: conf },
+    actions: [{ intent, payload, confidence: conf }],
     meta: { model: "fallback", prompt_tokens: null, completion_tokens: null, total_tokens: null },
   });
 
@@ -152,18 +176,8 @@ export async function processVoiceInput(text: string): Promise<ClassifyResult> {
   }
 
   type GatewayResp = {
-    choices?: Array<{
-      message?: {
-        tool_calls?: Array<{
-          function?: { name?: string; arguments?: string };
-        }>;
-      };
-    }>;
-    usage?: {
-      prompt_tokens?: number;
-      completion_tokens?: number;
-      total_tokens?: number;
-    };
+    choices?: Array<{ message?: { tool_calls?: Array<{ function?: { name?: string; arguments?: string } }> } }>;
+    usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
   const json = (await res.json().catch(() => null)) as GatewayResp | null;
@@ -174,11 +188,13 @@ export async function processVoiceInput(text: string): Promise<ClassifyResult> {
   }
 
   let parsed: {
-    intent?: string;
-    confidence?: number;
-    ambiguous?: boolean;
-    clarification_question?: string;
-    payload?: Record<string, unknown>;
+    actions?: Array<{
+      intent?: string;
+      confidence?: number;
+      ambiguous?: boolean;
+      clarification_question?: string;
+      payload?: Record<string, unknown>;
+    }>;
   };
   try {
     parsed = JSON.parse(call.function.arguments);
@@ -186,20 +202,28 @@ export async function processVoiceInput(text: string): Promise<ClassifyResult> {
     return fallback("release", { text: trimmed });
   }
 
-  const intent = INTENT_VALUES.includes(parsed.intent as VoiceIntent)
-    ? (parsed.intent as VoiceIntent)
-    : "release";
-  const payload = parsed.payload ?? {};
-  if (intent === "release" && !payload.text) payload.text = trimmed;
+  const rawActions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, MAX_ACTIONS) : [];
+  if (rawActions.length === 0) {
+    return fallback("release", { text: trimmed });
+  }
 
-  return {
-    action: {
+  const actions: VoiceAction[] = rawActions.map((a) => {
+    const intent = INTENT_VALUES.includes(a.intent as VoiceIntent)
+      ? (a.intent as VoiceIntent)
+      : "release";
+    const payload = a.payload ?? {};
+    if (intent === "release" && !payload.text) payload.text = trimmed;
+    return {
       intent,
       payload,
-      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.6,
-      ambiguous: !!parsed.ambiguous,
-      clarification_question: parsed.clarification_question?.trim() || null,
-    },
+      confidence: typeof a.confidence === "number" ? a.confidence : 0.6,
+      ambiguous: !!a.ambiguous,
+      clarification_question: a.clarification_question?.trim() || null,
+    };
+  });
+
+  return {
+    actions,
     meta: {
       model: MODEL,
       prompt_tokens: json?.usage?.prompt_tokens ?? null,

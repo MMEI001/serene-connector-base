@@ -336,6 +336,7 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          related_appointment_id: string | null
           remind_at: string | null
           source: Database["public"]["Enums"]["item_source"]
           status: Database["public"]["Enums"]["reminder_status"]
@@ -347,6 +348,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          related_appointment_id?: string | null
           remind_at?: string | null
           source?: Database["public"]["Enums"]["item_source"]
           status?: Database["public"]["Enums"]["reminder_status"]
@@ -358,6 +360,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           id?: string
+          related_appointment_id?: string | null
           remind_at?: string | null
           source?: Database["public"]["Enums"]["item_source"]
           status?: Database["public"]["Enums"]["reminder_status"]
@@ -365,7 +368,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "reminders_related_appointment_id_fkey"
+            columns: ["related_appointment_id"]
+            isOneToOne: false
+            referencedRelation: "appointments"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_behavior_events: {
         Row: {

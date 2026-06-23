@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { commitVoiceAction } from "@/lib/voice/dispatch-voice-action";
-import type { ActionResult } from "@/lib/voice/types";
+import { commitVoiceBundle } from "@/lib/voice/dispatch-voice-action";
+import type { ActionResult, VoiceAction } from "@/lib/voice/types";
 
 const validateId = (data: { action_id: string }) => {
   if (!data || typeof data.action_id !== "string" || !data.action_id) {
@@ -40,11 +40,20 @@ export const confirmVoiceAction = createServerFn({ method: "POST" })
       };
     }
 
-    const result = await commitVoiceAction(
-      { supabase, userId },
-      row.intent as string,
-      (row.payload as Record<string, unknown>) ?? {},
-    );
+    const payload = (row.payload as Record<string, unknown>) ?? {};
+    const actions: VoiceAction[] = Array.isArray(
+      (payload as { actions?: unknown }).actions,
+    )
+      ? ((payload as { actions: VoiceAction[] }).actions)
+      : [
+          {
+            intent: row.intent as VoiceAction["intent"],
+            payload,
+            confidence: 1,
+          },
+        ];
+
+    const result = await commitVoiceBundle({ supabase, userId }, actions);
 
     await supabase
       .from("voice_actions")
@@ -75,7 +84,6 @@ export const cancelVoiceAction = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-/** Haalt de laatste nog-niet-verlopen pending actie op (revive na timeout). */
 export const getPendingVoiceAction = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{
