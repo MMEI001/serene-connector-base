@@ -151,7 +151,10 @@ export async function speakText(
     const audio = new Audio(url);
     currentAudio = audio;
     audio.addEventListener("ended", () => URL.revokeObjectURL(url));
-    audio.addEventListener("error", () => URL.revokeObjectURL(url));
+    audio.addEventListener("error", () => {
+      console.warn("[TTS] audio play error", audio.error);
+      URL.revokeObjectURL(url);
+    });
     try {
       await audio.play();
       console.log("[TTS] audio play success");
