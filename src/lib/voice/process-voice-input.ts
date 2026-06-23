@@ -30,7 +30,10 @@ const INTENT_VALUES: VoiceIntent[] = [
   "event",
   "query",
   "checkin",
+  "assistant_chat",
 ];
+
+const CONFIRMABLE_SUGGESTED_INTENTS = new Set<VoiceIntent>(["reminder", "event", "note"]);
 
 const TOOL = {
   type: "function" as const,
@@ -91,6 +94,30 @@ const TOOL = {
                     description:
                       "Index van een eerdere actie in deze bundle waar deze reminder bij hoort.",
                   },
+                  /** Alleen voor intent=assistant_chat: korte adviserende reactie. */
+                  reply: {
+                    type: "string",
+                    description:
+                      "assistant_chat: korte, rustige Nederlandse reactie (max 2 zinnen).",
+                  },
+                  /** Alleen voor intent=assistant_chat: optionele vervolgacties. */
+                  suggested_actions: {
+                    type: "array",
+                    maxItems: MAX_ACTIONS,
+                    description:
+                      "assistant_chat: optionele vervolgacties (event/reminder/note) die de gebruiker eerst moet bevestigen. Nooit direct uitvoeren.",
+                    items: {
+                      type: "object",
+                      properties: {
+                        intent: {
+                          type: "string",
+                          enum: ["event", "reminder", "note"],
+                        },
+                        payload: { type: "object" },
+                      },
+                      required: ["intent", "payload"],
+                    },
+                  },
                 },
               },
             },
@@ -109,14 +136,23 @@ function systemPrompt(nowIso: string, persona?: UserPersona) {
 De gebruiker spreekt één korte zin in. Splits 'm in 1..${MAX_ACTIONS} acties — meestal één, maar bij samengestelde commando's één per actie.
 
 INTENTS:
-- release   → iets loslaten/luchten. payload: { text }
-- reminder  → herinnering met tijdstip. payload: { title, iso_datetime, description?, related_to_index? }
-- event     → afspraak. payload: { action="create", title, date, start_time?, end_time?, description? }
-- query     → vraag over agenda/reminders. payload: { scope, date? }
-- note      → losse notitie. payload: { text }
-- checkin   → stemmings-check. payload: { text }
+- release        → iets loslaten/luchten. payload: { text }
+- reminder       → herinnering met tijdstip. payload: { title, iso_datetime, description?, related_to_index? }
+- event          → afspraak. payload: { action="create", title, date, start_time?, end_time?, description? }
+- query          → vraag over agenda/reminders. payload: { scope, date? }
+- note           → losse notitie. payload: { text }
+- checkin        → stemmings-check. payload: { text }
+- assistant_chat → de gebruiker vraagt om advies, uitleg, een plan, of denkt hardop. payload: { reply, suggested_actions? }
 
-MULTI-ACTION REGELS:
+ASSISTANT_CHAT REGELS:
+- Kies dit als de gebruiker NIET om een directe actie vraagt, maar om mee te denken, advies, suggesties, of een vraag stelt die niet door query gedekt wordt.
+  Voorbeelden: "Wat zou jij doen?", "Help me prioriteren", "Hoe pak ik dit aan?", "Geef me een tip", "Wat staat er morgen écht op het spel?".
+- reply: kort, rustig, adviserend Nederlands. Max 2 zinnen. Geen lijstjes, geen markdown.
+- suggested_actions: ALLEEN als de gebruiker er concreet iets aan kan hebben (max ${MAX_ACTIONS}). Voorbeeld: "Help me morgen rustig te beginnen" → suggested_actions=[{ intent:"reminder", payload:{ title:"Adempauze", iso_datetime:"…T08:30+01:00" } }].
+- suggested_actions worden NIET direct uitgevoerd — de gebruiker bevestigt eerst. Gebruik exact dezelfde payload-velden als bij gewone reminder/event/note.
+- Bij twijfel tussen query en assistant_chat: kies query als er een agenda/reminder antwoord is, anders assistant_chat.
+
+MULTI-ACTION REGELS (voor gewone event+reminder, niet voor assistant_chat):
 - "Zet een afspraak X EN herinner me Y" → 2 acties: [event, reminder].
 - Bij "X dagen/uur van tevoren": bereken iso_datetime = event-datum − X dagen/uur. Zonder kloktijd → default 09:00 Europe/Amsterdam.
 - Zet related_to_index op de reminder naar de index van het event in de actions-array (meestal 0).
