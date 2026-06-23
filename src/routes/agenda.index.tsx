@@ -283,7 +283,7 @@ function AgendaPage() {
       const to = new Date(now);
       to.setDate(to.getDate() + 180);
 
-      const [apptRes, icsRes] = await Promise.all([
+      const [apptRes, icsRes, remindersRes] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, title, description, date, start_time, end_time")
@@ -296,9 +296,19 @@ function AgendaPage() {
           console.warn("[agenda] ics fetch failed", e);
           return [] as Awaited<ReturnType<typeof fetchIcs>>;
         }),
+        supabase
+          .from("reminders")
+          .select("related_appointment_id" as never)
+          .eq("user_id", user.id)
+          .not("related_appointment_id", "is", null),
       ]);
 
       if (apptRes.error) console.error("[agenda]", apptRes.error);
+
+      const linkedApptIds = new Set<string>();
+      for (const r of (remindersRes.data ?? []) as Array<{ related_appointment_id: string | null }>) {
+        if (r.related_appointment_id) linkedApptIds.add(r.related_appointment_id);
+      }
 
       const merged: DisplayEvent[] = [];
       for (const a of apptRes.data ?? []) {
@@ -312,6 +322,7 @@ function AgendaPage() {
           startTime: a.start_time ? a.start_time.slice(0, 5) : null,
           endTime: a.end_time ? a.end_time.slice(0, 5) : null,
           appointmentId: a.id,
+          hasReminder: linkedApptIds.has(a.id),
         });
       }
       for (const e of icsRes ?? []) {
