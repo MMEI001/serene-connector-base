@@ -124,7 +124,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
         // Korte gesproken vraag — niet de hele preview voorlezen.
-        void speakText("Wil je dit zo bevestigen?");
+        void speakText("Ik heb dit voor je klaargezet. Wil je dit bevestigen?");
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
