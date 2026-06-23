@@ -300,13 +300,16 @@ function AgendaPage() {
           .from("reminders")
           .select("related_appointment_id" as never)
           .eq("user_id", user.id)
-          .not("related_appointment_id", "is", null),
+          .not("related_appointment_id" as never, "is", null),
       ]);
 
       if (apptRes.error) console.error("[agenda]", apptRes.error);
 
       const linkedApptIds = new Set<string>();
-      for (const r of (remindersRes.data ?? []) as Array<{ related_appointment_id: string | null }>) {
+      const remindersData = (remindersRes.data ?? []) as unknown as Array<{
+        related_appointment_id: string | null;
+      }>;
+      for (const r of remindersData) {
         if (r.related_appointment_id) linkedApptIds.add(r.related_appointment_id);
       }
 
