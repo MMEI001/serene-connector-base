@@ -1,10 +1,28 @@
+import { X } from "lucide-react";
 import type { QueryResult } from "@/lib/voice/types";
 
-export function QueryResultCard({ data }: { data: QueryResult }) {
+type Props = {
+  data: QueryResult;
+  onClose?: () => void;
+};
+
+export function QueryResultCard({ data, onClose }: Props) {
   if (data.items.length === 0) return null;
   return (
     <div className="mt-4 w-full max-w-sm">
-      <p className="mb-2 text-center text-sm text-muted-foreground">{data.intro}</p>
+      <div className="mb-2 flex items-center justify-between gap-2 px-1">
+        <p className="text-sm text-muted-foreground">{data.intro}</p>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Sluit overzicht"
+            className="shrink-0 rounded-full p-1 text-muted-foreground/70 transition-colors hover:text-foreground/80 active:scale-95"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
       <ul className="space-y-2">
         {data.items.map((item) => (
           <li
