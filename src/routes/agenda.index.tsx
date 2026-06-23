@@ -197,6 +197,13 @@ function ApptList({
                         strokeWidth={2}
                       />
                     )}
+                    {a.hasReminder && (
+                      <Bell
+                        aria-label="Gekoppelde reminder"
+                        className="absolute right-4 top-4 h-3.5 w-3.5 text-muted-foreground/70"
+                        strokeWidth={2}
+                      />
+                    )}
                     <div className="ml-3 flex items-baseline justify-between gap-3 pr-6">
                       <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
                         {a.title}
