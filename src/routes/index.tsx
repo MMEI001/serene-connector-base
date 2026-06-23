@@ -42,14 +42,6 @@ function todayISO() {
   return `${y}-${m}-${day}`;
 }
 
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 5) return "Goedenacht";
-  if (h < 12) return "Goedemorgen";
-  if (h < 18) return "Goedemiddag";
-  if (h < 22) return "Goedenavond";
-  return "Goedenacht";
-}
 
 const pills = [
   { label: "Iets loslaten", to: "/laat-los" as const },
