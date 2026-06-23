@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, useScroll, useTransform } from "motion/react";
-import { Lock } from "lucide-react";
+import { Lock, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -36,13 +36,14 @@ type DisplayEvent = {
   sourceLabel: string;
   color: string | null;
   title: string;
-  date: string; // YYYY-MM-DD
-  startTime: string | null; // HH:MM
+  date: string;
+  startTime: string | null;
   endTime: string | null;
   appointmentId: string | null;
   description?: string | null;
   location?: string | null;
   calendarUrl?: string | null;
+  hasReminder?: boolean;
 };
 
 type IcsProvider = {
