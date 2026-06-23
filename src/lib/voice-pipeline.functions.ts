@@ -101,6 +101,38 @@ function deriveTitleFromReply(reply: string): string {
   return words || "Herinnering";
 }
 
+const ACTION_VERBS = [
+  "kopen", "halen", "bellen", "sturen", "regelen", "brengen", "maken",
+  "boeken", "reserveren", "plannen", "afspreken", "bestellen", "ophalen",
+  "schrijven", "mailen", "appen", "betalen", "inpakken", "bezoeken",
+];
+
+/** Leid een korte actie-titel af uit het transcript van de gebruiker. */
+function deriveTitleFromTranscript(transcript: string): string {
+  const text = transcript.toLowerCase().replace(/[?!.,;:]/g, " ").replace(/\s+/g, " ").trim();
+  if (!text) return "Herinnering";
+  const tokens = text.split(" ");
+  // Zoek "<woord(en)> <werkwoord>" patroon (max 3 woorden vóór werkwoord).
+  for (let i = 0; i < tokens.length; i++) {
+    if (ACTION_VERBS.includes(tokens[i])) {
+      const start = Math.max(0, i - 2);
+      const phrase = tokens.slice(start, i + 1).join(" ");
+      return capitalize(phrase);
+    }
+  }
+  // Geen werkwoord-match → fallback op kernwoord (eerste zelfstandig nw na "een"/"de"/"het" of "mijn").
+  const articleIdx = tokens.findIndex((t) => ["een", "de", "het", "mijn", "m'n"].includes(t));
+  if (articleIdx >= 0 && tokens[articleIdx + 1]) {
+    return capitalize(tokens.slice(articleIdx + 1, articleIdx + 3).join(" "));
+  }
+  return "Herinnering";
+}
+
+function capitalize(s: string): string {
+  if (!s) return s;
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 const MIN_WORDS = 2;
 const PENDING_TTL_MS = 5 * 60 * 1000;
 
