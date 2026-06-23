@@ -6,7 +6,8 @@ export type VoiceIntent =
   | "note"
   | "event"
   | "query"
-  | "checkin";
+  | "checkin"
+  | "assistant_chat";
 
 export type VoiceActionStatus =
   | "completed"
@@ -69,6 +70,10 @@ export type ActionResult = {
   // ---- query extras ----
   query_result?: QueryResult;
   external_url?: string | null;
+
+  // ---- assistant_chat extras ----
+  /** Korte, adviserende reactie van de assistent (voor TTS + UI). */
+  assistant_reply?: string;
 };
 
 export type PipelineResult = ActionResult;
