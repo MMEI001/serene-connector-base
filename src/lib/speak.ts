@@ -245,17 +245,22 @@ export async function speakText(
     let provider = "elevenlabs";
     let enabled = true;
     if (!opts?.voiceId) {
-      const prefs = await loadPrefs();
+      const prefs = await loadPrefs(intent);
       enabled = prefs.enabled;
       voiceId = prefs.voiceId;
       provider = prefs.provider;
-      logTts("prefs_loaded", { intent, voice_enabled: enabled, voice_provider: provider, voice_id: voiceId });
       if (!opts?.force && !enabled) {
-        logTts("skipped_disabled", { intent });
+        logTts("skipped_disabled", { intent, voice_enabled: enabled, voice_provider: provider });
         return;
       }
     } else {
-      logTts("prefs_loaded", { intent, voice_enabled: true, voice_provider: provider, voice_id: voiceId, source: "override" });
+      logTts("prefs_loaded", {
+        intent,
+        source: "override",
+        voice_enabled_effective: true,
+        voice_provider: provider,
+        voice_id: voiceId,
+      });
     }
 
     const SUPABASE_URL =
