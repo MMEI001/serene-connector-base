@@ -33,7 +33,7 @@ const INTENT_VALUES: VoiceIntent[] = [
   "assistant_chat",
 ];
 
-const CONFIRMABLE_SUGGESTED_INTENTS = new Set<VoiceIntent>(["reminder", "event", "note"]);
+
 
 const TOOL = {
   type: "function" as const,
