@@ -248,6 +248,19 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         deduped.push(a);
         if (deduped.length >= 2) break;
       }
+      // Verrijk acties met subtiele suggestie-subtekst uit de assistant_reply.
+      const subtext = extractSuggestionsFromReply(assistantReply);
+      if (subtext) {
+        for (const a of deduped) {
+          if (a.intent === "reminder") {
+            const cur = typeof a.payload.description === "string" ? a.payload.description.trim() : "";
+            if (!cur) a.payload.description = subtext;
+          } else if (a.intent === "event") {
+            const cur = typeof a.payload.notes === "string" ? a.payload.notes.trim() : "";
+            if (!cur) a.payload.notes = subtext;
+          }
+        }
+      }
       if (deduped.length > 0) {
         actions = deduped;
       } else {
