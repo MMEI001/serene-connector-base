@@ -666,6 +666,7 @@ export type Database = {
         | "event"
         | "query"
         | "checkin"
+        | "assistant_chat"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -818,6 +819,7 @@ export const Constants = {
         "event",
         "query",
         "checkin",
+        "assistant_chat",
       ],
     },
   },

@@ -3,7 +3,9 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
 import { dispatchVoiceBundle } from "@/lib/voice/dispatch-voice-action";
 import { loadUserPersona } from "@/lib/voice/load-persona";
-import type { PipelineResult } from "@/lib/voice/types";
+import type { PipelineResult, VoiceAction, VoiceIntent } from "@/lib/voice/types";
+
+const CONFIRMABLE_SUGGESTED: ReadonlySet<VoiceIntent> = new Set(["reminder", "event", "note"]);
 
 const MIN_WORDS = 2;
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -33,10 +35,40 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     const persona = await loadUserPersona(supabase, userId);
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
-    const { actions, meta } = await processVoiceInput(text, persona);
+    const { actions: classified, meta } = await processVoiceInput(text, persona);
+    const primary = classified[0];
 
-    // 2. Log intent-classificatie (één rij per zin, met alle actions in payload)
-    const primary = actions[0];
+    // 1b. assistant_chat: pak korte reply + (optionele) vervolgacties uit.
+    //     Vervolgacties worden NOOIT direct uitgevoerd — ze gaan via de
+    //     bestaande needs_confirmation / commitVoiceBundle-flow.
+    let assistantReply: string | null = null;
+    let actions: VoiceAction[] = classified;
+    if (primary?.intent === "assistant_chat") {
+      const replyRaw = primary.payload.reply;
+      assistantReply = typeof replyRaw === "string" && replyRaw.trim() ? replyRaw.trim() : "Ik denk met je mee.";
+      const suggestedRaw = primary.payload.suggested_actions;
+      const suggested: VoiceAction[] = Array.isArray(suggestedRaw)
+        ? suggestedRaw
+            .map((s): VoiceAction | null => {
+              if (!s || typeof s !== "object") return null;
+              const obj = s as { intent?: unknown; payload?: unknown };
+              const intent = typeof obj.intent === "string" ? (obj.intent as VoiceIntent) : null;
+              if (!intent || !CONFIRMABLE_SUGGESTED.has(intent)) return null;
+              const payload = obj.payload && typeof obj.payload === "object"
+                ? (obj.payload as Record<string, unknown>)
+                : {};
+              return { intent, payload, confidence: 0.7 };
+            })
+            .filter((x): x is VoiceAction => !!x)
+        : [];
+      if (suggested.length > 0) {
+        actions = suggested;
+      } else {
+        actions = [primary];
+      }
+    }
+
+    // 2. Log intent-classificatie (één rij per zin, met alle (originele) actions in payload)
     supabase
       .from("voice_intents")
       .insert({
@@ -45,13 +77,13 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         model: meta.model,
         intent: primary.intent,
         confidence: primary.confidence,
-        payload: { actions, persona_signature: persona.signature } as never,
+        payload: { actions: classified, persona_signature: persona.signature } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
         total_tokens: meta.total_tokens,
-        ambiguous: actions.some((a) => !!a.ambiguous),
+        ambiguous: classified.some((a) => !!a.ambiguous),
         clarification_question:
-          actions.find((a) => a.clarification_question)?.clarification_question ?? null,
+          classified.find((a) => a.clarification_question)?.clarification_question ?? null,
       })
       .then(({ error }) => {
         if (error) console.error("[pipeline] voice_intents log", error);
@@ -59,6 +91,17 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
 
     // 3. Dispatch bundle (persona doorgegeven voor query-handler caps + toon)
     const result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
+
+    // 3b. assistant_chat reply altijd meesturen voor TTS/UI.
+    if (assistantReply) {
+      result.assistant_reply = assistantReply;
+      // Voor needs_confirmation: laat de reply leidend zijn in de gesproken intro.
+      if (result.status === "needs_confirmation") {
+        result.confirmation = assistantReply;
+      } else if (result.status === "completed" && !result.query_result) {
+        result.confirmation = assistantReply;
+      }
+    }
 
     if (result.status === "skipped") return result;
 

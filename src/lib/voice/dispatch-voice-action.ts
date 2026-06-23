@@ -71,6 +71,18 @@ async function dispatchSingle(ctx: Ctx, action: VoiceAction): Promise<ActionResu
       return previewReminder(action.payload);
     case "event":
       return previewEvent(action.payload);
+    case "assistant_chat": {
+      const reply =
+        typeof action.payload.reply === "string" && action.payload.reply.trim()
+          ? action.payload.reply.trim()
+          : "Ik denk met je mee.";
+      return {
+        intent: "assistant_chat",
+        status: "completed",
+        confirmation: reply,
+        assistant_reply: reply,
+      };
+    }
   }
 }
 
