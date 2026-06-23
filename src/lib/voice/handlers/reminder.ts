@@ -16,11 +16,13 @@ export function previewReminder(payload: Record<string, unknown>): ActionResult 
     };
   }
   const when = formatWhen(iso);
+  const description = typeof payload.description === "string" ? payload.description.trim() : "";
+  const preview = description ? `${when} — ${title}\n${description}` : `${when} — ${title}`;
   return {
     intent: "reminder",
     status: "needs_confirmation",
     confirmation: `Reminder ${when}: ${title}.`,
-    preview: `${when} — ${title}`,
+    preview,
   };
 }
 
