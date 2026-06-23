@@ -1,12 +1,12 @@
 // Pure state-machine voor de orb. Geen UI, geen side-effects.
-// UI consumeert dit via een hook (zie voice-orb.tsx).
 
 export type OrbState =
   | "idle"
   | "listening"
   | "processing"
+  | "confirming" // wacht op Bevestig/Annuleer (fase B)
   | "done"
-  | "speaking" // gereserveerd voor fase C (TTS)
+  | "speaking" // fase C (TTS)
   | "error";
 
 export type OrbEvent =
@@ -14,7 +14,10 @@ export type OrbEvent =
   | { type: "STOP" }
   | { type: "TRANSCRIBED" }
   | { type: "DISPATCHED" }
-  | { type: "SPOKEN" } // fase C
+  | { type: "NEEDS_CONFIRMATION" }
+  | { type: "CONFIRM" }
+  | { type: "CANCEL" }
+  | { type: "SPOKEN" }
   | { type: "FAIL"; message?: string }
   | { type: "RESET" };
 
@@ -28,9 +31,16 @@ export function orbReducer(state: OrbState, event: OrbEvent): OrbState {
       if (event.type === "FAIL") return "error";
       return state;
     case "processing":
-      if (event.type === "TRANSCRIBED") return "processing"; // blijft processing tot dispatch klaar
+      if (event.type === "TRANSCRIBED") return "processing";
+      if (event.type === "NEEDS_CONFIRMATION") return "confirming";
       if (event.type === "DISPATCHED") return "done";
       if (event.type === "FAIL") return "error";
+      return state;
+    case "confirming":
+      if (event.type === "CONFIRM") return "processing";
+      if (event.type === "CANCEL") return "idle";
+      if (event.type === "FAIL") return "error";
+      if (event.type === "RESET") return "idle";
       return state;
     case "done":
       if (event.type === "RESET") return "idle";
