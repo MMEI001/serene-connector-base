@@ -1,63 +1,43 @@
-# Diagnose Assistant Mode-fout
+# Bevindingen Assistant Mode
 
-## Wat ik vond in de logs
+## Laatste 5 `voice_actions` rijen (jouw user_id)
 
-**Testzin** "Ik heb zaterdag een verjaardag, zal ik bloemen kopen?" — meerdere keren getest om 11:31, 11:32, 11:34, 11:35.
+Alle 5 zijn vóór 11:41 UTC opgeslagen — identiek patroon:
 
-**Classifier:** werkt correct.
-- `voice_intents.intent = assistant_chat`
-- `reply` bv. *"Bloemen zijn altijd een goed idee voor een verjaardag. Zal ik een herinnering voor je instellen om ze morgenochtend te halen?"*
-- `ambiguous = false`, geen `clarification_question` — precies zoals gewenst.
+| created_at (UTC) | intent | status | error | confirmation_text | payload |
+|---|---|---|---|---|---|
+| 11:35:12 | assistant_chat | failed | missing_fields | "Ik miste de tijd of het onderwerp." | `{actions:[{intent:reminder, confidence:0.7, payload:{}}, …]}` |
+| 11:34:47 | assistant_chat | failed | missing_fields | idem | idem (3 lege reminders) |
+| 11:32:12 | assistant_chat | failed | missing_fields | idem | idem (3 lege reminders) |
+| 11:31:52 | assistant_chat | failed | missing_fields | idem | `{actions:[{intent:reminder, confidence:0.7, payload:{}}]}` |
+| 11:31:38 | assistant_chat | failed | missing_fields | idem | idem (1 lege reminder) |
 
-**Enum-migratie:** OK. `enum_range(voice_intent)` bevat `assistant_chat` in de live DB.
+Daarvoor: gewone reminder/query rijen, alle `completed`.
 
-**Echte fout:** in `voice_actions`:
-```
-intent: assistant_chat
-status: failed
-error:  missing_fields
-confirmation_text: "Ik miste de tijd of het onderwerp."
-```
+## De preview heeft de fix nog niet getest
 
-## Oorzaak
+- `src/lib/voice-pipeline.functions.ts` en `src/lib/voice/process-voice-input.ts` zijn voor het laatst gewijzigd om **11:41:00 / 11:41:17 UTC**.
+- Jouw laatste test was **11:35:12 UTC** — dus **6 minuten vóór** de fix in de sandbox stond.
+- Sinds 11:41 zijn er **0 nieuwe `voice_actions` rijen**. De fix is dus nog niet getest.
 
-Het model stopt suggesties als reminder in `suggested_actions`, maar geeft natuurlijke taal mee ("morgenochtend", "vrijdag 09:00") in plaats van een ISO 8601 datetime. De pipeline doet:
+De fix is wel aanwezig in de source (geverifieerd):
+- `amsterdamIso` + `deriveDefaultIso` aanwezig in `voice-pipeline.functions.ts` (regels 16, 52, 88)
+- `assistant_chat` failsafe + reply-meesturen aanwezig (regels 140–187, 213–230)
+- Lege `payload.iso_datetime` wordt automatisch ingevuld via `deriveDefaultIso(text)` (regel 160)
+- Lege `title` wordt afgeleid uit `assistantReply` (regel 162)
 
-```
-if (suggested.length > 0) actions = suggested
-→ dispatchVoiceBundle → previewReminder
-→ payload.iso_datetime ontbreekt → status: "failed", error: "missing_fields"
-```
+De `Unable to post message to https://lovable.dev` console-melding is niet gerelateerd — dat is een onschuldige cross-origin postMessage uit de Lovable preview-wrapper.
 
-Daarna kent de pipeline `assistant_reply` alleen toe aan `result.confirmation` voor `needs_confirmation` of `completed`. Bij `failed` blijft de generieke errortekst staan → orb spreekt/toont "Het lukte even niet…".
+## Plan
 
-Dus: classifier OK, dispatcher OK voor assistant_chat zélf, TTS/orb-pad OK — het breekt op de **suggested reminder zonder ISO**.
+1. **Hard refresh in de preview** (Cmd+Shift+R / Ctrl+Shift+R) zodat HMR de nieuwe `voice-pipeline.functions.ts` zeker laadt.
+2. **Hertest** met exact dezelfde zin: *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"*
+3. **Ik haal direct daarna** de nieuwste `voice_actions` rij op en plak intent / status / error / confirmation_text / payload terug — dan zien we of de defaults effectief zijn ingevuld.
+4. **Als het opnieuw `failed / missing_fields` is** voeg ik in build-mode extra `console.log` toe rond:
+   - `processVoiceInput` return-shape (loggen welke `suggested_actions` GPT teruggeeft)
+   - Het normalisatieblok in `voice-pipeline.functions.ts` (vóór en ná defaults)
+   - `dispatchVoiceBundle` per-action result
+   En kijk ik via `stack_modern--server-function-logs` mee.
+5. **Als GPT überhaupt geen `suggested_actions` teruggeeft** voor advies-zinnen, scherp ik de prompt verder aan zodat assistant_chat zonder suggested_actions ook accepteert wordt (alleen reply → completed, geen bevestigingskaart).
 
-## Fix
-
-Twee complementaire wijzigingen, beide in `src/lib/voice-pipeline.functions.ts` en `src/lib/voice/process-voice-input.ts`:
-
-1. **Server-side default voor suggested_actions zonder iso_datetime** (pipeline):
-   - Bij normalisatie van `suggested_actions`: als `intent=reminder` en `iso_datetime` ontbreekt/ongeldig → bereken default op basis van context:
-     - Probeer eerst een datum uit de oorspronkelijke transcript te halen (regex naar "zaterdag/zondag/…/morgen/overmorgen") en kies de werkdag ervóór, 09:00 Europe/Amsterdam.
-     - Anders: morgen 09:00 Europe/Amsterdam.
-   - Idem voor `intent=event` zonder `date`: gebruik dezelfde gevonden datum, default 09:00.
-   - Als titel ontbreekt → afleiden uit `reply` of fallback "Herinnering".
-
-2. **Failsafe in pipeline**: als na normalisatie/defaults de suggested actions tóch failen in `dispatchVoiceBundle`, val terug op alleen het assistant_chat-antwoord:
-   - `actions = [primary]` (assistant_chat)
-   - Dispatch opnieuw → `status: completed`, `confirmation = assistant_reply`
-   - Log dit als `voice_actions.status = completed` met `intent: assistant_chat`, zodat de gebruiker minimaal het gesproken advies hoort i.p.v. de generieke fout.
-
-3. **Prompt-aanscherping** (`process-voice-input.ts`): expliciet maken dat `suggested_actions[*].payload.iso_datetime` ALTIJD een volledige ISO 8601 string met Europe/Amsterdam-offset moet zijn — geen natuurlijke taal — en een voorbeeld toevoegen voor de zaterdag-bloemen-case. Dit voorkomt dat de fix-flow vaak nodig is.
-
-## Niet aanraken
-
-- Enum-migratie (al doorgevoerd).
-- Classifier-keuze voor `assistant_chat` (werkt al correct, geen clarification meer).
-- TTS/orb-pad voor `completed`/`needs_confirmation` (werkt al, alleen `failed` werd verkeerd verwoord).
-
-## Verificatie na implementatie
-
-- Run testzin opnieuw. Verwacht: `voice_intents.intent = assistant_chat`, en `voice_actions` één rij met `status = needs_confirmation` (preview "vrijdag 09:00 — Bloemen kopen") **of** `completed` met `intent=assistant_chat` (alleen advies). Geen `missing_fields`.
-- Orb spreekt het advies + (indien preview) "Wil je dit zo bevestigen?".
+Geen code-wijzigingen in deze stap — eerst hertest na hard refresh + nieuwe DB-rij ophalen.
