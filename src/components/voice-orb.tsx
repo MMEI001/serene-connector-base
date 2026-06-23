@@ -152,11 +152,16 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       // completed
       setConfirmation(result.confirmation);
-      if (result.query_result) setQueryResult(result.query_result);
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
       onCompleted?.();
-      scheduleReset();
+      if (result.query_result) {
+        // Query-resultaat blijft staan tot gebruiker 'm sluit of nieuwe opname start.
+        setQueryResult(result.query_result);
+      } else {
+        scheduleReset();
+      }
+
     },
     [onCompleted, scheduleReset],
   );
@@ -398,7 +403,17 @@ export function VoiceOrb({ onCompleted }: Props) {
         </button>
       )}
 
-      {queryResult && state === "done" && <QueryResultCard data={queryResult} />}
+      {queryResult && (
+        <QueryResultCard
+          data={queryResult}
+          onClose={() => {
+            setQueryResult(null);
+            setConfirmation("");
+            dispatch({ type: "RESET" });
+          }}
+        />
+      )}
+
 
       {state === "idle" && revive && (
         <button
