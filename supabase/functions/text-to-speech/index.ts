@@ -100,7 +100,12 @@ Deno.serve(async (req) => {
     if (!resp.ok) {
       const detail = await resp.text();
       console.error("ElevenLabs error", resp.status, detail);
-      return json({ error: "Spraak is tijdelijk niet beschikbaar." }, 502);
+      const fallbackable = resp.status === 401 || resp.status === 402 ||
+        resp.status === 429 || resp.status >= 500;
+      return json(
+        { error: "tts_unavailable", fallback: fallbackable, upstream_status: resp.status },
+        fallbackable ? 200 : resp.status,
+      );
     }
 
     const audio = await resp.arrayBuffer();

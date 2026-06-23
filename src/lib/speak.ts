@@ -5,6 +5,20 @@ export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
 let currentAudio: HTMLAudioElement | null = null;
+let ttsUnavailableUntil = 0; // epoch ms; skip ElevenLabs until then
+
+function browserSpeak(text: string) {
+  try {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "nl-NL";
+    utter.rate = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utter);
+  } catch {
+    // ignore
+  }
+}
 
 export function resetVoicePreferenceCache() {
   cachedEnabled = null;
@@ -64,6 +78,12 @@ export async function speakText(
     const { data: sessionData } = await supabase.auth.getSession();
     const token = sessionData.session?.access_token ?? ANON;
 
+    // Skip ElevenLabs entirely during cooldown after a known failure.
+    if (Date.now() < ttsUnavailableUntil) {
+      browserSpeak(text);
+      return;
+    }
+
     const res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
       method: "POST",
       headers: {
@@ -73,10 +93,26 @@ export async function speakText(
       },
       body: JSON.stringify({ text, voice_id: voiceId }),
     });
-    if (!res.ok) {
-      console.warn("[speakText] edge function returned", res.status);
+
+    const contentType = res.headers.get("content-type") || "";
+    if (!res.ok || contentType.includes("application/json")) {
+      // Either an error, or a JSON fallback signal from the edge function.
+      let fallback = true;
+      try {
+        const payload = await res.json();
+        fallback = payload?.fallback !== false;
+      } catch {
+        // non-JSON failure: still fall back
+      }
+      if (!res.ok) console.warn("[speakText] edge function returned", res.status);
+      if (fallback) {
+        // Cool down for 5 min so we don't hammer ElevenLabs while it's down/unpaid.
+        ttsUnavailableUntil = Date.now() + 5 * 60 * 1000;
+        browserSpeak(text);
+      }
       return;
     }
+
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     if (currentAudio) {
