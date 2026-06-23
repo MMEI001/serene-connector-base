@@ -39,11 +39,19 @@ function blobExt(mimeType: string) {
 
 type Props = { onCompleted?: () => void };
 type Pending = { id: string; blob: Blob; mimeType: string } | null;
+type Editable = {
+  intent: "reminder" | "event";
+  title: string;
+  iso_datetime?: string;
+  date?: string;
+  start_time?: string;
+};
 type Confirming = {
   action_id: string;
   intent: string;
   preview: string;
   expires_at: string;
+  editable?: Editable;
 } | null;
 
 export function VoiceOrb({ onCompleted }: Props) {
