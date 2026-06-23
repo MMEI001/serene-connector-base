@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
     const voiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
       ? requestedVoiceId
       : DEFAULT_VOICE_ID;
+    console.log("[TTS] voice_id", voiceId);
 
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
 
@@ -107,6 +108,7 @@ Deno.serve(async (req) => {
         fallbackable ? 200 : resp.status,
       );
     }
+    console.log("[TTS] ElevenLabs status", resp.status);
 
     const audio = await resp.arrayBuffer();
     return new Response(audio, {

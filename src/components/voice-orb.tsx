@@ -16,6 +16,7 @@ import {
   savePendingAudio,
   deletePendingAudio,
 } from "@/lib/voice/pending-audio";
+import { speakText } from "@/lib/speak";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 
@@ -122,6 +123,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
+        void speakText(result.confirmation);
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -152,6 +154,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       // completed
       setConfirmation(result.confirmation);
+      void speakText(result.confirmation);
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
       onCompleted?.();
