@@ -167,7 +167,7 @@ function Dashboard() {
           <Textarea
             value={aiText}
             onChange={(e) => setAiText(e.target.value)}
-            placeholder="Wat speelt er in je hoofd? Typ het hier."
+            placeholder="Liever typen? Schrijf het hier."
             rows={3}
             disabled={aiBusy}
             className="resize-none border-0 bg-transparent p-0 text-base shadow-none focus-visible:ring-0"
