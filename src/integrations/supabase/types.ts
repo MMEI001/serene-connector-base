@@ -427,6 +427,7 @@ export type Database = {
           user_id: string
           voice_enabled: boolean | null
           voice_id: string | null
+          voice_provider: string
         }
         Insert: {
           created_at?: string
@@ -446,6 +447,7 @@ export type Database = {
           user_id: string
           voice_enabled?: boolean | null
           voice_id?: string | null
+          voice_provider?: string
         }
         Update: {
           created_at?: string
@@ -465,6 +467,7 @@ export type Database = {
           user_id?: string
           voice_enabled?: boolean | null
           voice_id?: string | null
+          voice_provider?: string
         }
         Relationships: []
       }
