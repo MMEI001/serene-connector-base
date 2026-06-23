@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RotateCcw, Check, X } from "lucide-react";
+import { RotateCcw, Check, X, Pencil } from "lucide-react";
 import { BreathingOrb } from "@/components/breathing-orb";
 import { QueryResultCard } from "@/components/voice-query-result";
 import { orbReducer, type OrbState } from "@/lib/voice/orb-state";
