@@ -3,7 +3,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { getSpeechProvider, TranscribeError } from "@/lib/voice/providers";
 
 const MAX_BYTES = 25 * 1024 * 1024;
-const RATE_LIMIT_PER_HOUR = 20;
+const RATE_LIMIT_PER_HOUR = 120;
 // Whisper-1: $0.006 per minuut (alleen accuraat voor openai/whisper).
 const COST_PER_SECOND = 0.006 / 60;
 
