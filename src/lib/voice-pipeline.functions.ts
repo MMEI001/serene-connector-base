@@ -298,7 +298,26 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           error: error?.message ?? "pending insert failed",
         };
       }
-      return { ...result, action_id: row.id as string, expires_at: expiresAt };
+      // Bewerkbare velden: alleen bij precies één confirmable actie.
+      let editable: PipelineResult["editable"] | undefined;
+      if (actions.length === 1) {
+        const a = actions[0];
+        if (a.intent === "reminder") {
+          editable = {
+            intent: "reminder",
+            title: String(a.payload.title ?? ""),
+            iso_datetime: typeof a.payload.iso_datetime === "string" ? a.payload.iso_datetime : undefined,
+          };
+        } else if (a.intent === "event") {
+          editable = {
+            intent: "event",
+            title: String(a.payload.title ?? ""),
+            date: typeof a.payload.date === "string" ? a.payload.date : undefined,
+            start_time: typeof a.payload.start_time === "string" ? a.payload.start_time : undefined,
+          };
+        }
+      }
+      return { ...result, action_id: row.id as string, expires_at: expiresAt, editable };
     }
 
     // 4b. completed/failed → audit-log
