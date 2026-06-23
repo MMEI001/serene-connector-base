@@ -1,64 +1,57 @@
-# Assistant Mode: dedupe preview + Bewerken/Annuleer/Bevestig
+## Doel
 
-Twee verbeteringen op de assistant_chat-flow.
+Wanneer Assistant Mode advies geeft én daaruit een reminder (of event) ontstaat, sla de concrete suggesties als korte subtekst op naast de actie. De titel blijft kort; de suggesties zijn context.
 
-## 1. Duplicate preview-regels
+Voorbeeld:
+- Titel: `Cadeau kopen`
+- Subtekst (klein/grijs): `Suggesties: knutselset, boekje of iets om samen te doen.`
 
-**Oorzaak:** GPT geeft vaak 2-3 identieke `suggested_actions` terug. Onze server-side defaults vullen ze allemaal met dezelfde `iso_datetime` en dezelfde titel (afgeleid uit de hele `assistant_reply`), dus de preview krijgt 3× dezelfde regel.
+## Wijzigingen
 
-**Fix in `src/lib/voice-pipeline.functions.ts`:**
-- Nieuwe `deriveTitleFromTranscript(transcript)`: zoekt korte actie-frase met patroon `<zelfstandig nw> + (kopen|halen|bellen|sturen|regelen|brengen|maken|boeken|reserveren|plannen)`. Geen match → eerste werkwoord + object, max 4 woorden. Geen match → "Herinnering".
-- Bij suggested_action defaults: titel afleiden uit het **transcript** (de vraag van de gebruiker), **niet** uit `assistant_reply`. Voorbeeld: *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"* → titel `Bloemen kopen`, niet `Bloemen zijn een uitstekend idee voor`.
-- Dedupe na normalisatie: `Map` op key `intent|iso_datetime|title.toLowerCase()`, neem eerste. Cap op max 2 acties.
+### 1. `src/lib/voice-pipeline.functions.ts` — suggesties extraheren
 
-## 2. Bewerken-knop
+Nieuwe helper `extractSuggestionsFromReply(reply: string): string | null`:
+- Zoekt naar lijstpatronen in `assistant_reply`:
+  - `denken aan X, Y of Z`
+  - `bijvoorbeeld X, Y of Z`
+  - `zoals X, Y of Z`
+  - `aan X, Y of Z` (na werkwoord "denken/voorstellen/overwegen")
+- Resultaat: `"Suggesties: knutselset, boekje of iets om samen te doen."` (max 2 regels, max ~140 tekens, anders afkappen op woordgrens met `…`).
+- Geen match of geen `assistant_chat` → `null`.
 
-**Doel:** bij een voorstel: `Annuleer | Bewerken | Bevestig`. Bewerken opent een klein formulier waar titel + datum/tijd aangepast kunnen worden, daarna pas opslaan.
+In de bestaande `assistant_chat`-tak, **na** het normaliseren van `suggested_actions`:
+- Bereken `subtext = extractSuggestionsFromReply(assistantReply)` één keer.
+- Voor elke `reminder`-actie: `payload.description = subtext` (alleen als geen `description` al gezet door GPT, en alleen als `subtext` niet-leeg).
+- Voor elke `event`-actie: `payload.notes = subtext` (idem voorwaardelijk). *(Event-handler gebruikt dit veld nog niet voor opslag; deze stap blijft compatibel — zie sectie 4.)*
 
-### Server (`src/lib/voice-confirm.functions.ts`)
-Breid `confirmVoiceAction` uit met optionele `overrides`:
-```ts
-{ action_id: string; overrides?: { title?: string; iso_datetime?: string; date?: string; start_time?: string } }
-```
-Indien aanwezig: merge in de payload van de **eerste** confirmable action vóór `commitVoiceBundle`. Validatie:
-- `title`: trim, min 1 char, max 200.
-- `iso_datetime`: regex `/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/`. Niet in verleden (> nu − 1 min).
-- `date`: `/^\d{4}-\d{2}-\d{2}$/`. `start_time`: `/^\d{2}:\d{2}$/`.
-Ongeldig → return `failed` met heldere melding (geen exception).
+### 2. `src/lib/voice/handlers/reminder.ts` — subtekst in preview
 
-### Pipeline result uitbreiden
-- `PipelineResult.editable?: { intent: "reminder" | "event"; title: string; iso_datetime?: string; date?: string; start_time?: string }` (alleen gevuld voor needs_confirmation met precies één confirmable action — de assistant_chat-case na dedupe).
-- Pipeline vult deze in `voice-pipeline.functions.ts` voor het needs_confirmation-pad.
+`previewReminder`:
+- Lees `description` uit payload (string, getrimd).
+- Als aanwezig: voeg toe aan `preview` als tweede regel, voorafgegaan door newline. `commitVoiceBundle`/UI splitten al op `\n` voor preview-lijst.
+  - `preview = "${when} — ${title}\n${description}"` (description al inclusief "Suggesties: …" prefix).
+- `confirmation` (TTS) blijft kort en ongewijzigd — geen suggesties hardop herhalen (de `assistant_reply` heeft ze al uitgesproken).
 
-### Types (`src/lib/voice/types.ts`)
-- `editable?` veld toevoegen aan `ActionResult` (optional, geen breaking change).
+`commitReminder` ongewijzigd: schrijft `description` al weg naar kolom `reminders.description`.
 
-### UI (`src/components/voice-orb.tsx`)
-- `Confirming` type krijgt optioneel `editable` veld (uit `result.editable`).
-- Knoppenrij in `state === "confirming"`:
-  - **Annuleer** (bestaand, links, secondary).
-  - **Bewerken** (nieuw, midden, secondary, `Pencil` icoon).
-  - **Bevestig** (bestaand, rechts, primary).
-- Bewerken-paneel (nieuwe state `isEditing: boolean`, alleen tonen als `confirming.editable` aanwezig):
-  - `<input type="text">` voor titel (prefill `editable.title`).
-  - Voor `reminder`: `<input type="datetime-local">` (prefill `editable.iso_datetime` → naar local string).
-  - Voor `event`: `<input type="date">` + `<input type="time">`.
-  - Twee knoppen: **Terug** (sluit editor zonder wijzigingen) en **Opslaan & bevestig** (roept `confirmFn` met `overrides`).
-  - Converteer `datetime-local` (lokale tijd in browser, NL-tz aanname) terug naar ISO met Amsterdam-offset via dezelfde helper als pipeline (gewoon `new Date(localStr).toISOString()` werkt niet voor DST-correctheid — gebruik een kleine inline helper die `+02:00`/`+01:00` plakt o.b.v. `Intl`).
-- Geen TTS bij openen van editor (alleen UI-actie).
-- `handleConfirm` accepteert nu een tweede arg `overrides?` en geeft die door.
+### 3. `src/components/voice-orb.tsx` — subtiele rendering
 
-### Geen wijzigingen aan
-- `dispatch-voice-action.ts` (commit-pad blijft identiek).
-- `getPendingVoiceAction` (revive-knop blijft simpele bevestiging — geen editor in revive-pad).
-- Reminder/event handlers (`previewReminder` / `commitReminder` etc.) — geheel hergebruikt.
-- TTS gedrag voor confirm-stap (advies blijft uitgesproken).
+De preview-bubble (regel 461-465) toont nu `whitespace-pre-line`. Splits in twee delen:
+- Eerste regel → normale tekst.
+- Overige regel(s) → kleinere, gedimde tekst (`text-xs text-muted-foreground/80 mt-1`).
+- Maximaal 2 regels subtekst (`line-clamp-2`).
+
+Logica: `const [head, ...rest] = confirming.preview.split("\n"); const sub = rest.join(" ").trim();`.
+
+### 4. Niet in scope (expliciet)
+
+- Event-handler aanpassen om `notes` op te slaan: het event-schema gebruikt nu geen `notes`-kolom voor deze flow; volgt later als de gebruiker dat ook bij agenda-items wil.
+- Wijzigingen aan de bewerken-flow: subtekst is niet bewerkbaar in deze ronde (kan later via apart veld).
+- GPT-prompt aanpassen: we leiden suggesties af uit bestaande `assistant_reply`, geen extra modelcall.
 
 ## Verificatie
 
-Met test *"Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"*:
-- Preview toont **één** regel: `vrijdag 09:00 — Bloemen kopen`.
-- Drie knoppen zichtbaar: Annuleer / Bewerken / Bevestig.
-- Klikken op Bewerken: titel-veld bevat `Bloemen kopen`, datum/tijd-veld bevat vrijdag 09:00. Aanpassen + Opslaan slaat de reminder met aangepaste waarden op (controle via `voice_actions` row + nieuwe `reminders` row).
-- Klikken op Annuleer: `voice_actions.status = failed`, error `cancelled`. Geen reminder aangemaakt.
-- Klikken op Bevestig zonder bewerken: zoals nu — reminder met `Bloemen kopen` op vrijdag 09:00.
+Test: *"Mijn dochter heeft volgende week een partijtje, ik zoek nog een cadeautje. Het kindje is 8 jaar."*
+- Preview toont: `vrijdag 09:00 — Cadeau kopen` + subtiele tweede regel `Suggesties: knutselset, boekje of iets om samen te doen.`
+- Na bevestigen: `reminders.title = "Cadeau kopen"`, `reminders.description = "Suggesties: …"`, `reminders.remind_at` = vrijdag 09:00 (default voor "volgende week").
+- TTS spreekt alleen de assistant-reply + "Wil je dit zo bevestigen?" — geen dubbele opsomming.

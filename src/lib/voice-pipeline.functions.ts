@@ -133,6 +133,33 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+/** Trek concrete suggesties uit een assistant_reply en formatteer als "Suggesties: …". */
+function extractSuggestionsFromReply(reply: string): string | null {
+  if (!reply) return null;
+  const text = reply.replace(/\s+/g, " ").trim();
+  const patterns = [
+    /(?:denken aan|denk aan|voorstellen|overweeg(?:en)?)\s+([^.!?]+)/i,
+    /\bbijvoorbeeld\s+([^.!?]+)/i,
+    /\bzoals\s+([^.!?]+)/i,
+  ];
+  let phrase: string | null = null;
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m && m[1]) { phrase = m[1].trim(); break; }
+  }
+  if (!phrase) return null;
+  phrase = phrase.replace(/\s+(ik kan|ik zou|wil je|zal ik)\b.*$/i, "").trim();
+  phrase = phrase.replace(/[,;:\s]+$/g, "");
+  if (phrase.length < 3) return null;
+  const MAX = 140;
+  if (phrase.length > MAX) {
+    const cut = phrase.slice(0, MAX);
+    const lastSpace = cut.lastIndexOf(" ");
+    phrase = (lastSpace > 40 ? cut.slice(0, lastSpace) : cut) + "…";
+  }
+  return `Suggesties: ${phrase}.`;
+}
+
 const MIN_WORDS = 2;
 const PENDING_TTL_MS = 5 * 60 * 1000;
 
@@ -220,6 +247,19 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         seen.add(key);
         deduped.push(a);
         if (deduped.length >= 2) break;
+      }
+      // Verrijk acties met subtiele suggestie-subtekst uit de assistant_reply.
+      const subtext = extractSuggestionsFromReply(assistantReply);
+      if (subtext) {
+        for (const a of deduped) {
+          if (a.intent === "reminder") {
+            const cur = typeof a.payload.description === "string" ? a.payload.description.trim() : "";
+            if (!cur) a.payload.description = subtext;
+          } else if (a.intent === "event") {
+            const cur = typeof a.payload.notes === "string" ? a.payload.notes.trim() : "";
+            if (!cur) a.payload.notes = subtext;
+          }
+        }
       }
       if (deduped.length > 0) {
         actions = deduped;

@@ -458,11 +458,18 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       {state === "confirming" && confirming && !isEditing && (
         <div className="mt-4 flex flex-col items-center gap-3">
-          {confirming.preview.includes("\n") && (
-            <div className="max-w-xs rounded-2xl bg-white/60 px-4 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] whitespace-pre-line text-left">
-              {confirming.preview}
-            </div>
-          )}
+          {confirming.preview.includes("\n") && (() => {
+            const [head, ...rest] = confirming.preview.split("\n");
+            const sub = rest.join(" ").trim();
+            return (
+              <div className="max-w-xs rounded-2xl bg-white/60 px-4 py-3 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] text-left">
+                <div className="text-sm text-foreground/80">{head}</div>
+                {sub && (
+                  <div className="mt-1 text-xs text-muted-foreground/80 line-clamp-2">{sub}</div>
+                )}
+              </div>
+            );
+          })()}
           <div className="flex items-center gap-2 flex-wrap justify-center">
             <button
               type="button"
