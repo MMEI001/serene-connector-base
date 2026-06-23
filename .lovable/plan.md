@@ -1,92 +1,63 @@
-# Personalisatie van HoofdRust op basis van onboarding
+# Diagnose Assistant Mode-fout
 
-Doel: twee gebruikers stellen dezelfde vraag, krijgen een antwoord dat past bij hun voorkeuren — in toon, lengte, hoeveelheid suggesties en standaard-acties.
+## Wat ik vond in de logs
 
-## Architectuur in één blik
+**Testzin** "Ik heb zaterdag een verjaardag, zal ik bloemen kopen?" — meerdere keren getest om 11:31, 11:32, 11:34, 11:35.
 
-```text
-user_profiles (DB)
-      │
-      ▼
-buildUserPersona(profile)   ← één pure functie, server-side
-      │   produceert:
-      │     - personaPrompt   (NL system-prompt fragment)
-      │     - personaHints    (gestructureerde defaults: max_suggestions, default_intent_bias, reminder_lead_time…)
-      ▼
-┌─────────────────────────┬──────────────────────────┬─────────────────────────┐
-│ process-voice-input     │ voice handlers           │ daily-ritual / speak    │
-│ (classifier system msg) │ (query/suggestion output)│ (begroeting + TTS toon) │
-└─────────────────────────┴──────────────────────────┴─────────────────────────┘
+**Classifier:** werkt correct.
+- `voice_intents.intent = assistant_chat`
+- `reply` bv. *"Bloemen zijn altijd een goed idee voor een verjaardag. Zal ik een herinnering voor je instellen om ze morgenochtend te halen?"*
+- `ambiguous = false`, geen `clarification_question` — precies zoals gewenst.
+
+**Enum-migratie:** OK. `enum_range(voice_intent)` bevat `assistant_chat` in de live DB.
+
+**Echte fout:** in `voice_actions`:
+```
+intent: assistant_chat
+status: failed
+error:  missing_fields
+confirmation_text: "Ik miste de tijd of het onderwerp."
 ```
 
-Eén bron van waarheid (`buildUserPersona`) — overal hetzelfde profiel, geen drift.
+## Oorzaak
 
-## Mapping: onboarding-antwoord → gedrag
+Het model stopt suggesties als reminder in `suggested_actions`, maar geeft natuurlijke taal mee ("morgenochtend", "vrijdag 09:00") in plaats van een ISO 8601 datetime. De pipeline doet:
 
-| Veld | Beïnvloedt | Concreet effect |
-|---|---|---|
-| `primary_goal` (multi) | system-prompt intro | "Focus op overzicht/rust/plannen…" als context-zin |
-| `support_style` (single) | toon + lengte | `Rustig en zacht` → langere, zachte zinnen · `Kort en duidelijk` → max 1 zin, geen vulwoorden · `Meedenkend` → 1 reflectievraag toegestaan · `Zo min mogelijk` → alleen bevestiging, geen extra tekst |
-| `overstimulation_level` (single) | max output-lengte + suggestie-cap | `Heel vaak` → hard cap 1 suggestie, geen emoji, geen vragen terug · `Bijna nooit` → mag meer details geven |
-| `suggestion_count_preference` | `personaHints.max_suggestions` | `Eén tegelijk`=1 · `Twee of drie`=3 · `Maakt me niet uit`=3 (default) |
-| `preferred_help_area` (multi) | intent-bias bij dubbelzinnige zinnen | bv. "kopen morgen" → met `Reminders` in voorkeur → reminder; met `Plannen` → event |
-| `reminder_style` | reminder-handler default | bv. `op de dag zelf` vs `dag van tevoren` → default lead-time wanneer gebruiker geen tijd noemt |
-| `planning_style` | event-handler default | bv. `met buffer` → default 15 min marge voor/na · `strak` → exacte tijden |
+```
+if (suggested.length > 0) actions = suggested
+→ dispatchVoiceBundle → previewReminder
+→ payload.iso_datetime ontbreekt → status: "failed", error: "missing_fields"
+```
 
-Onbekende/`null` velden → neutrale defaults (huidige gedrag).
+Daarna kent de pipeline `assistant_reply` alleen toe aan `result.confirmation` voor `needs_confirmation` of `completed`. Bij `failed` blijft de generieke errortekst staan → orb spreekt/toont "Het lukte even niet…".
 
-## Wat te bouwen
+Dus: classifier OK, dispatcher OK voor assistant_chat zélf, TTS/orb-pad OK — het breekt op de **suggested reminder zonder ISO**.
 
-### 1. `src/lib/voice/persona.ts` (nieuw, server-safe pure module)
-- `type UserPersona = { promptFragment: string; hints: PersonaHints }`
-- `type PersonaHints = { maxSuggestions: number; tone: "soft"|"brief"|"thoughtful"|"minimal"; reminderLeadHours: number|null; planningBufferMinutes: number; intentBias: VoiceIntent[]; allowFollowupQuestion: boolean }`
-- `buildUserPersona(profile: UserProfileRow | null): UserPersona` — deterministisch, geen I/O, makkelijk te unit-testen.
-- `renderPersonaPrompt(persona)`: produceert NL system-prompt fragment, bv:
-  ```
-  GEBRUIKERSPROFIEL
-  - Doel: meer overzicht, rust
-  - Gewenste toon: kort en duidelijk (max 1 zin, geen vulwoorden)
-  - Overprikkeling: vaak (geen tegenvragen, max 1 suggestie)
-  - Hulp bij voorkeur: reminders, loslaten
-  - Bij dubbelzinnige tijd: kies reminder boven event
-  ```
+## Fix
 
-### 2. `src/lib/voice/load-persona.functions.ts` (nieuw)
-- `loadPersona = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(...)` → leest `user_profiles` voor `context.userId`, retourneert `UserPersona`.
-- Cache binnen één request (closure-memo), niet globaal (stateless workers).
+Twee complementaire wijzigingen, beide in `src/lib/voice-pipeline.functions.ts` en `src/lib/voice/process-voice-input.ts`:
 
-### 3. Classifier — `src/lib/voice/process-voice-input.ts`
-- Functie krijgt `persona` mee en concatenate `renderPersonaPrompt(persona)` ná de bestaande system-prompt.
-- Gebruikt `persona.hints.intentBias` in een extra zin: "Bij twijfel tussen event/reminder: kies reminder."
-- `MAX_ACTIONS` blijft 3, maar prompt zegt: "geef max ${persona.hints.maxSuggestions} suggesties wanneer een query meerdere antwoorden heeft."
+1. **Server-side default voor suggested_actions zonder iso_datetime** (pipeline):
+   - Bij normalisatie van `suggested_actions`: als `intent=reminder` en `iso_datetime` ontbreekt/ongeldig → bereken default op basis van context:
+     - Probeer eerst een datum uit de oorspronkelijke transcript te halen (regex naar "zaterdag/zondag/…/morgen/overmorgen") en kies de werkdag ervóór, 09:00 Europe/Amsterdam.
+     - Anders: morgen 09:00 Europe/Amsterdam.
+   - Idem voor `intent=event` zonder `date`: gebruik dezelfde gevonden datum, default 09:00.
+   - Als titel ontbreekt → afleiden uit `reply` of fallback "Herinnering".
 
-### 4. Pipeline — `src/lib/voice-pipeline.functions.ts`
-- Roept `loadPersona` aan vóór `classify`, geeft persona door aan classifier én aan handlers.
-- Slaat `persona_hash` (sha-256 van JSON) op in `voice_actions.payload.meta` zodat we later A/B kunnen analyseren.
+2. **Failsafe in pipeline**: als na normalisatie/defaults de suggested actions tóch failen in `dispatchVoiceBundle`, val terug op alleen het assistant_chat-antwoord:
+   - `actions = [primary]` (assistant_chat)
+   - Dispatch opnieuw → `status: completed`, `confirmation = assistant_reply`
+   - Log dit als `voice_actions.status = completed` met `intent: assistant_chat`, zodat de gebruiker minimaal het gesproken advies hoort i.p.v. de generieke fout.
 
-### 5. Handlers
-- `handlers/query.ts`: gebruikt `persona.hints.maxSuggestions` om resultaat-lijst af te kappen + `tone` om antwoord-zin te formuleren (rustig vs. brief).
-- `handlers/reminder.ts`: bij ontbrekende tijd → `09:00` blijft; bij ontbrekende dag-offset bij gekoppelde reminder → `persona.hints.reminderLeadHours`.
-- `handlers/event.ts`: voegt `planningBufferMinutes` toe aan default-duur als gebruiker geen eindtijd noemt.
+3. **Prompt-aanscherping** (`process-voice-input.ts`): expliciet maken dat `suggested_actions[*].payload.iso_datetime` ALTIJD een volledige ISO 8601 string met Europe/Amsterdam-offset moet zijn — geen natuurlijke taal — en een voorbeeld toevoegen voor de zaterdag-bloemen-case. Dit voorkomt dat de fix-flow vaak nodig is.
 
-### 6. TTS / dagritueel
-- `src/lib/speak.ts` & `src/lib/daily-ritual.ts`: lezen al `user_profiles`; vervang ad-hoc velden door `buildUserPersona` zodat begroeting + stem-lengte consistent zijn met chat-output.
+## Niet aanraken
 
-### 7. Tests (vitest)
-- `persona.test.ts`: dekt elke `support_style`/`overstimulation_level` combinatie, lege profile, partial profile.
-- Snapshot van `renderPersonaPrompt` voor 3 archetypen (rustige gebruiker, brief-en-zakelijk, overprikkeld).
+- Enum-migratie (al doorgevoerd).
+- Classifier-keuze voor `assistant_chat` (werkt al correct, geen clarification meer).
+- TTS/orb-pad voor `completed`/`needs_confirmation` (werkt al, alleen `failed` werd verkeerd verwoord).
 
-## Wat NIET in deze ronde
+## Verificatie na implementatie
 
-- Geen embeddings / RAG over historisch gedrag (over-engineering nu).
-- Geen UI om persona-effect live te previewen — komt pas als de basis loopt.
-- Geen migrations: alle benodigde kolommen bestaan al in `user_profiles`.
-
-## Acceptatiecriteria
-
-1. Gebruiker A (`support_style="Kort en duidelijk"`, `overstimulation_level="Heel vaak"`, `suggestion_count_preference="Eén tegelijk"`) vraagt "Wat staat er morgen?" → resultaatkaart toont **max 1** item + één korte zin, geen tegenvraag.
-2. Gebruiker B (`support_style="Rustig en zacht"`, `suggestion_count_preference="Twee of drie"`) zelfde vraag → tot 3 items, zachtere formulering.
-3. Beide gebruikers zeggen "kopen morgen" zonder context: A met `preferred_help_area=["Reminders"]` → reminder bevestigingskaart; B met `["Plannen"]` → event-kaart.
-4. `voice_actions.payload.meta.persona_hash` gevuld.
-
-Geef akkoord en ik bouw stap 1→6 in deze volgorde; tests in dezelfde batch.
+- Run testzin opnieuw. Verwacht: `voice_intents.intent = assistant_chat`, en `voice_actions` één rij met `status = needs_confirmation` (preview "vrijdag 09:00 — Bloemen kopen") **of** `completed` met `intent=assistant_chat` (alleen advies). Geen `missing_fields`.
+- Orb spreekt het advies + (indien preview) "Wil je dit zo bevestigen?".
