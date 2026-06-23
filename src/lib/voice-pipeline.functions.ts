@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
 import { dispatchVoiceBundle } from "@/lib/voice/dispatch-voice-action";
+import { loadUserPersona } from "@/lib/voice/load-persona";
 import type { PipelineResult } from "@/lib/voice/types";
 
 const MIN_WORDS = 2;
