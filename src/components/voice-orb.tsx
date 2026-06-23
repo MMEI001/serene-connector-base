@@ -179,7 +179,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
-      void speakText(spoken);
+      void speakText(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
       onCompleted?.();
