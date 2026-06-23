@@ -321,14 +321,18 @@ export function VoiceOrb({ onCompleted }: Props) {
   }, []);
 
   const handleConfirm = useCallback(
-    async (actionId: string) => {
+    async (
+      actionId: string,
+      overrides?: { title?: string; iso_datetime?: string; date?: string; start_time?: string },
+    ) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setRevive(null);
+      setIsEditing(false);
       dispatch({ type: "CONFIRM" });
       setConfirmation("Even verwerken…");
       try {
-        const result = await confirmFn({ data: { action_id: actionId } });
+        const result = await confirmFn({ data: { action_id: actionId, overrides } });
         handleResult(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Er ging iets mis.";
@@ -345,12 +349,72 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setRevive(null);
+      setIsEditing(false);
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
     },
     [cancelFn],
   );
+
+  const openEditor = useCallback(() => {
+    if (!confirming?.editable) return;
+    const e = confirming.editable;
+    setEditTitle(e.title ?? "");
+    if (e.intent === "reminder" && e.iso_datetime) {
+      // ISO met tz-offset → local "YYYY-MM-DDTHH:mm" voor datetime-local input.
+      const d = new Date(e.iso_datetime);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      setEditDateTime(
+        `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`,
+      );
+    } else {
+      setEditDateTime("");
+    }
+    setEditDate(e.date ?? "");
+    setEditTime(e.start_time ?? "");
+    setIsEditing(true);
+  }, [confirming]);
+
+  const saveEdit = useCallback(() => {
+    if (!confirming?.editable) return;
+    const title = editTitle.trim();
+    if (!title) {
+      toast.error("Geef een korte titel.");
+      return;
+    }
+    const overrides: { title?: string; iso_datetime?: string; date?: string; start_time?: string } = { title };
+    if (confirming.editable.intent === "reminder") {
+      if (!editDateTime) {
+        toast.error("Kies een datum en tijd.");
+        return;
+      }
+      // datetime-local is lokale tijd; converteer naar ISO met Europe/Amsterdam offset.
+      const [datePart, timePart] = editDateTime.split("T");
+      const [y, m, d] = datePart.split("-").map(Number);
+      const [hh, mm] = timePart.split(":").map(Number);
+      const utc = Date.UTC(y, m - 1, d, hh, mm);
+      const dt = new Date(utc);
+      const tzName = new Intl.DateTimeFormat("en-US", {
+        timeZone: "Europe/Amsterdam",
+        timeZoneName: "shortOffset",
+      }).formatToParts(dt).find((p) => p.type === "timeZoneName")?.value ?? "GMT+1";
+      const off = tzName.match(/GMT([+-]\d+)/);
+      const oh = off ? parseInt(off[1], 10) : 1;
+      const sign = oh >= 0 ? "+" : "-";
+      const pad = (n: number) => String(n).padStart(2, "0");
+      overrides.iso_datetime = `${y}-${pad(m)}-${pad(d)}T${pad(hh)}:${pad(mm)}:00${sign}${pad(Math.abs(oh))}:00`;
+    } else {
+      if (!editDate || !editTime) {
+        toast.error("Kies een datum en tijd.");
+        return;
+      }
+      overrides.date = editDate;
+      overrides.start_time = editTime;
+    }
+    void handleConfirm(confirming.action_id, overrides);
+  }, [confirming, editTitle, editDateTime, editDate, editTime, handleConfirm]);
+
 
   const handleTap = useCallback(() => {
     if (state === "confirming") return; // alleen via knoppen
