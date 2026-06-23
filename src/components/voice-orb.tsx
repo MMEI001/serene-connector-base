@@ -338,7 +338,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const hint =
     state === "listening" ? `Tik om te stoppen (${elapsed}s)`
     : state === "processing" ? "Even verwerken…"
-    : state === "confirming" ? confirming?.preview ?? "Klopt dit?"
+    : state === "confirming" ? (confirming?.preview?.includes("\n") ? "Klopt dit?" : confirming?.preview ?? "Klopt dit?")
     : state === "done" ? confirmation || "Klaar."
     : state === "error" && pending ? "Het lukte even niet. Tik om opnieuw te proberen."
     : state === "error" ? "Probeer opnieuw"
