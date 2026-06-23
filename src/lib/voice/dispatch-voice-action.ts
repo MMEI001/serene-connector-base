@@ -64,7 +64,7 @@ async function dispatchSingle(ctx: Ctx, action: VoiceAction): Promise<ActionResu
     case "note":
       return handleNote(ctx, action.payload);
     case "query":
-      return handleQuery(ctx, action.payload);
+      return handleQuery(ctx, action.payload, ctx.persona);
     case "checkin":
       return handleCheckin(ctx, action.payload);
     case "reminder":
