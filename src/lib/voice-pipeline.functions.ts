@@ -185,13 +185,13 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
                 : {};
 
               // Vul slimme defaults in zodat preview niet faalt op ontbrekende velden.
-              const replyForTitle = assistantReply ?? "Herinnering";
+              const titleFromTranscript = deriveTitleFromTranscript(text);
               if (intent === "reminder") {
                 const iso = typeof payload.iso_datetime === "string" ? payload.iso_datetime : "";
                 const validIso = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(iso);
                 if (!validIso) payload.iso_datetime = deriveDefaultIso(text);
                 const title = typeof payload.title === "string" ? payload.title.trim() : "";
-                if (!title) payload.title = deriveTitleFromReply(replyForTitle);
+                if (!title) payload.title = titleFromTranscript;
               } else if (intent === "event") {
                 const date = typeof payload.date === "string" ? payload.date : "";
                 const validDate = /^\d{4}-\d{2}-\d{2}$/.test(date);
@@ -201,18 +201,28 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
                 }
                 if (!payload.start_time) payload.start_time = "09:00";
                 const title = typeof payload.title === "string" ? payload.title.trim() : "";
-                if (!title) payload.title = deriveTitleFromReply(replyForTitle);
+                if (!title) payload.title = titleFromTranscript;
               } else if (intent === "note") {
                 const t = typeof payload.text === "string" ? payload.text.trim() : "";
-                if (!t) payload.text = replyForTitle;
+                if (!t) payload.text = assistantReply ?? titleFromTranscript;
               }
 
               return { intent, payload, confidence: 0.7 };
             })
             .filter((x): x is VoiceAction => !!x)
         : [];
-      if (suggested.length > 0) {
-        actions = suggested;
+      // Dedupe op intent + tijd + titel; cap op max 2.
+      const seen = new Set<string>();
+      const deduped: VoiceAction[] = [];
+      for (const a of suggested) {
+        const key = `${a.intent}|${String(a.payload.iso_datetime ?? a.payload.date ?? "")}|${String(a.payload.title ?? a.payload.text ?? "").toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        deduped.push(a);
+        if (deduped.length >= 2) break;
+      }
+      if (deduped.length > 0) {
+        actions = deduped;
       } else {
         actions = [primary];
       }
