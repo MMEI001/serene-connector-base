@@ -16,7 +16,7 @@ const ALLOWED_VOICE_IDS = new Set([
   "Xb7hH8MSUJpSbSDYk0k2",
   "pFZP5JQG7iQjIQuC4Bku",
   "nPczCjzI2devNBz1zQrb",
-  "onwK4e9ZLuTAKqWW03F0",
+  "onwK4e9ZLuTAKqWW03F9",
 ]);
 const MODEL_ID = "eleven_multilingual_v2";
 const MAX_CHARS = 1000;
