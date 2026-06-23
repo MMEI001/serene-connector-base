@@ -338,7 +338,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const hint =
     state === "listening" ? `Tik om te stoppen (${elapsed}s)`
     : state === "processing" ? "Even verwerken…"
-    : state === "confirming" ? confirming?.preview ?? "Klopt dit?"
+    : state === "confirming" ? (confirming?.preview?.includes("\n") ? "Klopt dit?" : confirming?.preview ?? "Klopt dit?")
     : state === "done" ? confirmation || "Klaar."
     : state === "error" && pending ? "Het lukte even niet. Tik om opnieuw te proberen."
     : state === "error" ? "Probeer opnieuw"
@@ -360,23 +360,30 @@ export function VoiceOrb({ onCompleted }: Props) {
       </p>
 
       {state === "confirming" && confirming && (
-        <div className="mt-4 flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => handleCancel(confirming.action_id)}
-            className="inline-flex items-center gap-2 rounded-full bg-white/60 px-5 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
-          >
-            <X className="h-4 w-4" />
-            Annuleer
-          </button>
-          <button
-            type="button"
-            onClick={() => handleConfirm(confirming.action_id)}
-            className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
-          >
-            <Check className="h-4 w-4" />
-            Bevestig
-          </button>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          {confirming.preview.includes("\n") && (
+            <div className="max-w-xs rounded-2xl bg-white/60 px-4 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] whitespace-pre-line text-left">
+              {confirming.preview}
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleCancel(confirming.action_id)}
+              className="inline-flex items-center gap-2 rounded-full bg-white/60 px-5 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+            >
+              <X className="h-4 w-4" />
+              Annuleer
+            </button>
+            <button
+              type="button"
+              onClick={() => handleConfirm(confirming.action_id)}
+              className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+            >
+              <Check className="h-4 w-4" />
+              Bevestig
+            </button>
+          </div>
         </div>
       )}
 

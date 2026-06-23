@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion, useScroll, useTransform } from "motion/react";
-import { Lock } from "lucide-react";
+import { Lock, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -36,13 +36,14 @@ type DisplayEvent = {
   sourceLabel: string;
   color: string | null;
   title: string;
-  date: string; // YYYY-MM-DD
-  startTime: string | null; // HH:MM
+  date: string;
+  startTime: string | null;
   endTime: string | null;
   appointmentId: string | null;
   description?: string | null;
   location?: string | null;
   calendarUrl?: string | null;
+  hasReminder?: boolean;
 };
 
 type IcsProvider = {
@@ -196,6 +197,13 @@ function ApptList({
                         strokeWidth={2}
                       />
                     )}
+                    {a.hasReminder && (
+                      <Bell
+                        aria-label="Gekoppelde reminder"
+                        className="absolute right-4 top-4 h-3.5 w-3.5 text-muted-foreground/70"
+                        strokeWidth={2}
+                      />
+                    )}
                     <div className="ml-3 flex items-baseline justify-between gap-3 pr-6">
                       <h3 className="min-w-0 truncate text-[15px] font-medium text-foreground">
                         {a.title}
@@ -275,7 +283,7 @@ function AgendaPage() {
       const to = new Date(now);
       to.setDate(to.getDate() + 180);
 
-      const [apptRes, icsRes] = await Promise.all([
+      const [apptRes, icsRes, remindersRes] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, title, description, date, start_time, end_time")
@@ -288,9 +296,22 @@ function AgendaPage() {
           console.warn("[agenda] ics fetch failed", e);
           return [] as Awaited<ReturnType<typeof fetchIcs>>;
         }),
+        supabase
+          .from("reminders")
+          .select("related_appointment_id" as never)
+          .eq("user_id", user.id)
+          .not("related_appointment_id" as never, "is", null),
       ]);
 
       if (apptRes.error) console.error("[agenda]", apptRes.error);
+
+      const linkedApptIds = new Set<string>();
+      const remindersData = (remindersRes.data ?? []) as unknown as Array<{
+        related_appointment_id: string | null;
+      }>;
+      for (const r of remindersData) {
+        if (r.related_appointment_id) linkedApptIds.add(r.related_appointment_id);
+      }
 
       const merged: DisplayEvent[] = [];
       for (const a of apptRes.data ?? []) {
@@ -304,6 +325,7 @@ function AgendaPage() {
           startTime: a.start_time ? a.start_time.slice(0, 5) : null,
           endTime: a.end_time ? a.end_time.slice(0, 5) : null,
           appointmentId: a.id,
+          hasReminder: linkedApptIds.has(a.id),
         });
       }
       for (const e of icsRes ?? []) {
