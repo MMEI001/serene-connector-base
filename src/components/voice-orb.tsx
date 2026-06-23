@@ -403,7 +403,17 @@ export function VoiceOrb({ onCompleted }: Props) {
         </button>
       )}
 
-      {queryResult && state === "done" && <QueryResultCard data={queryResult} />}
+      {queryResult && (
+        <QueryResultCard
+          data={queryResult}
+          onClose={() => {
+            setQueryResult(null);
+            setConfirmation("");
+            dispatch({ type: "RESET" });
+          }}
+        />
+      )}
+
 
       {state === "idle" && revive && (
         <button
