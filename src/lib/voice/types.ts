@@ -1,4 +1,4 @@
-// Frozen contract — fase B vult `processVoiceInput` met GPT, signature blijft gelijk.
+// Contracten voor de voice-pipeline (fase B).
 
 export type VoiceIntent =
   | "release"
@@ -18,6 +18,25 @@ export type VoiceAction = {
   intent: VoiceIntent;
   payload: Record<string, unknown>;
   confidence: number;
+  ambiguous?: boolean;
+  clarification_question?: string | null;
+};
+
+/** Eén regel in een query-resultaat (agenda + reminders). */
+export type QueryItem = {
+  id: string;
+  kind: "appointment" | "reminder" | "ics_event";
+  title: string;
+  /** Geformatteerde Nederlandse tijd-/datum-tekst, bv. "vrijdag 14:00". */
+  when: string;
+  source: string; // 'manual' | 'ics' | naam van externe agenda
+  source_label?: string | null;
+  external_url?: string | null;
+};
+
+export type QueryResult = {
+  intro: string;
+  items: QueryItem[];
 };
 
 export type ActionResult = {
@@ -25,11 +44,23 @@ export type ActionResult = {
   status: VoiceActionStatus;
   /** Korte bevestiging voor de orb-UI ("Losgelaten.", "Reminder gezet."). */
   confirmation: string;
-  /** Verwijzing naar de aangemaakte rij, indien van toepassing. */
+  /** Verwijzing naar de aangemaakte rij (bij completed). */
   ref?: { table: string; id: string };
   /** Foutmelding (alleen bij status=failed). */
   error?: string;
+
+  // ---- needs_confirmation extras ----
+  /** voice_actions.id om later te bevestigen / annuleren. */
+  action_id?: string;
+  /** Korte preview-tekst boven Bevestig/Annuleer ("Reminder morgen 09:00 — tandarts"). */
+  preview?: string;
+  /** Wanneer verloopt deze pending actie (ISO). */
+  expires_at?: string;
+
+  // ---- query extras ----
+  query_result?: QueryResult;
+  /** Voor 'open in externe agenda'-flow op ICS-events. */
+  external_url?: string | null;
 };
 
-/** Pipeline-resultaat richting de client (orb-state). */
 export type PipelineResult = ActionResult;

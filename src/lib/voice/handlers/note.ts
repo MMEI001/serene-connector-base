@@ -3,7 +3,7 @@ import type { ActionResult } from "../types";
 
 type Ctx = { supabase: SupabaseClient; userId: string };
 
-// Fase B: sla op in `notes`.
+// Fase B-2: dedicated notes-tabel. Voor nu: stub.
 export async function handleNote(
   _ctx: Ctx,
   _payload: Record<string, unknown>,

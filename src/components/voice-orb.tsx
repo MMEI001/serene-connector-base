@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, Check, X } from "lucide-react";
 import { BreathingOrb } from "@/components/breathing-orb";
+import { QueryResultCard } from "@/components/voice-query-result";
 import { orbReducer, type OrbState } from "@/lib/voice/orb-state";
 import { transcribeAudio } from "@/lib/transcribe.functions";
 import { runVoicePipeline } from "@/lib/voice-pipeline.functions";
+import {
+  confirmVoiceAction,
+  cancelVoiceAction,
+  getPendingVoiceAction,
+} from "@/lib/voice-confirm.functions";
 import {
   savePendingAudio,
   deletePendingAudio,
 } from "@/lib/voice/pending-audio";
 import { useAuth } from "@/hooks/use-auth";
+import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 
-// Fase A vangnet: 60s harde max-opname. Echte silence-detection komt later
-// (Web Audio AnalyserNode op de mic-stream).
 const MAX_RECORDING_SECONDS = 60;
 const DONE_HOLD_MS = 1600;
+const CONFIRM_TIMEOUT_MS = 30_000;
 
 function vibrate(pattern: number | number[]) {
   if (typeof navigator !== "undefined" && "vibrate" in navigator) {
@@ -30,27 +36,37 @@ function blobExt(mimeType: string) {
   return "webm";
 }
 
-type Props = {
-  onCompleted?: () => void;
-};
-
+type Props = { onCompleted?: () => void };
 type Pending = { id: string; blob: Blob; mimeType: string } | null;
+type Confirming = {
+  action_id: string;
+  intent: string;
+  preview: string;
+  expires_at: string;
+} | null;
 
 export function VoiceOrb({ onCompleted }: Props) {
   const { user } = useAuth();
   const transcribe = useServerFn(transcribeAudio);
   const pipeline = useServerFn(runVoicePipeline);
+  const confirmFn = useServerFn(confirmVoiceAction);
+  const cancelFn = useServerFn(cancelVoiceAction);
+  const getPending = useServerFn(getPendingVoiceAction);
 
   const [state, dispatch] = useReducer(orbReducer, "idle" as OrbState);
   const [confirmation, setConfirmation] = useState<string>("");
   const [elapsed, setElapsed] = useState(0);
   const [pending, setPending] = useState<Pending>(null);
+  const [confirming, setConfirming] = useState<Confirming>(null);
+  const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [revive, setRevive] = useState<Confirming>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stopTimer = useCallback(() => {
     if (timerRef.current) {
@@ -68,21 +84,85 @@ export function VoiceOrb({ onCompleted }: Props) {
     return () => {
       stopTimer();
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       cleanupStream();
     };
   }, [stopTimer, cleanupStream]);
+
+  // Bij mount: check of er een nog-niet-verlopen pending actie is (revive na timeout).
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    getPending()
+      .then((p) => {
+        if (cancelled || !p) return;
+        setRevive(p);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [user, getPending]);
 
   const scheduleReset = useCallback(() => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     resetTimerRef.current = setTimeout(() => {
       setConfirmation("");
+      setQueryResult(null);
       dispatch({ type: "RESET" });
     }, DONE_HOLD_MS);
   }, []);
 
+  const handleResult = useCallback(
+    (result: PipelineResult) => {
+      if (result.status === "skipped") {
+        setConfirmation("");
+        dispatch({ type: "RESET" });
+        return;
+      }
+      if (result.status === "needs_confirmation" && result.action_id) {
+        setConfirmation(result.confirmation);
+        setConfirming({
+          action_id: result.action_id,
+          intent: result.intent,
+          preview: result.preview ?? result.confirmation,
+          expires_at: result.expires_at ?? new Date(Date.now() + CONFIRM_TIMEOUT_MS).toISOString(),
+        });
+        setRevive(null);
+        dispatch({ type: "NEEDS_CONFIRMATION" });
+        // 30s "snoozen" — daarna blijft 'm 5 min revive-baar via getPending
+        if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+        confirmTimerRef.current = setTimeout(() => {
+          setConfirming((cur) => {
+            if (!cur) return cur;
+            setRevive(cur);
+            return null;
+          });
+          setConfirmation("");
+          dispatch({ type: "RESET" });
+        }, CONFIRM_TIMEOUT_MS);
+        return;
+      }
+      if (result.status === "failed") {
+        setConfirmation("");
+        dispatch({ type: "FAIL", message: result.error });
+        toast.error(result.confirmation || "Er ging iets mis.");
+        scheduleReset();
+        return;
+      }
+      // completed
+      setConfirmation(result.confirmation);
+      if (result.query_result) setQueryResult(result.query_result);
+      dispatch({ type: "DISPATCHED" });
+      vibrate(20);
+      onCompleted?.();
+      scheduleReset();
+    },
+    [onCompleted, scheduleReset],
+  );
+
   const runPipeline = useCallback(
     async (blob: Blob, mimeType: string, existingPendingId?: string) => {
-      // Stap 1: transcribe. Bij fout → blob bewaren voor retry, geen auto-reset.
       let trans: Awaited<ReturnType<typeof transcribe>>;
       try {
         const file = new File([blob], `recording.${blobExt(mimeType)}`, { type: mimeType });
@@ -105,42 +185,18 @@ export function VoiceOrb({ onCompleted }: Props) {
         setConfirmation("");
         dispatch({ type: "FAIL", message: msg });
         toast.error("Het lukte even niet. Tik op opnieuw om te proberen.");
-        return; // bewust geen scheduleReset — retry-knop blijft staan
+        return;
       }
 
       dispatch({ type: "TRANSCRIBED" });
-
-      // Transcriptie geslaagd → pending audio is overbodig.
-      if (existingPendingId) {
-        deletePendingAudio(existingPendingId).catch(() => {});
-      }
+      if (existingPendingId) deletePendingAudio(existingPendingId).catch(() => {});
       setPending(null);
 
-      // Stap 2: dispatcher
       try {
         const result = await pipeline({
           data: { text: trans.text, transcription_id: trans.transcription_id },
         });
-
-        if (result.status === "skipped") {
-          setConfirmation("");
-          dispatch({ type: "RESET" });
-          return;
-        }
-
-        if (result.status === "failed") {
-          setConfirmation("");
-          dispatch({ type: "FAIL", message: result.error });
-          toast.error(result.confirmation || "Er ging iets mis.");
-          scheduleReset();
-          return;
-        }
-
-        setConfirmation(result.confirmation);
-        dispatch({ type: "DISPATCHED" });
-        vibrate(20);
-        if (result.status === "completed") onCompleted?.();
-        scheduleReset();
+        handleResult(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Er ging iets mis.";
         setConfirmation("");
@@ -149,14 +205,13 @@ export function VoiceOrb({ onCompleted }: Props) {
         scheduleReset();
       }
     },
-    [transcribe, pipeline, onCompleted, scheduleReset, user?.id],
+    [transcribe, pipeline, handleResult, scheduleReset, user?.id],
   );
 
   const retryPending = useCallback(async () => {
     if (!pending) return;
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
     setConfirmation("");
-    // Forceer terug naar processing: simuleer een nieuwe tap-flow.
     dispatch({ type: "RESET" });
     dispatch({ type: "TAP" });
     dispatch({ type: "STOP" });
@@ -232,7 +287,40 @@ export function VoiceOrb({ onCompleted }: Props) {
     dispatch({ type: "STOP" });
   }, []);
 
+  const handleConfirm = useCallback(
+    async (actionId: string) => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirming(null);
+      setRevive(null);
+      dispatch({ type: "CONFIRM" });
+      setConfirmation("Even verwerken…");
+      try {
+        const result = await confirmFn({ data: { action_id: actionId } });
+        handleResult(result);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Er ging iets mis.";
+        dispatch({ type: "FAIL", message: msg });
+        toast.error(msg);
+        scheduleReset();
+      }
+    },
+    [confirmFn, handleResult, scheduleReset],
+  );
+
+  const handleCancel = useCallback(
+    async (actionId: string) => {
+      if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
+      setConfirming(null);
+      setRevive(null);
+      setConfirmation("");
+      dispatch({ type: "CANCEL" });
+      cancelFn({ data: { action_id: actionId } }).catch(() => {});
+    },
+    [cancelFn],
+  );
+
   const handleTap = useCallback(() => {
+    if (state === "confirming") return; // alleen via knoppen
     if (state === "error" && pending) {
       retryPending();
       return;
@@ -240,6 +328,7 @@ export function VoiceOrb({ onCompleted }: Props) {
     if (state === "idle" || state === "done" || state === "error") {
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
       setConfirmation("");
+      setQueryResult(null);
       startListening();
     } else if (state === "listening") {
       stopListening();
@@ -249,6 +338,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const hint =
     state === "listening" ? `Tik om te stoppen (${elapsed}s)`
     : state === "processing" ? "Even verwerken…"
+    : state === "confirming" ? confirming?.preview ?? "Klopt dit?"
     : state === "done" ? confirmation || "Klaar."
     : state === "error" && pending ? "Het lukte even niet. Tik om opnieuw te proberen."
     : state === "error" ? "Probeer opnieuw"
@@ -264,18 +354,54 @@ export function VoiceOrb({ onCompleted }: Props) {
       />
       <p
         aria-live="polite"
-        className="mt-6 min-h-[1.5rem] text-sm text-muted-foreground"
+        className="mt-6 min-h-[1.5rem] text-sm text-muted-foreground text-center px-6"
       >
         {hint}
       </p>
+
+      {state === "confirming" && confirming && (
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => handleCancel(confirming.action_id)}
+            className="inline-flex items-center gap-2 rounded-full bg-white/60 px-5 py-2.5 text-sm font-medium text-foreground/70 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+          >
+            <X className="h-4 w-4" />
+            Annuleer
+          </button>
+          <button
+            type="button"
+            onClick={() => handleConfirm(confirming.action_id)}
+            className="inline-flex items-center gap-2 rounded-full bg-foreground/90 px-5 py-2.5 text-sm font-medium text-background backdrop-blur-md shadow-[0_2px_12px_rgba(139,126,115,0.12)] transition-transform duration-200 active:scale-95"
+          >
+            <Check className="h-4 w-4" />
+            Bevestig
+          </button>
+        </div>
+      )}
+
       {state === "error" && pending && (
         <button
           type="button"
           onClick={retryPending}
-          className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] hover:scale-[1.02] active:scale-95"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-white/70 px-4 py-2 text-xs font-medium text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-300 active:scale-95"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Opnieuw proberen
+        </button>
+      )}
+
+      {queryResult && state === "done" && <QueryResultCard data={queryResult} />}
+
+      {state === "idle" && revive && (
+        <button
+          type="button"
+          onClick={() => handleConfirm(revive.action_id)}
+          className="mt-4 inline-flex flex-col items-center gap-1 rounded-2xl bg-white/60 px-5 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
+        >
+          <span className="text-xs text-muted-foreground">Nog niet bevestigd</span>
+          <span className="font-medium">{revive.preview}</span>
+          <span className="text-xs text-muted-foreground mt-0.5">Tik om alsnog te bevestigen</span>
         </button>
       )}
     </div>

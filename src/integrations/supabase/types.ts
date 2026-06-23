@@ -459,8 +459,10 @@ export type Database = {
       }
       voice_actions: {
         Row: {
+          confirmation_text: string | null
           created_at: string
           error: string | null
+          expires_at: string | null
           id: string
           intent: Database["public"]["Enums"]["voice_intent"]
           payload: Json
@@ -471,8 +473,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          confirmation_text?: string | null
           created_at?: string
           error?: string | null
+          expires_at?: string | null
           id?: string
           intent: Database["public"]["Enums"]["voice_intent"]
           payload?: Json
@@ -483,8 +487,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          confirmation_text?: string | null
           created_at?: string
           error?: string | null
+          expires_at?: string | null
           id?: string
           intent?: Database["public"]["Enums"]["voice_intent"]
           payload?: Json
@@ -530,6 +536,57 @@ export type Database = {
           id?: string
           provider?: string
           stage?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      voice_intents: {
+        Row: {
+          ambiguous: boolean
+          clarification_question: string | null
+          completion_tokens: number | null
+          confidence: number | null
+          cost_usd: number | null
+          created_at: string
+          id: string
+          intent: Database["public"]["Enums"]["voice_intent"]
+          model: string
+          payload: Json
+          prompt_tokens: number | null
+          total_tokens: number | null
+          transcription_id: string | null
+          user_id: string
+        }
+        Insert: {
+          ambiguous?: boolean
+          clarification_question?: string | null
+          completion_tokens?: number | null
+          confidence?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          intent: Database["public"]["Enums"]["voice_intent"]
+          model: string
+          payload?: Json
+          prompt_tokens?: number | null
+          total_tokens?: number | null
+          transcription_id?: string | null
+          user_id: string
+        }
+        Update: {
+          ambiguous?: boolean
+          clarification_question?: string | null
+          completion_tokens?: number | null
+          confidence?: number | null
+          cost_usd?: number | null
+          created_at?: string
+          id?: string
+          intent?: Database["public"]["Enums"]["voice_intent"]
+          model?: string
+          payload?: Json
+          prompt_tokens?: number | null
+          total_tokens?: number | null
+          transcription_id?: string | null
           user_id?: string
         }
         Relationships: []
