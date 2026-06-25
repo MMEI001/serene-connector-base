@@ -358,8 +358,8 @@ export function VoiceOrb({ onCompleted }: Props) {
     async (actionId: string) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
-      setRevive(null);
       setIsEditing(false);
+
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
