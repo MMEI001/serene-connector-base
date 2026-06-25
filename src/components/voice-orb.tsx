@@ -212,7 +212,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
-      void speakText(spoken, { intent: result.intent });
+      void speakAndAnimate(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
 
