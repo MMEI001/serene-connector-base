@@ -163,20 +163,17 @@ export function VoiceOrb({ onCompleted }: Props) {
           editable: result.editable,
         });
         setIsEditing(false);
-        setRevive(null);
         dispatch({ type: "NEEDS_CONFIRMATION" });
-        // 30s "snoozen" — daarna blijft 'm 5 min revive-baar via getPending
+        // 30s "snooze": orb komt vrij voor nieuwe input, maar de bevestigingskaart
+        // blijft staan (revive). Bevestig/Bewerken/Annuleer blijven beschikbaar
+        // tot de server-side expiry (5 min) of een nieuwe pipeline-actie.
         if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
         confirmTimerRef.current = setTimeout(() => {
-          setConfirming((cur) => {
-            if (!cur) return cur;
-            setRevive(cur);
-            return null;
-          });
           setConfirmation("");
           dispatch({ type: "RESET" });
         }, CONFIRM_TIMEOUT_MS);
         return;
+
       }
       if (result.status === "failed") {
         setConfirmation("");
