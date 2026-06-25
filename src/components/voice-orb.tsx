@@ -17,6 +17,11 @@ import {
   deletePendingAudio,
 } from "@/lib/voice/pending-audio";
 import { speakText } from "@/lib/speak";
+import {
+  preloadAckAudio,
+  playAcknowledgement,
+  stopAcknowledgement,
+} from "@/lib/voice/ack-audio";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 
