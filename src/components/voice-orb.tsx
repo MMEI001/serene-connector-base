@@ -103,20 +103,33 @@ export function VoiceOrb({ onCompleted }: Props) {
     };
   }, [stopTimer, cleanupStream]);
 
-  // Bij mount: check of er een nog-niet-verlopen pending actie is (revive na timeout).
+  // Bij mount: check of er een nog-niet-verlopen pending actie is (revive na app-restart of timeout).
+  // We hydrateren de bestaande confirming-flow zodat Bewerken/Annuleer/Bevestig identiek werken.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     getPending()
       .then((p) => {
         if (cancelled || !p) return;
-        setRevive(p);
+        // Alleen reviven als we niet al midden in een nieuwe interactie zitten.
+        setConfirming((cur) => {
+          if (cur) return cur;
+          dispatch({ type: "NEEDS_CONFIRMATION" });
+          return {
+            action_id: p.action_id,
+            intent: p.intent,
+            preview: p.preview,
+            expires_at: p.expires_at,
+            editable: p.editable,
+          };
+        });
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [user, getPending]);
+
 
   const scheduleReset = useCallback(() => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
