@@ -17,6 +17,11 @@ import {
   deletePendingAudio,
 } from "@/lib/voice/pending-audio";
 import { speakText } from "@/lib/speak";
+import {
+  preloadAckAudio,
+  playAcknowledgement,
+  stopAcknowledgement,
+} from "@/lib/voice/ack-audio";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 
@@ -80,6 +85,8 @@ export function VoiceOrb({ onCompleted }: Props) {
   const speakAndAnimate = useCallback(
     async (text: string, opts?: Parameters<typeof speakText>[1]) => {
       setIsSpeaking(true);
+      // Het echte AI-antwoord begint nu te spreken — kap de wacht-erkenning af.
+      stopAcknowledgement();
       try {
         await speakText(text, opts);
       } finally {
@@ -110,11 +117,13 @@ export function VoiceOrb({ onCompleted }: Props) {
   }, []);
 
   useEffect(() => {
+    preloadAckAudio();
     return () => {
       stopTimer();
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       cleanupStream();
+      stopAcknowledgement();
     };
   }, [stopTimer, cleanupStream]);
 
@@ -328,7 +337,14 @@ export function VoiceOrb({ onCompleted }: Props) {
         dispatch({ type: "RESET" });
         return;
       }
-      await runPipeline(blob, type);
+      // Instant acknowledgement: lokale audio, geen ElevenLabs. Stopt
+      // automatisch zodra speakAndAnimate (TTS) begint of de pipeline klaar is.
+      playAcknowledgement();
+      try {
+        await runPipeline(blob, type);
+      } finally {
+        stopAcknowledgement();
+      }
     };
 
     recorderRef.current = recorder;
