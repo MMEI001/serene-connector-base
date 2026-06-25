@@ -68,7 +68,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [pending, setPending] = useState<Pending>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
-  const [revive, setRevive] = useState<Confirming>(null);
+  // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDateTime, setEditDateTime] = useState("");
@@ -103,20 +103,37 @@ export function VoiceOrb({ onCompleted }: Props) {
     };
   }, [stopTimer, cleanupStream]);
 
-  // Bij mount: check of er een nog-niet-verlopen pending actie is (revive na timeout).
+  // Bij mount: check of er een nog-niet-verlopen pending actie is (revive na app-restart of timeout).
+  // We hydrateren de bestaande confirming-flow zodat Bewerken/Annuleer/Bevestig identiek werken.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
     getPending()
       .then((p) => {
         if (cancelled || !p) return;
-        setRevive(p);
+        // Alleen reviven als we niet al midden in een nieuwe interactie zitten.
+        setConfirming((cur) => {
+          if (cur) return cur;
+          // Niet de orb-state op "confirming" zetten: gebruiker mag direct
+          // nieuwe input geven. De bevestigingskaart blijft staan tot de
+          // gebruiker Bevestig/Bewerken/Annuleer kiest of een nieuwe actie
+          // de pending vervangt.
+          return {
+            action_id: p.action_id,
+            intent: p.intent,
+            preview: p.preview,
+            expires_at: p.expires_at,
+            editable: p.editable,
+          };
+        });
+
       })
       .catch(() => {});
     return () => {
       cancelled = true;
     };
   }, [user, getPending]);
+
 
   const scheduleReset = useCallback(() => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
@@ -131,9 +148,11 @@ export function VoiceOrb({ onCompleted }: Props) {
     (result: PipelineResult) => {
       if (result.status === "skipped") {
         setConfirmation("");
+        setConfirming(null);
         dispatch({ type: "RESET" });
         return;
       }
+
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
         // assistant_chat met vervolgacties → spreek de adviserende reply uit,
@@ -150,23 +169,21 @@ export function VoiceOrb({ onCompleted }: Props) {
           editable: result.editable,
         });
         setIsEditing(false);
-        setRevive(null);
         dispatch({ type: "NEEDS_CONFIRMATION" });
-        // 30s "snoozen" — daarna blijft 'm 5 min revive-baar via getPending
+        // 30s "snooze": orb komt vrij voor nieuwe input, maar de bevestigingskaart
+        // blijft staan (revive). Bevestig/Bewerken/Annuleer blijven beschikbaar
+        // tot de server-side expiry (5 min) of een nieuwe pipeline-actie.
         if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
         confirmTimerRef.current = setTimeout(() => {
-          setConfirming((cur) => {
-            if (!cur) return cur;
-            setRevive(cur);
-            return null;
-          });
           setConfirmation("");
           dispatch({ type: "RESET" });
         }, CONFIRM_TIMEOUT_MS);
         return;
+
       }
       if (result.status === "failed") {
         setConfirmation("");
+        setConfirming(null);
         dispatch({ type: "FAIL", message: result.error });
         toast.error(result.confirmation || "Er ging iets mis.");
         scheduleReset();
@@ -174,6 +191,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       // completed — korte gesproken bevestiging.
       setConfirmation(result.confirmation);
+      setConfirming(null);
       // Prioriteit: assistant_reply (adviserend antwoord) → query-intro → confirmation → fallback.
       const spoken = result.assistant_reply?.trim()
         || result.query_result?.intro?.trim()
@@ -182,6 +200,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       void speakText(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
+
       onCompleted?.();
       if (result.query_result) {
         // Query-resultaat blijft staan tot gebruiker 'm sluit of nieuwe opname start.
@@ -327,8 +346,8 @@ export function VoiceOrb({ onCompleted }: Props) {
     ) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
-      setRevive(null);
       setIsEditing(false);
+
       dispatch({ type: "CONFIRM" });
       setConfirmation("Even verwerken…");
       try {
@@ -348,8 +367,8 @@ export function VoiceOrb({ onCompleted }: Props) {
     async (actionId: string) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
-      setRevive(null);
       setIsEditing(false);
+
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
@@ -456,7 +475,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         {hint}
       </p>
 
-      {state === "confirming" && confirming && !isEditing && (
+      {confirming && !isEditing && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-center gap-3">
           {confirming.preview.includes("\n") && (() => {
             const [head, ...rest] = confirming.preview.split("\n");
@@ -501,7 +520,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         </div>
       )}
 
-      {state === "confirming" && confirming && isEditing && confirming.editable && (
+      {confirming && isEditing && confirming.editable && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-stretch gap-3 w-full max-w-xs">
           <label className="flex flex-col gap-1 text-left">
             <span className="text-xs text-muted-foreground">Titel</span>
@@ -588,17 +607,8 @@ export function VoiceOrb({ onCompleted }: Props) {
       )}
 
 
-      {state === "idle" && revive && (
-        <button
-          type="button"
-          onClick={() => handleConfirm(revive.action_id)}
-          className="mt-4 inline-flex flex-col items-center gap-1 rounded-2xl bg-white/60 px-5 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
-        >
-          <span className="text-xs text-muted-foreground">Nog niet bevestigd</span>
-          <span className="font-medium">{revive.preview}</span>
-          <span className="text-xs text-muted-foreground mt-0.5">Tik om alsnog te bevestigen</span>
-        </button>
-      )}
+
+
     </div>
   );
 }
