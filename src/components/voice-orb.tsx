@@ -337,8 +337,8 @@ export function VoiceOrb({ onCompleted }: Props) {
     ) => {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
-      setRevive(null);
       setIsEditing(false);
+
       dispatch({ type: "CONFIRM" });
       setConfirmation("Even verwerken…");
       try {
