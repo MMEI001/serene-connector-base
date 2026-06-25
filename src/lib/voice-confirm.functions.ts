@@ -137,6 +137,44 @@ export const cancelVoiceAction = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+type PendingEditable = {
+  intent: "reminder" | "event";
+  title: string;
+  iso_datetime?: string;
+  date?: string;
+  start_time?: string;
+};
+
+function deriveEditable(payload: unknown): PendingEditable | undefined {
+  const root = (payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>;
+  const actions = Array.isArray((root as { actions?: unknown }).actions)
+    ? ((root as { actions: VoiceAction[] }).actions)
+    : null;
+  const candidate: { intent: string; payload: Record<string, unknown> } | null = actions && actions.length === 1
+    ? { intent: actions[0].intent, payload: actions[0].payload ?? {} }
+    : actions
+      ? null
+      : { intent: String(root.intent ?? ""), payload: root };
+  if (!candidate) return undefined;
+  const p = candidate.payload ?? {};
+  if (candidate.intent === "reminder") {
+    return {
+      intent: "reminder",
+      title: typeof p.title === "string" ? p.title : "",
+      iso_datetime: typeof p.iso_datetime === "string" ? p.iso_datetime : undefined,
+    };
+  }
+  if (candidate.intent === "event") {
+    return {
+      intent: "event",
+      title: typeof p.title === "string" ? p.title : "",
+      date: typeof p.date === "string" ? p.date : undefined,
+      start_time: typeof p.start_time === "string" ? p.start_time : undefined,
+    };
+  }
+  return undefined;
+}
+
 export const getPendingVoiceAction = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<{
@@ -144,11 +182,12 @@ export const getPendingVoiceAction = createServerFn({ method: "GET" })
     intent: string;
     preview: string;
     expires_at: string;
+    editable?: PendingEditable;
   } | null> => {
     const { supabase, userId } = context;
     const { data } = await supabase
       .from("voice_actions")
-      .select("id,intent,confirmation_text,expires_at")
+      .select("id,intent,confirmation_text,expires_at,payload")
       .eq("user_id", userId)
       .eq("status", "needs_confirmation")
       .gt("expires_at", new Date().toISOString())
@@ -162,5 +201,6 @@ export const getPendingVoiceAction = createServerFn({ method: "GET" })
       intent: data.intent as string,
       preview: (data.confirmation_text as string) ?? "",
       expires_at: data.expires_at as string,
+      editable: deriveEditable((data as { payload?: unknown }).payload),
     };
   });
