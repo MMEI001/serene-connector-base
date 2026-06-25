@@ -74,6 +74,21 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editDateTime, setEditDateTime] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Wrapper: zet orb-mode op "speaking" zolang de TTS-call (incl. afspelen) loopt.
+  const speakAndAnimate = useCallback(
+    async (text: string, opts?: Parameters<typeof speakText>[1]) => {
+      setIsSpeaking(true);
+      try {
+        await speakText(text, opts);
+      } finally {
+        setIsSpeaking(false);
+      }
+    },
+    [],
+  );
+
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
