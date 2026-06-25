@@ -85,6 +85,8 @@ export function VoiceOrb({ onCompleted }: Props) {
   const speakAndAnimate = useCallback(
     async (text: string, opts?: Parameters<typeof speakText>[1]) => {
       setIsSpeaking(true);
+      // Het echte AI-antwoord begint nu te spreken — kap de wacht-erkenning af.
+      stopAcknowledgement();
       try {
         await speakText(text, opts);
       } finally {
