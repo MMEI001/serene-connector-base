@@ -183,6 +183,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       if (result.status === "failed") {
         setConfirmation("");
+        setConfirming(null);
         dispatch({ type: "FAIL", message: result.error });
         toast.error(result.confirmation || "Er ging iets mis.");
         scheduleReset();
@@ -190,6 +191,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       }
       // completed — korte gesproken bevestiging.
       setConfirmation(result.confirmation);
+      setConfirming(null);
       // Prioriteit: assistant_reply (adviserend antwoord) → query-intro → confirmation → fallback.
       const spoken = result.assistant_reply?.trim()
         || result.query_result?.intro?.trim()
@@ -198,6 +200,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       void speakText(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
+
       onCompleted?.();
       if (result.query_result) {
         // Query-resultaat blijft staan tot gebruiker 'm sluit of nieuwe opname start.
