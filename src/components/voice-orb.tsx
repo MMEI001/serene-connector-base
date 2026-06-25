@@ -68,7 +68,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [pending, setPending] = useState<Pending>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
-  const [revive, setRevive] = useState<Confirming>(null);
+  // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
   const [editDateTime, setEditDateTime] = useState("");
