@@ -74,6 +74,21 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editDateTime, setEditDateTime] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Wrapper: zet orb-mode op "speaking" zolang de TTS-call (incl. afspelen) loopt.
+  const speakAndAnimate = useCallback(
+    async (text: string, opts?: Parameters<typeof speakText>[1]) => {
+      setIsSpeaking(true);
+      try {
+        await speakText(text, opts);
+      } finally {
+        setIsSpeaking(false);
+      }
+    },
+    [],
+  );
+
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -160,7 +175,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         const spokenConfirm = result.assistant_reply?.trim()
           ? `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`
           : "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-        void speakText(spokenConfirm, { intent: result.assistant_reply ? "assistant_chat_confirm" : "confirm" });
+        void speakAndAnimate(spokenConfirm, { intent: result.assistant_reply ? "assistant_chat_confirm" : "confirm" });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -197,7 +212,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
-      void speakText(spoken, { intent: result.intent });
+      void speakAndAnimate(spoken, { intent: result.intent });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
 
@@ -463,11 +478,21 @@ export function VoiceOrb({ onCompleted }: Props) {
   return (
     <div className="flex flex-col items-center">
       <BreathingOrb
-        recording={state === "listening" || state === "processing"}
-        blooming={state === "done"}
+        mode={
+          isSpeaking
+            ? "speaking"
+            : state === "listening"
+              ? "listening"
+              : state === "processing"
+                ? "processing"
+                : state === "done"
+                  ? "speaking"
+                  : "idle"
+        }
         onTap={handleTap}
         ariaLabel={hint}
       />
+
       <p
         aria-live="polite"
         className="mt-6 min-h-[1.5rem] text-sm text-muted-foreground text-center px-6"
