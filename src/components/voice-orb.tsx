@@ -515,7 +515,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         </div>
       )}
 
-      {state === "confirming" && confirming && isEditing && confirming.editable && (
+      {confirming && isEditing && confirming.editable && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-stretch gap-3 w-full max-w-xs">
           <label className="flex flex-col gap-1 text-left">
             <span className="text-xs text-muted-foreground">Titel</span>
