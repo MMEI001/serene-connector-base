@@ -478,11 +478,21 @@ export function VoiceOrb({ onCompleted }: Props) {
   return (
     <div className="flex flex-col items-center">
       <BreathingOrb
-        recording={state === "listening" || state === "processing"}
-        blooming={state === "done"}
+        mode={
+          isSpeaking
+            ? "speaking"
+            : state === "listening"
+              ? "listening"
+              : state === "processing"
+                ? "processing"
+                : state === "done"
+                  ? "speaking"
+                  : "idle"
+        }
         onTap={handleTap}
         ariaLabel={hint}
       />
+
       <p
         aria-live="polite"
         className="mt-6 min-h-[1.5rem] text-sm text-muted-foreground text-center px-6"
