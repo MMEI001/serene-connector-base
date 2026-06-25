@@ -148,9 +148,11 @@ export function VoiceOrb({ onCompleted }: Props) {
     (result: PipelineResult) => {
       if (result.status === "skipped") {
         setConfirmation("");
+        setConfirming(null);
         dispatch({ type: "RESET" });
         return;
       }
+
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
         // assistant_chat met vervolgacties → spreek de adviserende reply uit,
