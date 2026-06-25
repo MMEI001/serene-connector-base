@@ -114,7 +114,10 @@ export function VoiceOrb({ onCompleted }: Props) {
         // Alleen reviven als we niet al midden in een nieuwe interactie zitten.
         setConfirming((cur) => {
           if (cur) return cur;
-          dispatch({ type: "NEEDS_CONFIRMATION" });
+          // Niet de orb-state op "confirming" zetten: gebruiker mag direct
+          // nieuwe input geven. De bevestigingskaart blijft staan tot de
+          // gebruiker Bevestig/Bewerken/Annuleer kiest of een nieuwe actie
+          // de pending vervangt.
           return {
             action_id: p.action_id,
             intent: p.intent,
@@ -123,6 +126,7 @@ export function VoiceOrb({ onCompleted }: Props) {
             editable: p.editable,
           };
         });
+
       })
       .catch(() => {});
     return () => {
