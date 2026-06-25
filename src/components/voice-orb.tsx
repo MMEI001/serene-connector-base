@@ -601,17 +601,8 @@ export function VoiceOrb({ onCompleted }: Props) {
       )}
 
 
-      {state === "idle" && revive && (
-        <button
-          type="button"
-          onClick={() => handleConfirm(revive.action_id)}
-          className="mt-4 inline-flex flex-col items-center gap-1 rounded-2xl bg-white/60 px-5 py-3 text-sm text-foreground/80 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] transition-transform duration-200 active:scale-95"
-        >
-          <span className="text-xs text-muted-foreground">Nog niet bevestigd</span>
-          <span className="font-medium">{revive.preview}</span>
-          <span className="text-xs text-muted-foreground mt-0.5">Tik om alsnog te bevestigen</span>
-        </button>
-      )}
+
+
     </div>
   );
 }
