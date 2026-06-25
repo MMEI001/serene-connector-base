@@ -470,7 +470,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         {hint}
       </p>
 
-      {state === "confirming" && confirming && !isEditing && (
+      {confirming && !isEditing && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-center gap-3">
           {confirming.preview.includes("\n") && (() => {
             const [head, ...rest] = confirming.preview.split("\n");
