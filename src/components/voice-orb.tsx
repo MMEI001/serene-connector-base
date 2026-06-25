@@ -335,7 +335,14 @@ export function VoiceOrb({ onCompleted }: Props) {
         dispatch({ type: "RESET" });
         return;
       }
-      await runPipeline(blob, type);
+      // Instant acknowledgement: lokale audio, geen ElevenLabs. Stopt
+      // automatisch zodra speakAndAnimate (TTS) begint of de pipeline klaar is.
+      playAcknowledgement();
+      try {
+        await runPipeline(blob, type);
+      } finally {
+        stopAcknowledgement();
+      }
     };
 
     recorderRef.current = recorder;
