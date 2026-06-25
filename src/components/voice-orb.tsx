@@ -117,11 +117,13 @@ export function VoiceOrb({ onCompleted }: Props) {
   }, []);
 
   useEffect(() => {
+    preloadAckAudio();
     return () => {
       stopTimer();
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       cleanupStream();
+      stopAcknowledgement();
     };
   }, [stopTimer, cleanupStream]);
 
