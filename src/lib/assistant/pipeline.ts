@@ -49,10 +49,6 @@ function appendLine(base: string | undefined, extra: string): string {
   if (!b) return a;
   return `${a} ${b}`;
 }
-  const start = performance.now();
-  const value = await fn();
-  return { value, ms: Math.round(performance.now() - start) };
-}
 
 function pickSlowest(timings: Record<string, number>): string {
   let slowest = "n/a";

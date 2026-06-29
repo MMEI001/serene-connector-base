@@ -189,6 +189,15 @@ export type EngineTrace = {
     sources: Array<"persona" | "dynamic">;
     ms: number;
   };
+  /** Sprint 6 — Persistent Memory v1 write-back. */
+  memory_writeback?: {
+    handled_confirmation: boolean;
+    created_pending: boolean;
+    category: string | null;
+    future_value: number | null;
+    active_records_count: number;
+    ms: number;
+  };
   context?: {
     today_count: number;
     has_next_event: boolean;
