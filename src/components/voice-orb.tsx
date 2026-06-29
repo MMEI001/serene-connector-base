@@ -187,12 +187,23 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
-        // assistant_chat met vervolgacties → spreek de adviserende reply uit,
-        // anders de standaard "Ik heb dit voor je klaargezet."-vraag.
-        const spokenConfirm = result.assistant_reply?.trim()
-          ? `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`
-          : "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-        void speakAndAnimate(spokenConfirm, { intent: result.assistant_reply ? "assistant_chat_confirm" : "confirm" });
+        // Prioriteit voor TTS bij bevestiging:
+        // 1) spoken_summary (rijke experience-kaart) — laat het de hele zin doen.
+        // 2) assistant_reply (advies) + standaard bevestigingsvraag.
+        // 3) Fallback.
+        let spokenConfirm: string;
+        let spokenIntent: string;
+        if (result.spoken_summary?.trim()) {
+          spokenConfirm = result.spoken_summary.trim();
+          spokenIntent = "experience_confirm";
+        } else if (result.assistant_reply?.trim()) {
+          spokenConfirm = `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`;
+          spokenIntent = "assistant_chat_confirm";
+        } else {
+          spokenConfirm = "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
+          spokenIntent = "confirm";
+        }
+        void speakAndAnimate(spokenConfirm, { intent: spokenIntent });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -202,9 +213,6 @@ export function VoiceOrb({ onCompleted }: Props) {
         });
         setIsEditing(false);
         dispatch({ type: "NEEDS_CONFIRMATION" });
-        // 30s "snooze": orb komt vrij voor nieuwe input, maar de bevestigingskaart
-        // blijft staan (revive). Bevestig/Bewerken/Annuleer blijven beschikbaar
-        // tot de server-side expiry (5 min) of een nieuwe pipeline-actie.
         if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
         confirmTimerRef.current = setTimeout(() => {
           setConfirmation("");
