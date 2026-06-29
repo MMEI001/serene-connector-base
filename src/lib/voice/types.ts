@@ -89,7 +89,7 @@ export type ActionResult = {
 
   // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
   editable?: {
-    intent: "reminder" | "event";
+    intent: "reminder" | "event" | "note";
     title: string;
     iso_datetime?: string;
     date?: string;
