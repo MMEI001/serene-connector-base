@@ -85,9 +85,10 @@ export function shouldTakeInitiative(
 
   // Continuation-turns (vervolg op lopende experience) loggen we, maar
   // verder gedraagt het zich als een gewone gift_event resultaat-turn.
-  if (isGiftEvent && primary?.payload.experience_data) {
+  if (isGiftEvent && primary?.payload.is_continuation === true) {
     addReason(reasons, "continuation_turn");
   }
+
 
 
   // 2. Persona-rust → score 0/1, geen voorstellen.
