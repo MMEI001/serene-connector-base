@@ -50,6 +50,7 @@ let cachedVoiceId: string | null = null;
 let cachedProvider: string | null = null;
 
 let currentAudio: HTMLAudioElement | null = null;
+let currentAudioRoute: string | null = null;
 const audioBlobCache = new Map<string, Blob>();
 
 let lastTraceLog: VoiceTraceLog | null = null;
@@ -160,8 +161,9 @@ export function subscribeVoiceTrace(fn: (trace: VoiceTraceLog) => void): () => v
   };
 }
 
-export function stopVoice() {
+export function stopVoice(route?: string) {
   if (!currentAudio) return;
+  if (route && currentAudioRoute !== route) return;
   try {
     currentAudio.onerror = null;
     currentAudio.onended = null;
@@ -173,6 +175,7 @@ export function stopVoice() {
     // ignore
   }
   currentAudio = null;
+  currentAudioRoute = null;
 }
 
 function browserSpeakFallback(text: string, intent: string, route: string, latencyMs: number) {
@@ -319,6 +322,18 @@ export async function speak(
   const actualVoiceId = res.headers.get("x-voice-id") || voiceId;
   const actualModel = res.headers.get("x-voice-model") || DEFAULT_MODEL_ID;
   if (!res.ok || contentType.includes("application/json")) {
+    let status = `http_${res.status}`;
+    if (contentType.includes("application/json")) {
+      const errorBody = await res.clone().json().catch(() => null) as {
+        error?: string;
+        upstream_status?: number;
+      } | null;
+      if (errorBody?.upstream_status) {
+        status = `upstream_${errorBody.upstream_status}_via_http_${res.status}`;
+      } else if (errorBody?.error) {
+        status = `${errorBody.error}_via_http_${res.status}`;
+      }
+    }
     const latency = Math.round(performance.now() - t0);
     emitTrace({
       provider: "elevenlabs",
@@ -329,7 +344,7 @@ export async function speak(
       intent,
       text_preview: cleanText.slice(0, 40),
       source: "error",
-      status: `http_${res.status}`,
+      status,
       timestamp: new Date().toISOString(),
     });
     return;
@@ -362,13 +377,17 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     stopVoice();
     const audio = new Audio(url);
     currentAudio = audio;
+    currentAudioRoute = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
 
     let settled = false;
     const finish = () => {
       if (settled) return;
       settled = true;
       URL.revokeObjectURL(url);
-      if (currentAudio === audio) currentAudio = null;
+      if (currentAudio === audio) {
+        currentAudio = null;
+        currentAudioRoute = null;
+      }
       options.onEnd?.();
       resolve();
     };
@@ -409,7 +428,7 @@ export async function prewarmVoiceCache(): Promise<void> {
 export function playAcknowledgement(): () => void {
   const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
   void speak(phrase, { intent: "acknowledgement", route: "prewarm_ack", isAck: true });
-  return stopVoice;
+  return stopAcknowledgement;
 }
 
-export const stopAcknowledgement = stopVoice;
+export const stopAcknowledgement = () => stopVoice("prewarm_ack");
