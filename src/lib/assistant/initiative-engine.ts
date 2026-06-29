@@ -85,12 +85,22 @@ export function shouldTakeInitiative(
   // 3. Bouw score op aan de hand van signalen.
   let score = 1; // baseline: assistant_chat krijgt minstens "klein advies".
 
-  const primary = conv.actions[0];
   const suggestedRaw = primary?.payload.suggested_actions;
   const hasSuggested = Array.isArray(suggestedRaw) && suggestedRaw.length > 0;
   if (hasSuggested) {
     score += 1;
     addReason(reasons, "suggested_actions_present");
+  }
+
+  // gift_event: garandeer score 3 (advies + reminder-voorstel) als reminder
+  // er nog niet stond. Bestaande reminder → score 1 (alleen bevestigen).
+  if (isGiftEvent) {
+    if (hasSuggested) {
+      score = Math.max(score, 3);
+    } else {
+      score = Math.max(score, 1);
+      addReason(reasons, "existing_followup_present");
+    }
   }
 
   if (FUTURE_RE.test(conv.text)) {
