@@ -351,6 +351,7 @@ export async function runGiftEvent(
     leadDays: DEFAULT_LEAD_DAYS,
     reminderAction,
     spokenSummary,
+    memoryUsedCount: relevantMemories.length,
     card: {
       kind: "gift_event",
       who,
