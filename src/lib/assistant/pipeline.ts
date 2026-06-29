@@ -191,6 +191,9 @@ export async function runAssistantTurn(
   if (experienceCard) {
     result.experience_card = experienceCard;
   }
+  if (experienceSpokenSummary) {
+    result.spoken_summary = experienceSpokenSummary;
+  }
 
   // Memory write-back (no-op sprint 1/2).
   void remember(supabase, userId, conv.value);
