@@ -176,6 +176,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const handleResult = useCallback(
     (result: PipelineResult) => {
       if (result.engine_trace) setLastTrace(result.engine_trace);
+      setExperienceCard(result.experience_card ?? null);
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
