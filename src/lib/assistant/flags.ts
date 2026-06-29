@@ -49,14 +49,19 @@ export async function resolveAssistantMode(
 /**
  * Mag deze turn door de nieuwe assistant-laag worden afgehandeld?
  * Sprint 2: alleen assistant_chat zonder DB-impacterende suggested_actions.
+ * Sprint 4: een herkenbare Experience (bv. gift_event) loopt altijd door
+ *   het framework, ook in chat_only-mode — de pipeline bouwt zelf het
+ *   bevestigingsvoorstel.
  */
 export function isEligibleForAssistantLayer(
   mode: AssistantFrameworkMode,
   primaryIntent: string,
   hasSuggestedActions: boolean,
+  hasExperience = false,
 ): boolean {
   if (mode === "off") return false;
   if (mode === "full") return true;
+  if (hasExperience && primaryIntent === "assistant_chat") return true;
   // chat_only: pure adviesreacties.
   return primaryIntent === "assistant_chat" && !hasSuggestedActions;
 }
