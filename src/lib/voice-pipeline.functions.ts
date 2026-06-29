@@ -1,3 +1,8 @@
+// NOTE: deze orchestrator wordt in een latere sprint vervangen door
+// runAssistantTurn() uit src/lib/assistant/pipeline.ts (HoofdRust
+// Intelligence Framework). De engines staan al klaar — sprint 1 leverde
+// het fundament. We swappen pas wanneer elke engine behavior-parity heeft
+// met de slimme defaults / dedupe / editable-shaping hieronder.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
