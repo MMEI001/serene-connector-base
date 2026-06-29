@@ -319,6 +319,11 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
                 date: typeof a.payload.date === "string" ? a.payload.date : undefined,
                 start_time: typeof a.payload.start_time === "string" ? a.payload.start_time : undefined,
               };
+            } else if (a.intent === "note") {
+              editable = {
+                intent: "note",
+                title: String(a.payload.title ?? a.payload.text ?? a.payload.content ?? ""),
+              };
             }
           }
           return {
@@ -524,6 +529,11 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
             title: String(a.payload.title ?? ""),
             date: typeof a.payload.date === "string" ? a.payload.date : undefined,
             start_time: typeof a.payload.start_time === "string" ? a.payload.start_time : undefined,
+          };
+        } else if (a.intent === "note") {
+          editable = {
+            intent: "note",
+            title: String(a.payload.title ?? a.payload.text ?? a.payload.content ?? ""),
           };
         }
       }
