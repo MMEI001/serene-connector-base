@@ -169,6 +169,7 @@ export function VoiceOrb({ onCompleted }: Props) {
     resetTimerRef.current = setTimeout(() => {
       setConfirmation("");
       setQueryResult(null);
+      setExperienceCard(null);
       dispatch({ type: "RESET" });
     }, DONE_HOLD_MS);
   }, []);
