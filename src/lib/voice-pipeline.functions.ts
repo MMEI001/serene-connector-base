@@ -219,16 +219,35 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     // 1a. Sprint 2 — Intelligence Framework narrow routing.
     //     assistant_chat zonder DB-impacterende suggested_actions mag door de
     //     nieuwe runAssistantTurn(). Bij fout val terug op legacy-pad.
+    //     Sprint 5 — als er een lopende Experience-state is, routeren we
+    //     ook continuation-zinnen (bv. "het is een meisje van acht") door
+    //     het framework, ongeacht hoe de classifier 'm labelde.
     try {
       const mode = await resolveAssistantMode(supabase, userId);
       const suggestedRaw = primary?.payload.suggested_actions;
       const hasSuggested =
         Array.isArray(suggestedRaw) && suggestedRaw.length > 0;
       const hasExperience = primary?.payload.experience === "gift_event";
+
+      // Lichte state-check voor continuation-routing.
+      let hasActiveExperience = false;
+      if (primary && !hasExperience && mode !== "off") {
+        const { data: stateRow } = await supabase
+          .from("voice_experience_state")
+          .select("expires_at")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (stateRow?.expires_at && new Date(stateRow.expires_at).getTime() > Date.now()) {
+          hasActiveExperience = true;
+        }
+      }
+
       if (
         primary &&
-        isEligibleForAssistantLayer(mode, primary.intent, hasSuggested, hasExperience)
+        (isEligibleForAssistantLayer(mode, primary.intent, hasSuggested, hasExperience) ||
+          hasActiveExperience)
       ) {
+
         const { result: assistantResult, trace, chosenActions } = await runAssistantTurn(
           supabase,
           userId,
