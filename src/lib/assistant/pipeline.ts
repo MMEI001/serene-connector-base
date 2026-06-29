@@ -93,12 +93,13 @@ export async function runAssistantTurn(
   };
 
   // 2. Context
-  const ctxSnap = await withTiming(() => snapshot(supabase, userId, now));
+  const ctxSnap = await withTiming(() => snapshot(supabase, userId, now, mem.value.records));
   timings.context = ctxSnap.ms;
   trace.context = {
     today_count: ctxSnap.value.todayCount,
     has_next_event: !!ctxSnap.value.nextEvent,
     snapshot_keys: Object.keys(ctxSnap.value),
+    categories: ctxSnap.value.categories.map((c) => ({ category: c.category, count: c.count })),
     ms: ctxSnap.ms,
   };
 
