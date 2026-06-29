@@ -15,6 +15,8 @@ import { shouldTakeInitiative } from "./initiative-engine";
 import { propose } from "./suggestion-engine";
 import { decide } from "./decision-engine";
 import { execute } from "./execution-engine";
+import { isGiftEventConv, runGiftEvent } from "./experiences/gift-event";
+import type { ExperienceCardData } from "@/components/experience-card";
 import type {
   AssistantInput,
   AssistantTurn,
