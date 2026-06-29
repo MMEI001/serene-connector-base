@@ -102,6 +102,38 @@ export async function runAssistantTurn(
     ms: conv.ms,
   };
 
+  // 3b. Experience-detectie: rijke patronen verrijken de Conversation
+  //     vóórdat Initiative/Suggestion eraan rekenen.
+  let experienceCard: ExperienceCardData | null = null;
+  const primary = conv.value.actions[0];
+  const giftInput = primary ? isGiftEventConv(primary.payload) : null;
+  if (giftInput) {
+    const exp = await withTiming(() => runGiftEvent(supabase, userId, giftInput, now));
+    timings.experience = exp.ms;
+    trace.experience = {
+      kind: "gift_event",
+      had_existing_event: !!exp.value.existingAppointmentId,
+      had_existing_reminder: !!exp.value.existingReminderId,
+      ideas_count: exp.value.ideas.length,
+      ms: exp.ms,
+    };
+    experienceCard = exp.value.card;
+    // Voeg het reminder-voorstel toe als suggested_action zodat de
+    // Suggestion Engine 'm als gewone Proposal oppakt.
+    if (exp.value.reminderAction) {
+      const existing = Array.isArray(primary.payload.suggested_actions)
+        ? (primary.payload.suggested_actions as unknown[])
+        : [];
+      primary.payload.suggested_actions = [
+        ...existing,
+        {
+          intent: exp.value.reminderAction.intent,
+          payload: exp.value.reminderAction.payload,
+        },
+      ];
+    }
+  }
+
   // 4. Initiative (v2 — bepaalt ook Opportunity Score + motivaties)
   const init = await withTiming(() => shouldTakeInitiative(ctx, conv.value));
   timings.initiative = init.ms;
