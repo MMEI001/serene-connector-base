@@ -1,15 +1,10 @@
 /**
  * Orchestrator — runAssistantTurn() loopt zeven engines af in vaste volgorde:
  *
- *   Conversation → Memory → Context → Initiative → Suggestion → Decision → Execution
+ *   Memory → Context → Conversation → Initiative → Suggestion → Decision → Execution
  *
- * Sprint 1: minimale implementatie die de bestaande voice-pipeline overneemt
- * zonder gedragverandering. Output blijft PipelineResult-compatible zodat de
- * orb-UI en bevestigingskaart ongewijzigd blijven werken.
- *
- * runVoicePipeline() in src/lib/voice-pipeline.functions.ts roept deze
- * orchestrator aan en blijft verantwoordelijk voor persistentie van
- * voice_actions (needs_confirmation + audit log).
+ * Sprint 2: bouwt een rijke, privacy-veilige EngineTrace mee (tellingen,
+ * timings, enum-redenen, signatures — geen ruwe gebruikersdata).
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,65 +22,136 @@ import type {
   EngineTrace,
 } from "./types";
 
+async function withTiming<T>(fn: () => Promise<T> | T): Promise<{ value: T; ms: number }> {
+  const start = performance.now();
+  const value = await fn();
+  return { value, ms: Math.round(performance.now() - start) };
+}
+
+function pickSlowest(timings: Record<string, number>): string {
+  let slowest = "n/a";
+  let max = -1;
+  for (const [name, ms] of Object.entries(timings)) {
+    if (ms > max) {
+      max = ms;
+      slowest = name;
+    }
+  }
+  return slowest;
+}
+
 export async function runAssistantTurn(
   supabase: SupabaseClient,
   userId: string,
   input: AssistantInput,
 ): Promise<AssistantTurn> {
+  const turnStart = performance.now();
   const now = new Date();
-  const trace: EngineTrace = {};
+  const turn_id =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `t_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-  // 1. Memory — laad persona (statische voorkeuren).
-  const { persona, hits } = await recall(supabase, userId);
-  trace.memory = { hits: hits.length, signature: persona.signature };
+  const trace: EngineTrace = {
+    turn_id,
+    framework: "assistant",
+    total_ms: 0,
+    slowest_engine: "n/a",
+  };
+  const timings: Record<string, number> = {};
 
-  // 2. Context — lichte snapshot voor downstream engines.
-  const snap = await snapshot(supabase, userId, now);
-  trace.context = { todayCount: snap.todayCount };
+  // 1. Memory
+  const mem = await withTiming(() => recall(supabase, userId));
+  timings.memory = mem.ms;
+  trace.memory = {
+    persona_signature: mem.value.persona.signature,
+    hits_count: mem.value.hits.length,
+    sources: Array.from(new Set(mem.value.hits.map((h) => h.source))),
+    ms: mem.ms,
+  };
+
+  // 2. Context
+  const ctxSnap = await withTiming(() => snapshot(supabase, userId, now));
+  timings.context = ctxSnap.ms;
+  trace.context = {
+    today_count: ctxSnap.value.todayCount,
+    has_next_event: !!ctxSnap.value.nextEvent,
+    snapshot_keys: Object.keys(ctxSnap.value),
+    ms: ctxSnap.ms,
+  };
 
   const ctx: EngineContext = {
     supabase,
     userId,
     now,
-    persona,
-    memoryHits: hits,
-    snapshot: snap,
+    persona: mem.value.persona,
+    memoryHits: mem.value.hits,
+    snapshot: ctxSnap.value,
   };
 
-  // 3. Conversation — begrijp wat de gebruiker écht wil.
-  const conv = await understand(input.text, persona);
+  // 3. Conversation
+  const conv = await withTiming(() => understand(input.text, mem.value.persona));
+  timings.conversation = conv.ms;
   trace.conversation = {
-    primary: conv.primary,
-    actions: conv.actions.length,
-    model: conv.meta.model,
+    primary: conv.value.primary,
+    actions_count: conv.value.actions.length,
+    model: conv.value.meta.model,
+    ambiguous: conv.value.actions.some((a) => !!a.ambiguous),
+    ms: conv.ms,
   };
 
-  // 4. Initiative — mag HoofdRust proactief iets opperen?
-  const initiative = shouldTakeInitiative(ctx, conv);
-  trace.initiative = initiative;
+  // 4. Initiative
+  const init = await withTiming(() => shouldTakeInitiative(ctx, conv.value));
+  timings.initiative = init.ms;
+  trace.initiative = { ...init.value, ms: init.ms };
 
-  // 5. Suggestion — concrete proposals.
-  const proposals = propose(ctx, conv);
-  trace.suggestion = { proposals: proposals.length };
+  // 5. Suggestion
+  const sug = await withTiming(() => propose(ctx, conv.value));
+  timings.suggestion = sug.ms;
+  trace.suggestion = {
+    proposals_count: sug.value.length,
+    skills: sug.value.map((p) => p.skill),
+    ms: sug.ms,
+  };
 
-  // 6. Decision — welke proposals voeren we uit / vragen we te bevestigen?
-  const decision = decide(ctx, conv, proposals);
-  trace.decision = { proposals: decision.proposals.length, reason: decision.reason };
+  // 6. Decision
+  const dec = await withTiming(() => decide(ctx, conv.value, sug.value));
+  timings.decision = dec.ms;
+  trace.decision = {
+    kept: dec.value.proposals.length,
+    rejected: dec.value.rejections.length,
+    rejection_reasons: dec.value.rejections.map((r) => r.reason),
+    reason: dec.value.reason,
+    ms: dec.ms,
+  };
 
-  // 7. Execution — voer uit (consent-handling gebeurt in caller).
-  const result = await execute(ctx, decision);
-  trace.execution = { status: result.status, intent: result.intent };
+  // 7. Execution
+  const exec = await withTiming(() => execute(ctx, dec.value));
+  timings.execution = exec.ms;
+  trace.execution = {
+    status: exec.value.status,
+    intent: exec.value.intent,
+    used_fallback: false,
+    ms: exec.ms,
+  };
 
   // assistant_chat reply doorzetten voor TTS/UI.
-  if (conv.assistantReply) {
-    result.assistant_reply = conv.assistantReply;
+  const result = exec.value;
+  if (conv.value.assistantReply) {
+    result.assistant_reply = conv.value.assistantReply;
+    if (result.status === "completed" && !result.query_result) {
+      result.confirmation = conv.value.assistantReply;
+    }
   }
 
-  // 8. Memory write-back (no-op in sprint 1).
-  void remember(supabase, userId, conv);
+  // Memory write-back (no-op sprint 1/2).
+  void remember(supabase, userId, conv.value);
+
+  trace.total_ms = Math.round(performance.now() - turnStart);
+  trace.slowest_engine = pickSlowest(timings);
+  result.engine_trace = trace;
 
   return { result, trace };
 }
 
-/** Re-export voor convenience. */
 export type { AssistantTurn } from "./types";

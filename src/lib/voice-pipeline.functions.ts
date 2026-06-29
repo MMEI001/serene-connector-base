@@ -1,14 +1,20 @@
-// NOTE: deze orchestrator wordt in een latere sprint vervangen door
-// runAssistantTurn() uit src/lib/assistant/pipeline.ts (HoofdRust
-// Intelligence Framework). De engines staan al klaar — sprint 1 leverde
-// het fundament. We swappen pas wanneer elke engine behavior-parity heeft
-// met de slimme defaults / dedupe / editable-shaping hieronder.
+// NOTE: deze orchestrator delegeert sinds Sprint 2 een SMALLE subset
+// (assistant_chat zonder DB-acties) aan runAssistantTurn() uit
+// src/lib/assistant/pipeline.ts (HoofdRust Intelligence Framework).
+// Alle overige intents lopen ongewijzigd via deze legacy-pipeline tot
+// elke engine behavior-parity heeft met de slimme defaults hieronder.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
 import { dispatchVoiceBundle } from "@/lib/voice/dispatch-voice-action";
 import { loadUserPersona } from "@/lib/voice/load-persona";
 import type { PipelineResult, VoiceAction, VoiceIntent } from "@/lib/voice/types";
+import { runAssistantTurn } from "@/lib/assistant/pipeline";
+import {
+  isEligibleForAssistantLayer,
+  resolveAssistantMode,
+} from "@/lib/assistant/flags";
+import type { EngineTrace } from "@/lib/assistant/types";
 
 const CONFIRMABLE_SUGGESTED: ReadonlySet<VoiceIntent> = new Set(["reminder", "event", "note"]);
 
@@ -196,6 +202,55 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     const { actions: classified, meta } = await processVoiceInput(text, persona);
     const primary = classified[0];
 
+    // 1a. Sprint 2 — Intelligence Framework narrow routing.
+    //     assistant_chat zonder DB-impacterende suggested_actions mag door de
+    //     nieuwe runAssistantTurn(). Bij fout val terug op legacy-pad.
+    try {
+      const mode = await resolveAssistantMode(supabase, userId);
+      const suggestedRaw = primary?.payload.suggested_actions;
+      const hasSuggested =
+        Array.isArray(suggestedRaw) && suggestedRaw.length > 0;
+      if (
+        primary &&
+        isEligibleForAssistantLayer(mode, primary.intent, hasSuggested)
+      ) {
+        const { result: assistantResult, trace } = await runAssistantTurn(
+          supabase,
+          userId,
+          { text, transcription_id: data.transcription_id },
+        );
+        // Audit-log voor de framework-turn met volledige trace.
+        supabase
+          .from("voice_intents")
+          .insert({
+            user_id: userId,
+            transcription_id: data.transcription_id,
+            model: meta.model,
+            intent: primary.intent,
+            confidence: primary.confidence,
+            payload: {
+              actions: classified,
+              persona_signature: persona.signature,
+              engine_trace: trace,
+            } as never,
+            prompt_tokens: meta.prompt_tokens,
+            completion_tokens: meta.completion_tokens,
+            total_tokens: meta.total_tokens,
+            ambiguous: classified.some((a) => !!a.ambiguous),
+            clarification_question: null,
+          })
+          .then(({ error }) => {
+            if (error) console.error("[pipeline:assistant] log", error);
+          });
+        return assistantResult;
+      }
+    } catch (err) {
+      console.warn(
+        "[pipeline] assistant-layer failed, falling back to legacy",
+        err,
+      );
+    }
+
     // 1b. assistant_chat: pak korte reply + (optionele) vervolgacties uit.
     //     Vervolgacties worden NOOIT direct uitgevoerd — ze gaan via de
     //     bestaande needs_confirmation / commitVoiceBundle-flow.
@@ -274,6 +329,14 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     }
 
     // 2. Log intent-classificatie (één rij per zin, met alle (originele) actions in payload)
+    const legacyStart = performance.now();
+    const legacyTraceSeed: Pick<EngineTrace, "framework" | "turn_id"> = {
+      framework: "legacy",
+      turn_id:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `legacy_${Date.now()}`,
+    };
     supabase
       .from("voice_intents")
       .insert({
@@ -282,7 +345,15 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         model: meta.model,
         intent: primary.intent,
         confidence: primary.confidence,
-        payload: { actions: classified, persona_signature: persona.signature } as never,
+        payload: {
+          actions: classified,
+          persona_signature: persona.signature,
+          engine_trace: {
+            ...legacyTraceSeed,
+            total_ms: Math.round(performance.now() - legacyStart),
+            slowest_engine: "legacy_pipeline",
+          },
+        } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
         total_tokens: meta.total_tokens,

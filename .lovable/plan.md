@@ -1,72 +1,67 @@
-# HoofdRust Intelligence Framework — Sprint 1
+# Sprint 2 — Narrow rollout + Reasoning Trace
 
-Doel: één centrale `assistant/` laag waar elke huidige en toekomstige Skill doorheen praat. We bouwen géén big-bang refactor — we leggen het fundament naast de bestaande voice-pipeline, verhuizen één skill als bewijs, en breken niets.
+Doel: één smalle, read-only flow (assistant_chat zonder DB-acties) loopt door het nieuwe Intelligence Framework, en élke AssistantTurn levert een rijke, privacy-veilige `EngineTrace` op die we live in een debug-paneel kunnen bekijken.
 
-## Wat er al staat (hergebruiken)
+## Stap 1 · Feature flag + narrow routing
 
-| Bestaand | Rol in nieuwe model | Hergebruik |
-|---|---|---|
-| `src/lib/voice/process-voice-input.ts` (Gemini classifier + tools) | **Conversation Engine** (intent + behoefte) | Verhuist 1-op-1 achter een nieuw interface |
-| `src/lib/voice/persona.ts` + `load-persona.ts` | **Memory Engine v0** (statische voorkeuren) | Wordt eerste memory-source; later aangevuld met dynamische leer-laag |
-| `src/lib/voice/handlers/query.ts` (agenda/reminder ophalen) | **Context Engine v0** | Logica verhuist naar context-provider |
-| `src/lib/voice/dispatch-voice-action.ts` (preview + commit bundle) | **Decision + Execution Engine** | Splitsen: beslissen (kies handler) vs uitvoeren (commit) |
-| `voice_actions` tabel met `needs_confirmation` + `expires_at` | **Execution toestemming** | Ongewijzigd, blijft de toestemmings-gate |
-| `voice_intents` log | Observability | Uitbreiden met engine-stappen |
-| `src/lib/voice-pipeline.functions.ts` `runVoicePipeline` | Orchestrator | Blijft entry-point, krijgt nieuwe interne volgorde |
-| `assistant_chat` intent + `suggested_actions` | Eerste vorm van **Suggestion Engine** | Generaliseren naar alle skills |
+- Server-side flag in `src/lib/assistant/flags.ts`:
+  - `ASSISTANT_FRAMEWORK` = `off` | `chat_only` | `full` (default `chat_only` in dev, `off` in prod).
+  - Per-user override via `user_profiles.assistant_framework_mode` (optioneel veld, nullable) zodat we testers selectief kunnen opnemen.
+- In `runVoicePipeline`: na de Conversation-classify, als flag actief is **én** `primary === "assistant_chat"` **én** geen `suggested_actions` met DB-impact → roep `runAssistantTurn` aan en geef diens result terug. Alle andere paden ongewijzigd.
+- Failsafe: als de nieuwe laag een error gooit of leeg resultaat geeft → val terug op het bestaande pad. We mogen nooit een gebruikersinteractie laten falen door het experiment.
 
-## Wat nieuw gebouwd wordt (klein, in deze sprint)
+## Stap 2 · Rijke EngineTrace (privacy-veilig)
 
-Eén nieuwe map `src/lib/assistant/` met dunne engines + duidelijke contracten. Geen UI-veranderingen, geen schema-veranderingen, geen migratie van bestaande tabellen.
+Uitbreiding van `EngineTrace` in `src/lib/assistant/types.ts`:
 
 ```text
-src/lib/assistant/
-  types.ts                 # AssistantTurn, EngineContext, Proposal, Decision
-  conversation-engine.ts   # wrapper rond processVoiceInput
-  memory-engine.ts         # leest persona; stub voor write-back
-  context-engine.ts        # tijd, agenda-snapshot, reminders-snapshot
-  initiative-engine.ts     # mag/moet HoofdRust proactief iets opperen?
-  suggestion-engine.ts     # genereert Proposal[] (event/reminder/note/...)
-  decision-engine.ts       # kiest 0..n Proposals → Decision
-  execution-engine.ts      # voert uit via bestaande handlers, respecteert consent
-  pipeline.ts              # orchestrator: runAssistantTurn(input) → AssistantTurn
+EngineTrace {
+  turn_id: string                    // ULID, voor cross-referentie met voice_intents
+  total_ms: number
+  slowest_engine: string
+
+  conversation: { primary, actions_count, model, ms, ambiguous }
+  memory:       { persona_signature, hits_count, sources[], ms }
+  context:      { today_count, has_next_event, snapshot_keys[], ms }
+  initiative:   { allow, reason, ms }
+  suggestion:   { proposals_count, skills[], ms }
+  decision:     { kept, rejected, rejection_reasons[], reason, ms }
+  execution:    { status, intent, ms, used_fallback: boolean }
+}
 ```
 
-## Implementatieplan — kleine stappen
+Privacy-regels (hard):
+- **Geen** transcript-tekst, geen titels, geen datums, geen reply-tekst in de trace.
+- Alleen tellingen, signatures, intent-namen, redenen (uit een vaste enum), en timings.
+- Persona alleen via `signature` (al gehasht), nooit ruwe profielvelden.
+- Memory-hits alleen als `{key, confidence}`, nooit `value`.
 
-**Stap 1 · Contracten (geen gedragverandering)**
-- Schrijf `src/lib/assistant/types.ts` met `EngineContext`, `Proposal`, `Decision`, `AssistantTurn`.
-- Schrijf lege engine-modules die nu nog delegeren naar de bestaande voice-modules.
-- Geen route- of UI-code raakt dit aan. Build moet groen blijven.
+Implementatie:
+- Kleine helper `withTiming(name, fn)` in `pipeline.ts` → meet ms per engine + bouw timings-map.
+- Decision Engine geeft voortaan `Decision.rejections: { skill, reason }[]` terug (reason uit enum: `over_cap`, `duplicate`, `persona_quiet`, `requires_consent_outside_chat_only`, ...).
+- Suggestion Engine vult `Proposal.rationale` met enum-waarden (al deels aanwezig).
+- `runAssistantTurn` schrijft trace naar `voice_intents.payload.engine_trace` (jsonb-veld bestaat al, geen migratie nodig).
 
-**Stap 2 · Orchestrator naast de oude**
-- `runAssistantTurn()` in `assistant/pipeline.ts` roept de engines in volgorde: Conversation → Memory → Context → Initiative → Suggestion → Decision → Execution.
-- `runVoicePipeline` blijft bestaan; intern roept hij `runAssistantTurn` aan. Output-shape (`PipelineResult`) blijft identiek — `voice-orb.tsx` en `voice-confirm.functions.ts` merken er niets van.
+## Stap 3 · Debug-paneel (alleen voor tester)
 
-**Stap 3 · Skills verhuizen naar engine-call (proof)**
-- Eén skill als bewijs: de bestaande `query`-handler wordt opnieuw ingericht zodat hij alleen `Context.snapshot()` + `Suggestion.format()` gebruikt — geen eigen AI-call.
-- Bevestigt het patroon: een skill is een dunne adapter, intelligentie zit in de engines.
-- Andere handlers (release, reminder, event, note, checkin, assistant_chat) blijven werken via de oude weg tot een latere sprint ze één voor één verhuist.
+- Nieuwe component `src/components/debug/engine-trace-panel.tsx`: collapsible panel onderaan de orb-pagina, met chronologisch timeline-overzicht per engine + ms-balkjes + reden-chips.
+- Zichtbaarheid:
+  - Lokaal toggle via `localStorage.setItem('hr_debug', '1')` (browser console-only, niet via UI — geen knop in de gebruikers-UI).
+  - Server stuurt `engine_trace` alleen mee in de response als de flag actief is voor deze user; anders `undefined` (geen extra bytes voor gewone gebruikers).
+- `PipelineResult` krijgt optioneel veld `engine_trace?: EngineTrace`.
 
-**Stap 4 · Memory write-back stub + observability**
-- `memory-engine.ts` krijgt een `remember()` no-op met TODO + log; nog géén nieuwe tabel.
-- `voice_intents.payload` krijgt extra veld `engine_trace` (welke engines actief waren, welke proposals, welke decision) — puur logging, geen schema-migratie nodig (`payload` is jsonb).
+## Stap 4 · Server-side meetbaarheid
 
-## Hoe we niets breken
+- Trace wegschrijven naar `voice_intents.payload.engine_trace` voor élke turn (ook wanneer de oude pipeline draait, met `framework: "legacy"` + alleen totale ms). Zo kunnen we straks vergelijken: hoe vaak zou de nieuwe laag een ándere decision genomen hebben?
+- Geen nieuwe tabel, geen migratie — `payload` is al jsonb.
 
-- Alle bestaande files blijven staan, geen renames.
-- Nieuwe code zit volledig in `src/lib/assistant/` en wordt alleen aangeroepen vanuit `runVoicePipeline`'s body.
-- Output-contract `PipelineResult` is ongewijzigd → UI (`voice-orb`, `voice-query-result`, bevestigingskaart) blijft werken.
-- `voice_actions` + `voice_intents` tabellen ongewijzigd; toestemmings-flow (`needs_confirmation` + `expires_at` + `confirmation_text`) blijft de execution-gate.
-- Geen nieuwe afhankelijkheden, geen Edge Function, geen DB-migratie in deze sprint.
+## Wat we NIET doen in deze sprint
 
-## Out of scope (latere sprints)
+- Geen reminder/event/query/release-flows door de nieuwe laag (Sprint 3+).
+- Geen schema-migratie (alles past in bestaande jsonb).
+- Geen UI-flag voor gebruikers — debug is strict tester-only via localStorage.
+- Geen vergelijkende A/B-runner (twee pipelines tegelijk draaien). Eerst kwaliteit per turn meten, dan pas A/B.
 
-- Dynamische memory (leren van gedrag, eigen `assistant_memory` tabel).
-- Proactieve trigger-bron buiten een spraak-turn (cron / context-events).
-- Verhuizen van álle handlers naar engine-only.
-- Nieuwe skills (cadeau, restaurant, kapper, vakantie) — pas zinvol als fundament staat.
+## Resultaat
 
-## Resultaat van deze sprint
-
-Een werkend fundament: zeven dunne engines, één orchestrator, één skill (`query`) die bewijst dat een Skill geen eigen AI-logica meer hoeft. Alle bestaande functionaliteit blijft 1-op-1 werken. Volgende sprints verhuizen telkens één skill of voegen één engine-capability toe.
+Eén smalle live-flow door het framework, élke turn produceert een rijke trace die we ter plekke kunnen bekijken, en we hebben de meetbasis om Sprint 3 (volgende intent-verhuizing) op data te baseren.
