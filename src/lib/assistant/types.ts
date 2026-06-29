@@ -223,9 +223,22 @@ export type EngineTrace = {
   };
   experience?: {
     kind: "gift_event";
+    /** "clarify" = HoofdRust vroeg eerst om context. "results" = direct ideeën + reminder. */
+    mode: "clarify" | "results";
+    /** Welk veld de Conversation Engine miste en daarom opvroeg. */
+    asked_field?: "age" | "interests" | "budget" | "who" | null;
+    /** Aantal clarify-rondes in deze experience (inclusief deze). */
+    clarify_count?: number;
+    /** Lag er state klaar uit een vorige turn? */
+    had_state?: boolean;
+    /** Hoe oud (ms) was die state, null = geen state. */
+    state_age_ms?: number | null;
+    /** True als deze turn een vervolg-zin op een lopende experience was. */
+    is_continuation?: boolean;
     had_existing_event: boolean;
     had_existing_reminder: boolean;
     ideas_count: number;
     ms: number;
   };
+
 };
