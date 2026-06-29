@@ -343,14 +343,6 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     }
 
     // 2. Log intent-classificatie (één rij per zin, met alle (originele) actions in payload)
-    const legacyStart = performance.now();
-    const legacyTraceSeed: Pick<EngineTrace, "framework" | "turn_id"> = {
-      framework: "legacy",
-      turn_id:
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `legacy_${Date.now()}`,
-    };
     supabase
       .from("voice_intents")
       .insert({
@@ -362,11 +354,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         payload: {
           actions: classified,
           persona_signature: persona.signature,
-          engine_trace: {
-            ...legacyTraceSeed,
-            total_ms: Math.round(performance.now() - legacyStart),
-            slowest_engine: "legacy_pipeline",
-          },
+          engine_trace: buildLegacyTrace(),
         } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
@@ -378,6 +366,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       .then(({ error }) => {
         if (error) console.error("[pipeline] voice_intents log", error);
       });
+
 
     // 3. Dispatch bundle (persona doorgegeven voor query-handler caps + toon)
     let result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
