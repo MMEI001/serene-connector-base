@@ -526,6 +526,7 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       {confirming && !isEditing && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-center gap-3">
+          {experienceCard && <ExperienceCard data={experienceCard} />}
           {confirming.preview.includes("\n") && (() => {
             const [head, ...rest] = confirming.preview.split("\n");
             const sub = rest.join(" ").trim();
