@@ -20,6 +20,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VoiceAction } from "@/lib/voice/types";
 import type { UserPersona } from "@/lib/voice/persona";
 import type { AskField } from "./continuation";
+import type { MemoryRecord } from "../memory/types";
 import {
   buildClarifyQuestion,
   buildResultSummary,
@@ -94,6 +95,7 @@ function capitalize(s: string): string {
 async function generateIdeas(
   input: GiftEventInput,
   persona?: UserPersona,
+  memoryRecords: MemoryRecord[] = [],
 ): Promise<string[]> {
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) return defaultIdeas(input);
