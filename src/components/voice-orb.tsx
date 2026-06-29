@@ -674,6 +674,20 @@ export function VoiceOrb({ onCompleted }: Props) {
         />
       )}
 
+      {lastVoiceLog && (
+        <div className="mt-4 mb-2 inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full bg-black/5 dark:bg-white/10 px-3 py-1 text-[10px] font-mono text-muted-foreground backdrop-blur-md">
+          <span className="font-semibold text-foreground/80">Voice Trace:</span>
+          <span className="text-foreground">{lastVoiceLog.provider}</span>
+          <span>•</span>
+          <span>{lastVoiceLog.voice_id}</span>
+          <span>•</span>
+          <span>{lastVoiceLog.model}</span>
+          <span>•</span>
+          <span>{lastVoiceLog.latency_ms}ms</span>
+          <span className="opacity-70">({lastVoiceLog.intent})</span>
+        </div>
+      )}
+
       <EngineTracePanel trace={lastTrace} />
     </div>
   );
