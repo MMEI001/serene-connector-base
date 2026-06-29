@@ -407,7 +407,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setIsEditing(false);
-
+      setExperienceCard(null);
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
