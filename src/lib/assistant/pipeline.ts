@@ -223,6 +223,7 @@ export async function runAssistantTurn(
         had_existing_event: !!exp.value.existingAppointmentId,
         had_existing_reminder: !!exp.value.existingReminderId,
         ideas_count: exp.value.ideas.length,
+        memory_used_count: exp.value.memoryUsedCount,
         ms: exp.ms,
       };
     }

@@ -247,6 +247,7 @@ export type EngineTrace = {
     had_existing_event: boolean;
     had_existing_reminder: boolean;
     ideas_count: number;
+    memory_used_count?: number;
     ms: number;
   };
 
