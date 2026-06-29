@@ -75,6 +75,10 @@ export type ActionResult = {
   /** Korte, adviserende reactie van de assistent (voor TTS + UI). */
   assistant_reply?: string;
 
+  // ---- observability (alleen in dev/debug-mode mee) ----
+  /** Privacy-veilige reasoning-trace van het Intelligence Framework. */
+  engine_trace?: import("@/lib/assistant/types").EngineTrace;
+
   // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
   editable?: {
     intent: "reminder" | "event";
