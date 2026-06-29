@@ -229,7 +229,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         primary &&
         isEligibleForAssistantLayer(mode, primary.intent, hasSuggested, hasExperience)
       ) {
-        const { result: assistantResult, trace } = await runAssistantTurn(
+        const { result: assistantResult, trace, chosenActions } = await runAssistantTurn(
           supabase,
           userId,
           { text, transcription_id: data.transcription_id },
@@ -257,8 +257,78 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           .then(({ error }) => {
             if (error) console.error("[pipeline:assistant] log", error);
           });
+
+        // needs_confirmation → persisteer bundle + action_id zodat UI bevestigingskaart toont.
+        if (assistantResult.status === "needs_confirmation" && chosenActions.length > 0) {
+          const expiresAt = new Date(Date.now() + PENDING_TTL_MS).toISOString();
+          const { data: row, error: insErr } = await supabase
+            .from("voice_actions")
+            .insert({
+              user_id: userId,
+              transcription_id: data.transcription_id,
+              intent: primary.intent,
+              payload: { actions: chosenActions } as never,
+              status: "needs_confirmation",
+              confirmation_text: assistantResult.preview ?? assistantResult.confirmation,
+              expires_at: expiresAt,
+            })
+            .select("id")
+            .single();
+
+          if (insErr || !row) {
+            return {
+              intent: primary.intent,
+              status: "failed",
+              confirmation: "Kon de bevestiging niet voorbereiden.",
+              error: insErr?.message ?? "pending insert failed",
+              engine_trace: trace,
+            };
+          }
+          let editable: PipelineResult["editable"] | undefined;
+          if (chosenActions.length === 1) {
+            const a = chosenActions[0];
+            if (a.intent === "reminder") {
+              editable = {
+                intent: "reminder",
+                title: String(a.payload.title ?? ""),
+                iso_datetime: typeof a.payload.iso_datetime === "string" ? a.payload.iso_datetime : undefined,
+              };
+            } else if (a.intent === "event") {
+              editable = {
+                intent: "event",
+                title: String(a.payload.title ?? ""),
+                date: typeof a.payload.date === "string" ? a.payload.date : undefined,
+                start_time: typeof a.payload.start_time === "string" ? a.payload.start_time : undefined,
+              };
+            }
+          }
+          return {
+            ...assistantResult,
+            action_id: row.id as string,
+            expires_at: expiresAt,
+            editable,
+          };
+        }
+
+        // completed/failed → audit-log
+        if (assistantResult.status === "completed" || assistantResult.status === "failed") {
+          const { error: logErr } = await supabase.from("voice_actions").insert({
+            user_id: userId,
+            transcription_id: data.transcription_id,
+            intent: primary.intent,
+            payload: { actions: chosenActions } as never,
+            result_table: assistantResult.ref?.table ?? null,
+            result_id: assistantResult.ref?.id ?? null,
+            status: assistantResult.status,
+            error: assistantResult.error ?? null,
+            confirmation_text: assistantResult.confirmation,
+          });
+          if (logErr) console.error("[pipeline:assistant] audit log", logErr);
+        }
+
         return assistantResult;
       }
+
     } catch (err) {
       console.warn(
         "[pipeline] assistant-layer failed, falling back to legacy",
