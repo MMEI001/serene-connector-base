@@ -21,6 +21,7 @@ import type { VoiceAction } from "@/lib/voice/types";
 import type { UserPersona } from "@/lib/voice/persona";
 import type { AskField } from "./continuation";
 import type { MemoryRecord } from "../memory/types";
+import { touchMemoryUsed } from "../memory/store";
 import {
   buildClarifyQuestion,
   buildResultSummary,
@@ -342,6 +343,10 @@ export async function runGiftEvent(
     isContinuation,
     memoryUsed: relevantMemories.map((m) => ({ subject: m.subject || who, value: m.value })),
   });
+
+  if (relevantMemories.length > 0) {
+    void touchMemoryUsed(supabase, relevantMemories.map((m) => m.id), now);
+  }
 
   return {
     mode: "results",
