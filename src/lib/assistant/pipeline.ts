@@ -42,6 +42,18 @@ async function withTiming<T>(fn: () => Promise<T> | T): Promise<{ value: T; ms: 
   return { value, ms: Math.round(performance.now() - start) };
 }
 
+function appendLine(base: string | undefined, extra: string): string {
+  const a = (base ?? "").trim();
+  const b = extra.trim();
+  if (!a) return b;
+  if (!b) return a;
+  return `${a} ${b}`;
+}
+  const start = performance.now();
+  const value = await fn();
+  return { value, ms: Math.round(performance.now() - start) };
+}
+
 function pickSlowest(timings: Record<string, number>): string {
   let slowest = "n/a";
   let max = -1;
