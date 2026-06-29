@@ -155,6 +155,8 @@ export type Decision = {
 export type AssistantTurn = {
   result: PipelineResult;
   trace: EngineTrace;
+  /** De acties die door de Decision Engine zijn doorgelaten (voor persistence). */
+  chosenActions: VoiceAction[];
 };
 
 /**
