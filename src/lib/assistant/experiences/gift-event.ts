@@ -33,6 +33,8 @@ export type GiftEventOutcome = {
   existingReminderId: string | null;
   leadDays: number;
   reminderAction: VoiceAction | null;
+  /** Korte gesproken samenvatting (1-2 zinnen) voor TTS. */
+  spokenSummary: string;
   card: {
     kind: "gift_event";
     who: string;
