@@ -195,12 +195,26 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       return { intent: "release", status: "skipped", confirmation: "" };
     }
 
+    // Sprint 2 — legacy mini-trace (privacy-veilig: geen transcript/titels/datums).
+    const pipelineStart = performance.now();
+    const legacyTurnId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `legacy_${Date.now()}`;
+    const buildLegacyTrace = (): EngineTrace => ({
+      framework: "legacy",
+      turn_id: legacyTurnId,
+      total_ms: Math.round(performance.now() - pipelineStart),
+      slowest_engine: "legacy_pipeline",
+    });
+
     // 0. Persona laden uit user_profiles (RLS-actief via supabase-client van auth-middleware)
     const persona = await loadUserPersona(supabase, userId);
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
     const { actions: classified, meta } = await processVoiceInput(text, persona);
     const primary = classified[0];
+
 
     // 1a. Sprint 2 — Intelligence Framework narrow routing.
     //     assistant_chat zonder DB-impacterende suggested_actions mag door de
