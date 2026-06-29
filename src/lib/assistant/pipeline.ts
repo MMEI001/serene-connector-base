@@ -197,7 +197,14 @@ export async function runAssistantTurn(
   trace.slowest_engine = pickSlowest(timings);
   result.engine_trace = trace;
 
-  return { result, trace };
+  const chosenActions: import("@/lib/voice/types").VoiceAction[] =
+    dec.value.proposals.map((p) => ({
+      intent: p.skill,
+      payload: p.payload,
+      confidence: 0.8,
+    }));
+
+  return { result, trace, chosenActions };
 }
 
 export type { AssistantTurn } from "./types";
