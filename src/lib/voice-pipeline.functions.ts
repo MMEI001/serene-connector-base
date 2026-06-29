@@ -202,6 +202,55 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     const { actions: classified, meta } = await processVoiceInput(text, persona);
     const primary = classified[0];
 
+    // 1a. Sprint 2 — Intelligence Framework narrow routing.
+    //     assistant_chat zonder DB-impacterende suggested_actions mag door de
+    //     nieuwe runAssistantTurn(). Bij fout val terug op legacy-pad.
+    try {
+      const mode = await resolveAssistantMode(supabase, userId);
+      const suggestedRaw = primary?.payload.suggested_actions;
+      const hasSuggested =
+        Array.isArray(suggestedRaw) && suggestedRaw.length > 0;
+      if (
+        primary &&
+        isEligibleForAssistantLayer(mode, primary.intent, hasSuggested)
+      ) {
+        const { result: assistantResult, trace } = await runAssistantTurn(
+          supabase,
+          userId,
+          { text, transcription_id: data.transcription_id },
+        );
+        // Audit-log voor de framework-turn met volledige trace.
+        supabase
+          .from("voice_intents")
+          .insert({
+            user_id: userId,
+            transcription_id: data.transcription_id,
+            model: meta.model,
+            intent: primary.intent,
+            confidence: primary.confidence,
+            payload: {
+              actions: classified,
+              persona_signature: persona.signature,
+              engine_trace: trace,
+            } as never,
+            prompt_tokens: meta.prompt_tokens,
+            completion_tokens: meta.completion_tokens,
+            total_tokens: meta.total_tokens,
+            ambiguous: classified.some((a) => !!a.ambiguous),
+            clarification_question: null,
+          })
+          .then(({ error }) => {
+            if (error) console.error("[pipeline:assistant] log", error);
+          });
+        return assistantResult;
+      }
+    } catch (err) {
+      console.warn(
+        "[pipeline] assistant-layer failed, falling back to legacy",
+        err,
+      );
+    }
+
     // 1b. assistant_chat: pak korte reply + (optionele) vervolgacties uit.
     //     Vervolgacties worden NOOIT direct uitgevoerd — ze gaan via de
     //     bestaande needs_confirmation / commitVoiceBundle-flow.
