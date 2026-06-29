@@ -6,8 +6,9 @@
  * bevatten geen eigen AI-logica meer — ze leveren alleen een adapter aan
  * de Suggestion- en Execution-engine.
  *
- * Deze sprint definieert de contracten + een dunne orchestrator. De engines
- * delegeren waar mogelijk naar bestaande voice-modules zodat we niets breken.
+ * Sprint 2: contracten uitgebreid met een rijke, PRIVACY-VEILIGE EngineTrace
+ * (tellingen, signatures, redenen-enum, timings). Geen transcript-tekst,
+ * geen titels, geen datums, geen reply-tekst.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -39,15 +40,11 @@ export type EngineContext = {
   snapshot?: ContextSnapshot;
 };
 
-/** Resultaat van Conversation Engine: wat wil de gebruiker écht? */
+/** Resultaat van Conversation Engine. */
 export type Conversation = {
-  /** Originele tekst, getrimmed. */
   text: string;
-  /** Gemini-classificatie: 1..n acties met intent + payload. */
   actions: VoiceAction[];
-  /** Primaire intent (eerste actie). */
   primary: VoiceIntent;
-  /** Optionele adviserende reactie (assistant_chat). */
   assistantReply?: string;
   meta: {
     model: string;
@@ -57,57 +54,112 @@ export type Conversation = {
   };
 };
 
-/** Memory-hit — nu nog stub, later: dynamische voorkeuren/gewoontes. */
+/** Memory-hit — privacy: alleen key + confidence, nooit value. */
 export type MemoryHit = {
   key: string;
-  value: string;
+  source: "persona" | "dynamic";
   confidence: number;
 };
 
-/** Lichte snapshot van wat er vandaag/komend speelt — voedt Suggestion + Query. */
+/** Lichte snapshot van wat er vandaag speelt. */
 export type ContextSnapshot = {
   todayCount: number;
   nextEvent?: { title: string; whenIso: string } | null;
 };
 
-/** Een Proposal is een potentiële actie — nog niet besloten, nog niet uitgevoerd. */
+/** Vast vocabulaire van redenen — voorkomt vrij-tekst lekken in trace. */
+export type RejectionReason =
+  | "over_cap"
+  | "duplicate"
+  | "persona_quiet"
+  | "requires_consent_outside_chat_only"
+  | "unsupported_skill";
+
+export type InitiativeReason =
+  | "direct_intent"
+  | "persona_quiet"
+  | "advisory_question";
+
+/** Een Proposal is een potentiële actie — nog niet besloten. */
 export type Proposal = {
-  /** Welke skill levert dit voorstel. */
   skill: VoiceIntent;
-  /** Payload zoals de bestaande handlers verwachten. */
   payload: Record<string, unknown>;
-  /** Vereist deze actie expliciete bevestiging? */
   requiresConsent: boolean;
-  /** Korte preview voor logging/observability. */
-  rationale?: string;
+  rationale?: "direct_intent" | "assistant_suggested";
 };
 
-/** Initiative-beslissing: mag HoofdRust nu proactief iets opperen? */
 export type Initiative = {
   allow: boolean;
-  reason: string;
+  reason: InitiativeReason;
 };
 
-/** Decision Engine output: welke proposals voeren we uit (of: laten we bevestigen)? */
+export type RejectedProposal = {
+  skill: VoiceIntent;
+  reason: RejectionReason;
+};
+
 export type Decision = {
   proposals: Proposal[];
-  /** Korte uitleg voor logging. */
+  rejections: RejectedProposal[];
   reason: string;
 };
 
-/** Eindresultaat van één turn — wrapper rond bestaande PipelineResult. */
+/** Eindresultaat van één turn. */
 export type AssistantTurn = {
   result: PipelineResult;
   trace: EngineTrace;
 };
 
-/** Observability: welke engines deden wat. Wordt opgeslagen in voice_intents.payload. */
+/**
+ * Observability — uitlegbaar denken. PRIVACY-VEILIG: alleen tellingen,
+ * enum-redenen, signatures, timings. Geen ruwe gebruikersdata.
+ */
 export type EngineTrace = {
-  conversation?: { primary: VoiceIntent; actions: number; model: string };
-  memory?: { hits: number; signature: string };
-  context?: { todayCount: number };
-  initiative?: Initiative;
-  suggestion?: { proposals: number };
-  decision?: { proposals: number; reason: string };
-  execution?: { status: ActionResult["status"]; intent: VoiceIntent };
+  /** Korrelig ID per turn, voor cross-ref met voice_intents. */
+  turn_id: string;
+  /** "framework" of "legacy" — welk pad heeft deze turn afgehandeld. */
+  framework: "assistant" | "legacy";
+  /** Totale doorlooptijd in ms. */
+  total_ms: number;
+  /** Naam van de engine met de hoogste ms. */
+  slowest_engine: string;
+
+  conversation?: {
+    primary: VoiceIntent;
+    actions_count: number;
+    model: string;
+    ambiguous: boolean;
+    ms: number;
+  };
+  memory?: {
+    persona_signature: string;
+    hits_count: number;
+    sources: Array<"persona" | "dynamic">;
+    ms: number;
+  };
+  context?: {
+    today_count: number;
+    has_next_event: boolean;
+    snapshot_keys: string[];
+    ms: number;
+  };
+  initiative?: Initiative & { ms: number };
+  suggestion?: {
+    proposals_count: number;
+    skills: VoiceIntent[];
+    ms: number;
+  };
+  decision?: {
+    kept: number;
+    rejected: number;
+    rejection_reasons: RejectionReason[];
+    reason: string;
+    ms: number;
+  };
+  execution?: {
+    status: ActionResult["status"];
+    intent: VoiceIntent;
+    used_fallback: boolean;
+    ms: number;
+  };
 };

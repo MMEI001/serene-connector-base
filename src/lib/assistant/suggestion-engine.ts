@@ -1,10 +1,8 @@
 /**
  * Suggestion Engine — vertaalt Conversation-output naar concrete Proposals.
  *
- * Sprint 1: gebruikt de bestaande logica uit voice-pipeline (slimme defaults
- * voor titel/tijd, dedupe, subtekst uit assistant-reply). We isoleren dit
- * achter één functie zodat later skills hier hun eigen sub-suggester kunnen
- * inpluggen (cadeau, restaurant, kapper, ...).
+ * Sprint 2: Proposal.rationale gebruikt enum-waarden zodat de trace
+ * uitlegbaar wordt zonder ruwe tekst.
  */
 
 import type { VoiceAction, VoiceIntent } from "@/lib/voice/types";
@@ -16,18 +14,14 @@ export function propose(
   _ctx: EngineContext,
   conv: Conversation,
 ): Proposal[] {
-  // Directe intents (release/reminder/event/query/note/checkin) → één-op-één
-  // doorzetten als Proposal. De skill bepaalt zelf of consent nodig is.
   if (conv.primary !== "assistant_chat") {
-    return conv.actions.map((a) => toProposal(a));
+    return conv.actions.map((a) => toProposal(a, "direct_intent"));
   }
 
-  // assistant_chat: pak suggested_actions uit de reply.
   const primary = conv.actions[0];
   const suggestedRaw = primary?.payload.suggested_actions;
   if (!Array.isArray(suggestedRaw) || suggestedRaw.length === 0) {
-    // Alleen reply → één "doe niets behalve praten"-proposal.
-    return [toProposal(primary)];
+    return primary ? [toProposal(primary, "direct_intent")] : [];
   }
 
   const proposals: Proposal[] = [];
@@ -50,11 +44,14 @@ export function propose(
   return proposals;
 }
 
-function toProposal(action: VoiceAction): Proposal {
+function toProposal(
+  action: VoiceAction,
+  rationale: Proposal["rationale"],
+): Proposal {
   return {
     skill: action.intent,
     payload: action.payload,
     requiresConsent: action.intent === "reminder" || action.intent === "event",
-    rationale: "direct_intent",
+    rationale,
   };
 }
