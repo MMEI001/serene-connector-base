@@ -390,7 +390,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       }
     }
 
-    if (result.status === "skipped") return result;
+    if (result.status === "skipped") return { ...result, engine_trace: buildLegacyTrace() };
 
     // 4a. needs_confirmation → bewaar hele bundle in voice_actions.payload.actions
     if (result.status === "needs_confirmation") {
@@ -415,6 +415,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           status: "failed",
           confirmation: "Kon de bevestiging niet voorbereiden.",
           error: error?.message ?? "pending insert failed",
+          engine_trace: buildLegacyTrace(),
         };
       }
       // Bewerkbare velden: alleen bij precies één confirmable actie.
@@ -436,7 +437,13 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           };
         }
       }
-      return { ...result, action_id: row.id as string, expires_at: expiresAt, editable };
+      return {
+        ...result,
+        action_id: row.id as string,
+        expires_at: expiresAt,
+        editable,
+        engine_trace: buildLegacyTrace(),
+      };
     }
 
     // 4b. completed/failed → audit-log
@@ -455,5 +462,6 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       if (logErr) console.error("[pipeline] audit log", logErr);
     }
 
-    return result;
+    return { ...result, engine_trace: buildLegacyTrace() };
   });
+
