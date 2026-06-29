@@ -182,6 +182,14 @@ ASSISTANT_CHAT REGELS:
 - suggested_actions worden NOOIT direct uitgevoerd — de gebruiker bevestigt eerst via de bevestigingskaart. Gebruik exact dezelfde payload-velden als gewone reminder/event/note.
 - Bij twijfel tussen query en assistant_chat: kies query als er een agenda/reminder-antwoord is, anders assistant_chat.
 
+EXPERIENCE PATRONEN (alleen bij intent=assistant_chat):
+- Als de gebruiker een sociale gebeurtenis voor iemand anders noemt (kinderfeestje, verjaardag, bruiloft, etentje, doopfeest), zet:
+    payload.experience = "gift_event"
+    payload.experience_data = { who?, event_type?, iso_datetime?, age?, interests?, budget? }
+- "Mijn dochter heeft volgende week een kinderfeestje" → experience=gift_event, who="dochter", event_type="kinderfeestje", iso_datetime=<ISO van die dag 12:00>.
+- Geef ALTIJD ook een warm-praktische reply ("Leuk! Dan is het handig om alvast een cadeautje te regelen.").
+- LAAT in dit geval suggested_actions WEG — het framework bouwt zelf het cadeau-voorstel; jij zou de iso_datetime alleen maar verkeerd raden.
+
 MULTI-ACTION REGELS (voor gewone event+reminder, niet voor assistant_chat):
 - "Zet een afspraak X EN herinner me Y" → 2 acties: [event, reminder].
 - Bij "X dagen/uur van tevoren": bereken iso_datetime = event-datum − X dagen/uur. Zonder kloktijd → default 09:00 Europe/Amsterdam.
