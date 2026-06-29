@@ -105,6 +105,7 @@ export async function runAssistantTurn(
   // 3b. Experience-detectie: rijke patronen verrijken de Conversation
   //     vóórdat Initiative/Suggestion eraan rekenen.
   let experienceCard: ExperienceCardData | null = null;
+  let experienceSpokenSummary: string | null = null;
   const primary = conv.value.actions[0];
   const giftInput = primary ? isGiftEventConv(primary.payload) : null;
   if (giftInput) {
@@ -118,6 +119,7 @@ export async function runAssistantTurn(
       ms: exp.ms,
     };
     experienceCard = exp.value.card;
+    experienceSpokenSummary = exp.value.spokenSummary || null;
     // Voeg het reminder-voorstel toe als suggested_action zodat de
     // Suggestion Engine 'm als gewone Proposal oppakt.
     if (exp.value.reminderAction) {
