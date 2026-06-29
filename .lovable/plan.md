@@ -1,61 +1,72 @@
-## Root cause
+# HoofdRust Intelligence Framework — Sprint 1
 
-`loadPrefs()` in `src/lib/speak.ts` cached **`false`** voor de hele sessie en gebruikt dat daarna onvoorwaardelijk.
+Doel: één centrale `assistant/` laag waar elke huidige en toekomstige Skill doorheen praat. We bouwen géén big-bang refactor — we leggen het fundament naast de bestaande voice-pipeline, verhuizen één skill als bewijs, en breken niets.
 
-Twee paden waarlangs een onterechte `false` in de cache komt:
+## Wat er al staat (hergebruiken)
 
-1. **`supabase.auth.getUser()` faalt met 403** (precies wat je in het netwerk ziet op `/auth/v1/user`). `getUser()` doet een netwerkcall en valideert het token server-side; bij een tijdelijke 403 / refresh-race retourneert dit `user = null`. De huidige code doet dan:
-   ```ts
-   if (!user) return { enabled: false, ... }
-   ```
-   Daarna wordt deze waarde **niet** gecached (terecht), maar bij de andere tak (`maybeSingle()` geeft `data = null` door bv. een latente RLS-race of een lege response):
-   ```ts
-   const enabled = Boolean(row?.voice_enabled);
-   cachedEnabled = enabled;  // ← false wordt voor de hele sessie vastgezet
-   ```
-   Vanaf dat moment retourneert `loadPrefs()` altijd `false`, ook als de DB intussen `true` zegt en het profiel correct laadt.
+| Bestaand | Rol in nieuwe model | Hergebruik |
+|---|---|---|
+| `src/lib/voice/process-voice-input.ts` (Gemini classifier + tools) | **Conversation Engine** (intent + behoefte) | Verhuist 1-op-1 achter een nieuw interface |
+| `src/lib/voice/persona.ts` + `load-persona.ts` | **Memory Engine v0** (statische voorkeuren) | Wordt eerste memory-source; later aangevuld met dynamische leer-laag |
+| `src/lib/voice/handlers/query.ts` (agenda/reminder ophalen) | **Context Engine v0** | Logica verhuist naar context-provider |
+| `src/lib/voice/dispatch-voice-action.ts` (preview + commit bundle) | **Decision + Execution Engine** | Splitsen: beslissen (kies handler) vs uitvoeren (commit) |
+| `voice_actions` tabel met `needs_confirmation` + `expires_at` | **Execution toestemming** | Ongewijzigd, blijft de toestemmings-gate |
+| `voice_intents` log | Observability | Uitbreiden met engine-stappen |
+| `src/lib/voice-pipeline.functions.ts` `runVoicePipeline` | Orchestrator | Blijft entry-point, krijgt nieuwe interne volgorde |
+| `assistant_chat` intent + `suggested_actions` | Eerste vorm van **Suggestion Engine** | Generaliseren naar alle skills |
 
-2. **`speakText` draait vóór de profielroute** (jij zit nu op `/laat-los`, niet `/profiel`). Alleen `profiel.tsx` roept `setVoicePreferenceCache(true)` aan na het ophalen van het profiel. Op andere routes vult de eerste `loadPrefs()`-call de cache met wat de eerste poging ook teruggeeft — als die poging samenvalt met de 403, blijft `false` plakken.
+## Wat nieuw gebouwd wordt (klein, in deze sprint)
 
-DB-check bevestigd: er is **1** rij voor jouw `user_id` met `voice_enabled = true`. Geen duplicaten, geen RLS-probleem op de tabel zelf. Het probleem zit volledig in de client-side prefs-loader.
+Eén nieuwe map `src/lib/assistant/` met dunne engines + duidelijke contracten. Geen UI-veranderingen, geen schema-veranderingen, geen migratie van bestaande tabellen.
 
-## Plan
+```text
+src/lib/assistant/
+  types.ts                 # AssistantTurn, EngineContext, Proposal, Decision
+  conversation-engine.ts   # wrapper rond processVoiceInput
+  memory-engine.ts         # leest persona; stub voor write-back
+  context-engine.ts        # tijd, agenda-snapshot, reminders-snapshot
+  initiative-engine.ts     # mag/moet HoofdRust proactief iets opperen?
+  suggestion-engine.ts     # genereert Proposal[] (event/reminder/note/...)
+  decision-engine.ts       # kiest 0..n Proposals → Decision
+  execution-engine.ts      # voert uit via bestaande handlers, respecteert consent
+  pipeline.ts              # orchestrator: runAssistantTurn(input) → AssistantTurn
+```
 
-Alleen `src/lib/speak.ts` aanpassen — kleine, gerichte wijziging, geen nieuwe bestanden.
+## Implementatieplan — kleine stappen
 
-### 1. Vervang `getUser()` door `getSession()` in `loadPrefs`
-`getSession()` is lokaal (geen netwerk, geen 403). De `user_profiles`-query gebruikt al RLS via de session; we hebben geen server-side user-revalidatie nodig voor het ophalen van een UI-voorkeur.
+**Stap 1 · Contracten (geen gedragverandering)**
+- Schrijf `src/lib/assistant/types.ts` met `EngineContext`, `Proposal`, `Decision`, `AssistantTurn`.
+- Schrijf lege engine-modules die nu nog delegeren naar de bestaande voice-modules.
+- Geen route- of UI-code raakt dit aan. Build moet groen blijven.
 
-### 2. Cache alleen bij een echt geslaagde load
-- Geen session → return default (`enabled:false`), **niet cachen**.
-- Query error → log + return default, **niet cachen**.
-- `data === null` (geen rij gevonden) → log + return default, **niet cachen** (laat een latere call het opnieuw proberen zodra het profiel er is).
-- Alleen bij een succesvolle response met een rij: `cachedEnabled = row.voice_enabled` opslaan.
+**Stap 2 · Orchestrator naast de oude**
+- `runAssistantTurn()` in `assistant/pipeline.ts` roept de engines in volgorde: Conversation → Memory → Context → Initiative → Suggestion → Decision → Execution.
+- `runVoicePipeline` blijft bestaan; intern roept hij `runAssistantTurn` aan. Output-shape (`PipelineResult`) blijft identiek — `voice-orb.tsx` en `voice-confirm.functions.ts` merken er niets van.
 
-### 3. Uitgebreide logging in `prefs_loaded`
-Voeg toe aan het bestaande `prefs_loaded` event én een nieuw `prefs_load_failed` event:
-- `user_id`
-- `profile_id` (de `id` kolom van `user_profiles`)
-- `voice_enabled_db` (ruwe waarde uit DB, kan `null` zijn)
-- `voice_enabled_effective` (wat `speak.ts` daadwerkelijk gebruikt)
-- `source`: `"cache" | "db" | "default_no_session" | "default_no_row" | "default_query_error"`
-- bij error: `error_message`, `error_code`
+**Stap 3 · Skills verhuizen naar engine-call (proof)**
+- Eén skill als bewijs: de bestaande `query`-handler wordt opnieuw ingericht zodat hij alleen `Context.snapshot()` + `Suggestion.format()` gebruikt — geen eigen AI-call.
+- Bevestigt het patroon: een skill is een dunne adapter, intelligentie zit in de engines.
+- Andere handlers (release, reminder, event, note, checkin, assistant_chat) blijven werken via de oude weg tot een latere sprint ze één voor één verhuist.
 
-Selecteer dus ook `id` in de query.
+**Stap 4 · Memory write-back stub + observability**
+- `memory-engine.ts` krijgt een `remember()` no-op met TODO + log; nog géén nieuwe tabel.
+- `voice_intents.payload` krijgt extra veld `engine_trace` (welke engines actief waren, welke proposals, welke decision) — puur logging, geen schema-migratie nodig (`payload` is jsonb).
 
-### 4. Auth-state listener die de cache leeggooit
-Eenmalig bij module-load een `supabase.auth.onAuthStateChange` registreren die `resetVoicePreferenceCache()` aanroept bij `SIGNED_IN`, `SIGNED_OUT`, `TOKEN_REFRESHED` en `USER_UPDATED`. Voorkomt dat een stale `false` blijft hangen na een token-refresh die de 403 oploste.
+## Hoe we niets breken
 
-### 5. `skipped_disabled`-log uitbreiden
-Zodat we direct zien waarom geskipt werd: `{ intent, voice_enabled, source }`.
+- Alle bestaande files blijven staan, geen renames.
+- Nieuwe code zit volledig in `src/lib/assistant/` en wordt alleen aangeroepen vanuit `runVoicePipeline`'s body.
+- Output-contract `PipelineResult` is ongewijzigd → UI (`voice-orb`, `voice-query-result`, bevestigingskaart) blijft werken.
+- `voice_actions` + `voice_intents` tabellen ongewijzigd; toestemmings-flow (`needs_confirmation` + `expires_at` + `confirmation_text`) blijft de execution-gate.
+- Geen nieuwe afhankelijkheden, geen Edge Function, geen DB-migratie in deze sprint.
 
-### Niet in scope
-- Edge function, retry/fallback in `playWithRetry`, andere providers — die werken al.
-- Profielroute (`profiel.tsx`) — die zet de cache al correct na load, blijft ongewijzigd.
-- DB / RLS-wijzigingen — niet nodig, data is correct.
+## Out of scope (latere sprints)
 
-### Verificatie
-1. Hard refresh op `/laat-los`, voice-action triggeren → console moet tonen:
-   `prefs_loaded { source:"db", voice_enabled_db:true, voice_enabled_effective:true, user_id, profile_id }` en daarna `tts_request_started`.
-2. Console-trick: `await (await import('/src/lib/speak.ts')).resetVoicePreferenceCache()` simuleren door manueel auth-event te triggeren → volgende call laadt opnieuw uit DB.
-3. Forceer de 403-situatie door even offline te gaan tijdens de eerste call → log moet `prefs_load_failed` tonen en bij de volgende poging opnieuw proberen (niet permanent `false` cachen).
+- Dynamische memory (leren van gedrag, eigen `assistant_memory` tabel).
+- Proactieve trigger-bron buiten een spraak-turn (cron / context-events).
+- Verhuizen van álle handlers naar engine-only.
+- Nieuwe skills (cadeau, restaurant, kapper, vakantie) — pas zinvol als fundament staat.
+
+## Resultaat van deze sprint
+
+Een werkend fundament: zeven dunne engines, één orchestrator, één skill (`query`) die bewijst dat een Skill geen eigen AI-logica meer hoeft. Alle bestaande functionaliteit blijft 1-op-1 werken. Volgende sprints verhuizen telkens één skill of voegen één engine-capability toe.
