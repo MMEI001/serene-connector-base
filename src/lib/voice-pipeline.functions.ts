@@ -1,14 +1,20 @@
-// NOTE: deze orchestrator wordt in een latere sprint vervangen door
-// runAssistantTurn() uit src/lib/assistant/pipeline.ts (HoofdRust
-// Intelligence Framework). De engines staan al klaar — sprint 1 leverde
-// het fundament. We swappen pas wanneer elke engine behavior-parity heeft
-// met de slimme defaults / dedupe / editable-shaping hieronder.
+// NOTE: deze orchestrator delegeert sinds Sprint 2 een SMALLE subset
+// (assistant_chat zonder DB-acties) aan runAssistantTurn() uit
+// src/lib/assistant/pipeline.ts (HoofdRust Intelligence Framework).
+// Alle overige intents lopen ongewijzigd via deze legacy-pipeline tot
+// elke engine behavior-parity heeft met de slimme defaults hieronder.
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
 import { dispatchVoiceBundle } from "@/lib/voice/dispatch-voice-action";
 import { loadUserPersona } from "@/lib/voice/load-persona";
 import type { PipelineResult, VoiceAction, VoiceIntent } from "@/lib/voice/types";
+import { runAssistantTurn } from "@/lib/assistant/pipeline";
+import {
+  isEligibleForAssistantLayer,
+  resolveAssistantMode,
+} from "@/lib/assistant/flags";
+import type { EngineTrace } from "@/lib/assistant/types";
 
 const CONFIRMABLE_SUGGESTED: ReadonlySet<VoiceIntent> = new Set(["reminder", "event", "note"]);
 
