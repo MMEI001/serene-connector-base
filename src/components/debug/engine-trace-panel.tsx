@@ -62,9 +62,11 @@ export function EngineTracePanel({ trace }: Props) {
       ms: trace.context?.ms,
       chips: trace.context
         ? [
-            `today: ${trace.context.today_count}`,
-            trace.context.has_next_event ? "next_event" : "no_next_event",
-          ]
+            ...(trace.context.categories?.map((c) => `${c.category}: ${c.count}`) ?? [
+              `today: ${trace.context.today_count}`,
+              trace.context.has_next_event ? "next_event" : "",
+            ]),
+          ].filter(Boolean)
         : [],
     },
     {
