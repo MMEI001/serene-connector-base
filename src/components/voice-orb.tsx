@@ -22,6 +22,10 @@ import {
   playAcknowledgement,
   stopAcknowledgement,
 } from "@/lib/voice/ack-audio";
+import {
+  subscribeVoiceTrace,
+  type VoiceTraceLog,
+} from "@/lib/voice/voice-service";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
