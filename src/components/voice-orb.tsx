@@ -52,7 +52,7 @@ function blobExt(mimeType: string) {
 type Props = { onCompleted?: () => void };
 type Pending = { id: string; blob: Blob; mimeType: string } | null;
 type Editable = {
-  intent: "reminder" | "event";
+  intent: "reminder" | "event" | "note";
   title: string;
   iso_datetime?: string;
   date?: string;
@@ -600,7 +600,7 @@ export function VoiceOrb({ onCompleted }: Props) {
               autoFocus
             />
           </label>
-          {confirming.editable.intent === "reminder" ? (
+          {confirming.editable.intent === "note" ? null : confirming.editable.intent === "reminder" ? (
             <label className="flex flex-col gap-1 text-left">
               <span className="text-xs text-muted-foreground">Datum en tijd</span>
               <input

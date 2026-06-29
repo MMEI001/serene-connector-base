@@ -3,14 +3,14 @@ import type { ActionResult, ActionPreview, VoiceAction, VoiceIntent } from "./ty
 import type { UserPersona } from "./persona";
 import { handleRelease } from "./handlers/release";
 import { previewReminder, commitReminder } from "./handlers/reminder";
-import { handleNote } from "./handlers/note";
+import { handleNote, previewNote } from "./handlers/note";
 import { previewEvent, commitEvent } from "./handlers/event";
 import { handleQuery } from "./handlers/query";
 import { handleCheckin } from "./handlers/checkin";
 
 type Ctx = { supabase: SupabaseClient; userId: string; persona?: UserPersona };
 
-const CONFIRM_INTENTS = new Set<VoiceIntent>(["reminder", "event"]);
+const CONFIRM_INTENTS = new Set<VoiceIntent>(["reminder", "event", "note"]);
 
 /**
  * Dispatch een (mogelijk samengestelde) lijst van voice-acties.
@@ -34,7 +34,12 @@ export async function dispatchVoiceBundle(
   // Bouw previews voor alle bevestigingsacties.
   const previews: ActionPreview[] = [];
   for (const a of confirmable) {
-    const r = a.intent === "event" ? previewEvent(a.payload) : previewReminder(a.payload);
+    const r =
+      a.intent === "event"
+        ? previewEvent(a.payload)
+        : a.intent === "reminder"
+          ? previewReminder(a.payload)
+          : previewNote(a.payload);
     if (r.status === "failed") {
       // Eén van de acties miste verplichte velden → val terug op een failed bundle.
       return r;
@@ -100,7 +105,7 @@ export async function commitVoiceBundle(
     .map((a, i) => ({ a, originalIndex: i }))
     .sort((x, y) => (x.a.intent === "event" ? -1 : 1) - (y.a.intent === "event" ? -1 : 1));
 
-  const created: Array<{ table: "appointments" | "reminders"; id: string; originalIndex: number }> = [];
+  const created: Array<{ table: "appointments" | "reminders" | "notes"; id: string; originalIndex: number }> = [];
   const results: ActionResult[] = [];
 
   try {
@@ -122,6 +127,8 @@ export async function commitVoiceBundle(
           ? { ...a.payload, related_appointment_id: relatedId }
           : a.payload;
         r = await commitReminder(ctx, payload);
+      } else if (a.intent === "note") {
+        r = await handleNote(ctx, a.payload);
       } else {
         continue;
       }
@@ -138,7 +145,11 @@ export async function commitVoiceBundle(
           error: r.error ?? "commit_failed",
         };
       }
-      created.push({ table: r.ref.table as "appointments" | "reminders", id: r.ref.id, originalIndex });
+      created.push({
+        table: r.ref.table as "appointments" | "reminders" | "notes",
+        id: r.ref.id,
+        originalIndex,
+      });
       results.push(r);
     }
   } catch (err) {
@@ -164,7 +175,7 @@ export async function commitVoiceBundle(
 
 async function rollback(
   ctx: Ctx,
-  created: Array<{ table: "appointments" | "reminders"; id: string }>,
+  created: Array<{ table: "appointments" | "reminders" | "notes"; id: string }>,
 ) {
   for (const c of [...created].reverse()) {
     await ctx.supabase
