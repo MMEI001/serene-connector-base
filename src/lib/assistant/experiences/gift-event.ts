@@ -20,6 +20,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VoiceAction } from "@/lib/voice/types";
 import type { UserPersona } from "@/lib/voice/persona";
 import type { AskField } from "./continuation";
+import type { MemoryRecord } from "../memory/types";
+import { touchMemoryUsed } from "../memory/store";
 import {
   buildClarifyQuestion,
   buildResultSummary,
@@ -51,6 +53,7 @@ export type GiftEventResultOutcome = {
   leadDays: number;
   reminderAction: VoiceAction | null;
   spokenSummary: string;
+  memoryUsedCount: number;
   card: {
     kind: "gift_event";
     who: string;
@@ -94,6 +97,7 @@ function capitalize(s: string): string {
 async function generateIdeas(
   input: GiftEventInput,
   persona?: UserPersona,
+  memoryRecords: MemoryRecord[] = [],
 ): Promise<string[]> {
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) return defaultIdeas(input);
@@ -158,6 +162,15 @@ Budget: ${budgetHint}`;
 }
 
 function defaultIdeas(input: GiftEventInput): string[] {
+  // Als we specifieke interesses (zoals uit memory) kennen, genereer logische default-tips
+  if (input.interests?.length) {
+    const firstInterest = capitalize(input.interests[0]);
+    return [
+      `${firstInterest} speelset of figuur`,
+      `Boek over ${input.interests[0]}`,
+      `Knutselset met ${input.interests[0]}thema`,
+    ];
+  }
   const age = input.age ?? 7;
   if (age <= 4) return ["Houten puzzel", "Knuffel of stoffen boekje", "Speel-keukenset"];
   if (age <= 8) return ["Knutselset of tekenpakket", "Voorleesboek met avontuur", "Bouwspeelgoed of puzzel"];
@@ -216,6 +229,7 @@ async function lookupExisting(
 
 export type RunGiftEventOpts = {
   persona?: UserPersona;
+  memoryRecords?: MemoryRecord[];
   /** Aantal eerdere clarify-rondes voor deze experience. */
   clarifyCount?: number;
   /** Of dit een vervolgturn is binnen dezelfde experience (continuation). */
@@ -239,10 +253,34 @@ export async function runGiftEvent(
   const isContinuation = !!opts.isContinuation;
   const clarifyCount = opts.clarifyCount ?? 0;
 
+  // Filter relevante memory records (bijv. wie = "dochter" of wie komt overeen met subject, category = child_interest / hobby / favorite)
+  const relevantMemories = (opts.memoryRecords ?? []).filter((r) => {
+    if (r.status !== "active") return false;
+    if (!["child_interest", "hobby", "favorite", "child_activity"].includes(r.category)) return false;
+    if (r.subject && whoRaw) {
+      const s = r.subject.toLowerCase();
+      const w = whoRaw.toLowerCase();
+      return w.includes(s) || s.includes(w) || (w.includes("dochter") && s.includes("dochter")) || (w.includes("zoon") && s.includes("zoon"));
+    }
+    return true;
+  });
+
+  // Als we relevante memory hebben, verrijken we input.interests zodat er niet opnieuw naar gevraagd hoeft te worden
+  const mergedInterests = Array.from(
+    new Set([
+      ...(input.interests ?? []),
+      ...relevantMemories.map((m) => m.value),
+    ])
+  );
+  const enrichedInput: GiftEventInput = {
+    ...input,
+    interests: mergedInterests.length > 0 ? mergedInterests : input.interests,
+  };
+
   // 1. Adaptieve vraag — alleen als persona "wel mag" doorvragen, en we
   //    nog niet te vaak hebben doorgevraagd.
   const allowFollowup = opts.persona?.hints.allowFollowupQuestion !== false;
-  const missing = detectMissingField(input);
+  const missing = detectMissingField(enrichedInput);
   if (missing && allowFollowup && clarifyCount < MAX_CLARIFY_ROUNDS) {
     const question = buildClarifyQuestion({
       turnId,
@@ -261,7 +299,7 @@ export async function runGiftEvent(
   // 2. Context-lookup parallel met idee-generatie.
   const [existing, ideas] = await Promise.all([
     lookupExisting(supabase, userId, whenIso),
-    generateIdeas(input, opts.persona),
+    generateIdeas(enrichedInput, opts.persona, opts.memoryRecords),
   ]);
 
   // 3. Bepaal reminder-datum (event − leadDays, niet in het verleden).
@@ -297,13 +335,18 @@ export async function runGiftEvent(
   const spokenSummary = buildResultSummary({
     turnId,
     who,
-    age: input.age,
+    age: enrichedInput.age,
     ideas,
     whenIso,
     reminderIso,
     existingReminder: !!existing.reminderId,
     isContinuation,
+    memoryUsed: relevantMemories.map((m) => ({ subject: m.subject || who, value: m.value })),
   });
+
+  if (relevantMemories.length > 0) {
+    void touchMemoryUsed(supabase, relevantMemories.map((m) => m.id), now);
+  }
 
   return {
     mode: "results",
@@ -313,6 +356,7 @@ export async function runGiftEvent(
     leadDays: DEFAULT_LEAD_DAYS,
     reminderAction,
     spokenSummary,
+    memoryUsedCount: relevantMemories.length,
     card: {
       kind: "gift_event",
       who,

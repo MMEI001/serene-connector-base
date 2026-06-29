@@ -147,6 +147,7 @@ export async function runAssistantTurn(
     const exp = await withTiming(() =>
       runGiftEvent(supabase, userId, giftInput!, now, {
         persona: mem.value.persona,
+        memoryRecords: mem.value.records,
         clarifyCount: expState?.clarifyCount ?? 0,
         isContinuation: conv.value.isContinuation,
         turnId: turn_id,
@@ -222,6 +223,7 @@ export async function runAssistantTurn(
         had_existing_event: !!exp.value.existingAppointmentId,
         had_existing_reminder: !!exp.value.existingReminderId,
         ideas_count: exp.value.ideas.length,
+        memory_used_count: exp.value.memoryUsedCount,
         ms: exp.ms,
       };
     }
