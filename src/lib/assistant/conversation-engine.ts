@@ -66,7 +66,9 @@ export async function understand(
             reply: "",
             experience: "gift_event",
             experience_data: merged,
+            is_continuation: true,
           },
+
           confidence: 0.9,
         },
       ],
