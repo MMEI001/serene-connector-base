@@ -52,6 +52,7 @@ export type GiftEventResultOutcome = {
   leadDays: number;
   reminderAction: VoiceAction | null;
   spokenSummary: string;
+  memoryUsedCount: number;
   card: {
     kind: "gift_event";
     who: string;
