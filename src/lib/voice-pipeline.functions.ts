@@ -195,12 +195,26 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       return { intent: "release", status: "skipped", confirmation: "" };
     }
 
+    // Sprint 2 — legacy mini-trace (privacy-veilig: geen transcript/titels/datums).
+    const pipelineStart = performance.now();
+    const legacyTurnId =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `legacy_${Date.now()}`;
+    const buildLegacyTrace = (): EngineTrace => ({
+      framework: "legacy",
+      turn_id: legacyTurnId,
+      total_ms: Math.round(performance.now() - pipelineStart),
+      slowest_engine: "legacy_pipeline",
+    });
+
     // 0. Persona laden uit user_profiles (RLS-actief via supabase-client van auth-middleware)
     const persona = await loadUserPersona(supabase, userId);
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
     const { actions: classified, meta } = await processVoiceInput(text, persona);
     const primary = classified[0];
+
 
     // 1a. Sprint 2 — Intelligence Framework narrow routing.
     //     assistant_chat zonder DB-impacterende suggested_actions mag door de
@@ -329,14 +343,6 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     }
 
     // 2. Log intent-classificatie (één rij per zin, met alle (originele) actions in payload)
-    const legacyStart = performance.now();
-    const legacyTraceSeed: Pick<EngineTrace, "framework" | "turn_id"> = {
-      framework: "legacy",
-      turn_id:
-        typeof crypto !== "undefined" && "randomUUID" in crypto
-          ? crypto.randomUUID()
-          : `legacy_${Date.now()}`,
-    };
     supabase
       .from("voice_intents")
       .insert({
@@ -348,11 +354,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         payload: {
           actions: classified,
           persona_signature: persona.signature,
-          engine_trace: {
-            ...legacyTraceSeed,
-            total_ms: Math.round(performance.now() - legacyStart),
-            slowest_engine: "legacy_pipeline",
-          },
+          engine_trace: buildLegacyTrace(),
         } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
@@ -364,6 +366,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       .then(({ error }) => {
         if (error) console.error("[pipeline] voice_intents log", error);
       });
+
 
     // 3. Dispatch bundle (persona doorgegeven voor query-handler caps + toon)
     let result = await dispatchVoiceBundle({ supabase, userId, persona }, actions);
@@ -387,7 +390,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       }
     }
 
-    if (result.status === "skipped") return result;
+    if (result.status === "skipped") return { ...result, engine_trace: buildLegacyTrace() };
 
     // 4a. needs_confirmation → bewaar hele bundle in voice_actions.payload.actions
     if (result.status === "needs_confirmation") {
@@ -412,6 +415,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           status: "failed",
           confirmation: "Kon de bevestiging niet voorbereiden.",
           error: error?.message ?? "pending insert failed",
+          engine_trace: buildLegacyTrace(),
         };
       }
       // Bewerkbare velden: alleen bij precies één confirmable actie.
@@ -433,7 +437,13 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
           };
         }
       }
-      return { ...result, action_id: row.id as string, expires_at: expiresAt, editable };
+      return {
+        ...result,
+        action_id: row.id as string,
+        expires_at: expiresAt,
+        editable,
+        engine_trace: buildLegacyTrace(),
+      };
     }
 
     // 4b. completed/failed → audit-log
@@ -452,5 +462,6 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       if (logErr) console.error("[pipeline] audit log", logErr);
     }
 
-    return result;
+    return { ...result, engine_trace: buildLegacyTrace() };
   });
+
