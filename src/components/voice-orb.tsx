@@ -232,8 +232,9 @@ export function VoiceOrb({ onCompleted }: Props) {
       // completed — korte gesproken bevestiging.
       setConfirmation(result.confirmation);
       setConfirming(null);
-      // Prioriteit: assistant_reply (adviserend antwoord) → query-intro → confirmation → fallback.
-      const spoken = result.assistant_reply?.trim()
+      // Prioriteit: spoken_summary (experience) → assistant_reply → query-intro → confirmation → fallback.
+      const spoken = result.spoken_summary?.trim()
+        || result.assistant_reply?.trim()
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
