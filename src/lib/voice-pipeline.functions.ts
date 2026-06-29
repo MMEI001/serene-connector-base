@@ -329,6 +329,14 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     }
 
     // 2. Log intent-classificatie (één rij per zin, met alle (originele) actions in payload)
+    const legacyStart = performance.now();
+    const legacyTraceSeed: Pick<EngineTrace, "framework" | "turn_id"> = {
+      framework: "legacy",
+      turn_id:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `legacy_${Date.now()}`,
+    };
     supabase
       .from("voice_intents")
       .insert({
@@ -337,7 +345,15 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         model: meta.model,
         intent: primary.intent,
         confidence: primary.confidence,
-        payload: { actions: classified, persona_signature: persona.signature } as never,
+        payload: {
+          actions: classified,
+          persona_signature: persona.signature,
+          engine_trace: {
+            ...legacyTraceSeed,
+            total_ms: Math.round(performance.now() - legacyStart),
+            slowest_engine: "legacy_pipeline",
+          },
+        } as never,
         prompt_tokens: meta.prompt_tokens,
         completion_tokens: meta.completion_tokens,
         total_tokens: meta.total_tokens,
