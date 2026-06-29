@@ -216,4 +216,11 @@ export type EngineTrace = {
     used_fallback: boolean;
     ms: number;
   };
+  experience?: {
+    kind: "gift_event";
+    had_existing_event: boolean;
+    had_existing_reminder: boolean;
+    ideas_count: number;
+    ms: number;
+  };
 };
