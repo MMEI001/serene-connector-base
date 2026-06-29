@@ -33,6 +33,8 @@ export type GiftEventOutcome = {
   existingReminderId: string | null;
   leadDays: number;
   reminderAction: VoiceAction | null;
+  /** Korte gesproken samenvatting (1-2 zinnen) voor TTS. */
+  spokenSummary: string;
   card: {
     kind: "gift_event";
     who: string;
@@ -230,12 +232,21 @@ export async function runGiftEvent(
     }
   }
 
+  const spokenSummary = buildSpokenSummary({
+    who,
+    ideas,
+    reminderAction,
+    existingReminder: !!existing.reminderId,
+    now,
+  });
+
   return {
     ideas,
     existingAppointmentId: existing.appointmentId,
     existingReminderId: existing.reminderId,
     leadDays: DEFAULT_LEAD_DAYS,
     reminderAction,
+    spokenSummary,
     card: {
       kind: "gift_event",
       who,
@@ -245,6 +256,59 @@ export async function runGiftEvent(
       existingReminder: !!existing.reminderId,
     },
   };
+}
+
+function buildSpokenSummary(args: {
+  who: string;
+  ideas: string[];
+  reminderAction: VoiceAction | null;
+  existingReminder: boolean;
+  now: Date;
+}): string {
+  const { who, ideas, reminderAction, existingReminder } = args;
+  const top = ideas.slice(0, 3).map((s) => s.replace(/\.$/, ""));
+  let ideeenZin = "";
+  if (top.length === 3) {
+    ideeenZin = `Ik heb drie cadeau-ideeën voor je: ${top[0]}, ${top[1]} of ${top[2]}.`;
+  } else if (top.length === 2) {
+    ideeenZin = `Ik heb twee cadeau-ideeën: ${top[0]} of ${top[1]}.`;
+  } else if (top.length === 1) {
+    ideeenZin = `Een idee: ${top[0]}.`;
+  }
+
+  let vervolgZin = "";
+  if (existingReminder) {
+    vervolgZin = "Er staat al een reminder klaar om een cadeautje te kopen.";
+  } else if (reminderAction) {
+    const iso = String(reminderAction.payload.iso_datetime ?? "");
+    const when = formatDutchWhen(iso);
+    const naam = who && who !== "het feestje" ? ` voor ${who}` : "";
+    vervolgZin = when
+      ? `Zal ik je ${when} herinneren om een cadeautje${naam} te kopen?`
+      : `Zal ik je een paar dagen van tevoren herinneren om een cadeautje${naam} te kopen?`;
+  }
+
+  return [ideeenZin, vervolgZin].filter(Boolean).join(" ").trim();
+}
+
+const DUTCH_DAYS = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
+
+function formatDutchWhen(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  // Reken naar Amsterdam-tijd voor weergave.
+  const parts = new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    weekday: "long",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(d);
+  const weekday = parts.find((p) => p.type === "weekday")?.value ?? DUTCH_DAYS[d.getDay()];
+  const hh = parts.find((p) => p.type === "hour")?.value ?? "09";
+  const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${weekday} om ${hh}:${mm}`;
 }
 
 export function isGiftEventConv(payload: Record<string, unknown>): GiftEventInput | null {
