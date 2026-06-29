@@ -333,12 +333,13 @@ export async function runGiftEvent(
   const spokenSummary = buildResultSummary({
     turnId,
     who,
-    age: input.age,
+    age: enrichedInput.age,
     ideas,
     whenIso,
     reminderIso,
     existingReminder: !!existing.reminderId,
     isContinuation,
+    memoryUsed: relevantMemories.map((m) => ({ subject: m.subject || who, value: m.value })),
   });
 
   return {
