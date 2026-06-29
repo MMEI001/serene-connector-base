@@ -63,6 +63,13 @@ export function shouldTakeInitiative(
 
   const reasons: OpportunityReason[] = ["advisory_question"];
 
+  // Experience: gift_event → standaard score 3 (advies + voorstel reminder).
+  const primary = conv.actions[0];
+  const isGiftEvent = primary?.payload.experience === "gift_event";
+  if (isGiftEvent) {
+    addReason(reasons, "experience_gift_event");
+  }
+
   // 2. Persona-rust → score 0/1, geen voorstellen.
   const tone = ctx.persona.hints.tone;
   const personaCap = ctx.persona.hints.maxSuggestions;
