@@ -23,6 +23,7 @@ const ACK_PHRASES = [
 
 export type VoiceSpeakOptions = {
   intent?: string;
+  route?: string;
   force?: boolean;
   voiceId?: string;
   isAck?: boolean;
@@ -35,9 +36,12 @@ export type VoiceTraceLog = {
   provider: string;
   voice_id: string;
   model: string;
+  route: string;
   latency_ms: number;
   intent: string;
   text_preview: string;
+  source?: "network" | "cache" | "preload" | "browser" | "error";
+  status?: string;
   timestamp: string;
 };
 
@@ -171,14 +175,16 @@ export function stopVoice() {
   currentAudio = null;
 }
 
-function browserSpeakFallback(text: string, intent: string, latencyMs: number) {
+function browserSpeakFallback(text: string, intent: string, route: string, latencyMs: number) {
   emitTrace({
     provider: "browser",
     voice_id: "system_default",
     model: "speech_synthesis",
+    route,
     latency_ms: latencyMs,
     intent,
     text_preview: text.slice(0, 40),
+    source: "browser",
     timestamp: new Date().toISOString(),
   });
 
@@ -204,6 +210,7 @@ export async function speak(
 ): Promise<void> {
   const t0 = performance.now();
   const intent = options.intent ?? "general";
+  const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
 
   if (!cleanText) return;
@@ -229,12 +236,14 @@ export async function speak(
 
     const latency = Math.round(performance.now() - t0);
     emitTrace({
-      provider: "ElevenLabs (Cache)",
+      provider: "elevenlabs",
       voice_id: voiceId,
       model: DEFAULT_MODEL_ID,
+      route,
       latency_ms: latency,
       intent,
       text_preview: cleanText.slice(0, 40),
+      source: "cache",
       timestamp: new Date().toISOString(),
     });
 
@@ -246,7 +255,7 @@ export async function speak(
   if (provider === "browser") {
     if (options.preloadOnly) return;
     const latency = Math.round(performance.now() - t0);
-    browserSpeakFallback(cleanText, intent, latency);
+    browserSpeakFallback(cleanText, intent, route, latency);
     return;
   }
 
@@ -261,12 +270,15 @@ export async function speak(
   if (!SUPABASE_URL || !ANON) {
     const latency = Math.round(performance.now() - t0);
     emitTrace({
-      provider: "none (config_error)",
+      provider: "elevenlabs",
       voice_id: voiceId,
       model: DEFAULT_MODEL_ID,
+      route,
       latency_ms: latency,
       intent,
       text_preview: cleanText.slice(0, 40),
+      source: "error",
+      status: "config_error",
       timestamp: new Date().toISOString(),
     });
     return;
@@ -289,27 +301,35 @@ export async function speak(
   } catch {
     const latency = Math.round(performance.now() - t0);
     emitTrace({
-      provider: "none (network_error)",
+      provider: "elevenlabs",
       voice_id: voiceId,
       model: DEFAULT_MODEL_ID,
+      route,
       latency_ms: latency,
       intent,
       text_preview: cleanText.slice(0, 40),
+      source: "error",
+      status: "network_error",
       timestamp: new Date().toISOString(),
     });
     return;
   }
 
   const contentType = res.headers.get("content-type") || "";
+  const actualVoiceId = res.headers.get("x-voice-id") || voiceId;
+  const actualModel = res.headers.get("x-voice-model") || DEFAULT_MODEL_ID;
   if (!res.ok || contentType.includes("application/json")) {
     const latency = Math.round(performance.now() - t0);
     emitTrace({
-      provider: `none (elevenlabs_${res.status})`,
-      voice_id: voiceId,
-      model: DEFAULT_MODEL_ID,
+      provider: "elevenlabs",
+      voice_id: actualVoiceId,
+      model: actualModel,
+      route,
       latency_ms: latency,
       intent,
       text_preview: cleanText.slice(0, 40),
+      source: "error",
+      status: `http_${res.status}`,
       timestamp: new Date().toISOString(),
     });
     return;
@@ -322,12 +342,14 @@ export async function speak(
 
   const latency = Math.round(performance.now() - t0);
   emitTrace({
-    provider: "ElevenLabs",
-    voice_id: voiceId,
-    model: DEFAULT_MODEL_ID,
+    provider: "elevenlabs",
+    voice_id: actualVoiceId,
+    model: actualModel,
+    route,
     latency_ms: latency,
     intent,
     text_preview: cleanText.slice(0, 40),
+    source: "network",
     timestamp: new Date().toISOString(),
   });
 
@@ -367,11 +389,12 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
  */
 export async function prewarmVoiceCache(): Promise<void> {
   const prefs = await loadVoicePrefs();
-  if (!prefs.enabled && !prefs.voiceId) return;
+  if (!prefs.enabled || prefs.provider === "browser") return;
 
   ACK_PHRASES.forEach((phrase) => {
     speak(phrase, {
-      intent: "prewarm_ack",
+      intent: "acknowledgement",
+      route: "prewarm_ack",
       voiceId: prefs.voiceId,
       force: true,
       preloadOnly: true,
@@ -385,7 +408,7 @@ export async function prewarmVoiceCache(): Promise<void> {
  */
 export function playAcknowledgement(): () => void {
   const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
-  void speak(phrase, { intent: "instant_acknowledgement", isAck: true });
+  void speak(phrase, { intent: "acknowledgement", route: "prewarm_ack", isAck: true });
   return stopVoice;
 }
 
