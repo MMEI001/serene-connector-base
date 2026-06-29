@@ -118,6 +118,27 @@ const TOOL = {
                       required: ["intent", "payload"],
                     },
                   },
+                  /** Sprint 4 — herkenbaar levenspatroon (Experience). */
+                  experience: {
+                    type: "string",
+                    enum: ["gift_event"],
+                    description:
+                      "Markeer een herkenbaar patroon zodat het framework er rijker mee om kan gaan.",
+                  },
+                  experience_data: {
+                    type: "object",
+                    description:
+                      "Geëxtraheerde entiteiten voor de experience (bv. who/event_type/iso_datetime/age/interests/budget).",
+                    properties: {
+                      who: { type: "string" },
+                      event_type: { type: "string" },
+                      iso_datetime: { type: "string" },
+                      age: { type: "number" },
+                      interests: { type: "array", items: { type: "string" } },
+                      budget: { type: "number" },
+                      budget_currency: { type: "string" },
+                    },
+                  },
                 },
               },
             },
