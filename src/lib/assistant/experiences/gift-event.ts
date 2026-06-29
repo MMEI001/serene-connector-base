@@ -160,6 +160,15 @@ Budget: ${budgetHint}`;
 }
 
 function defaultIdeas(input: GiftEventInput): string[] {
+  // Als we specifieke interesses (zoals uit memory) kennen, genereer logische default-tips
+  if (input.interests?.length) {
+    const firstInterest = capitalize(input.interests[0]);
+    return [
+      `${firstInterest} speelset of figuur`,
+      `Boek over ${input.interests[0]}`,
+      `Knutselset met ${input.interests[0]}thema`,
+    ];
+  }
   const age = input.age ?? 7;
   if (age <= 4) return ["Houten puzzel", "Knuffel of stoffen boekje", "Speel-keukenset"];
   if (age <= 8) return ["Knutselset of tekenpakket", "Voorleesboek met avontuur", "Bouwspeelgoed of puzzel"];
