@@ -227,6 +227,7 @@ async function lookupExisting(
 
 export type RunGiftEventOpts = {
   persona?: UserPersona;
+  memoryRecords?: MemoryRecord[];
   /** Aantal eerdere clarify-rondes voor deze experience. */
   clarifyCount?: number;
   /** Of dit een vervolgturn is binnen dezelfde experience (continuation). */
