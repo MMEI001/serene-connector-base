@@ -118,7 +118,10 @@ export type OpportunityReason =
   | "suggested_actions_present"
   | "no_actionable_followup"
   | "experience_gift_event"
-  | "existing_followup_present";
+  | "existing_followup_present"
+  | "needs_clarification"
+  | "continuation_turn";
+
 
 /** Een Proposal is een potentiële actie — nog niet besloten. */
 export type Proposal = {
