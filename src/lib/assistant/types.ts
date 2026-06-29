@@ -73,12 +73,50 @@ export type RejectionReason =
   | "duplicate"
   | "persona_quiet"
   | "requires_consent_outside_chat_only"
-  | "unsupported_skill";
+  | "unsupported_skill"
+  | "below_opportunity_threshold";
 
 export type InitiativeReason =
   | "direct_intent"
   | "persona_quiet"
   | "advisory_question";
+
+/**
+ * Sprint 3 — Opportunity Score (0..4): intern signaal voor de Decision Engine
+ * over hoeveel toegevoegde waarde een proactief voorstel zou hebben.
+ *  0 = alleen antwoord
+ *  1 = klein praktisch advies
+ *  2 = advies + 1 slimme suggestie
+ *  3 = advies + voorstel voor reminder/notitie
+ *  4 = advies + meerdere logische vervolgstappen
+ */
+export type OpportunityScore = 0 | 1 | 2 | 3 | 4;
+
+/** Type hulp dat past bij de score — sturend voor Decision/Suggestion. */
+export type HelpKind =
+  | "none"
+  | "advice_only"
+  | "advice_plus_suggestion"
+  | "advice_plus_followup"
+  | "advice_plus_multistep";
+
+/**
+ * Vast vocabulaire van motivaties achter de Opportunity Score.
+ * Privacy-veilig: enum, geen vrije tekst, geen transcript-fragmenten.
+ */
+export type OpportunityReason =
+  | "direct_intent"
+  | "advisory_question"
+  | "future_time_marker"
+  | "user_may_forget"
+  | "agenda_has_room"
+  | "agenda_is_busy"
+  | "location_makes_sense"
+  | "similar_prior_behavior"
+  | "low_confidence"
+  | "persona_quiet"
+  | "suggested_actions_present"
+  | "no_actionable_followup";
 
 /** Een Proposal is een potentiële actie — nog niet besloten. */
 export type Proposal = {
@@ -91,7 +129,14 @@ export type Proposal = {
 export type Initiative = {
   allow: boolean;
   reason: InitiativeReason;
+  /** Sprint 3 — interne kansscore (0..4). */
+  score: OpportunityScore;
+  /** Type hulp dat bij de score past. */
+  helpKind: HelpKind;
+  /** Enum-motivaties achter de score (max 4). */
+  reasons: OpportunityReason[];
 };
+
 
 export type RejectedProposal = {
   skill: VoiceIntent;
