@@ -47,8 +47,9 @@ export function buildResultSummary(args: {
   reminderIso: string | null;
   existingReminder: boolean;
   isContinuation: boolean;
+  memoryUsed?: Array<{ subject?: string; value: string }>;
 }): string {
-  const { turnId, who, age, ideas, reminderIso, existingReminder, isContinuation } = args;
+  const { turnId, who, age, ideas, reminderIso, existingReminder, isContinuation, memoryUsed } = args;
   const top = ideas.slice(0, 3).map((s) => s.replace(/\.$/, ""));
 
   // Opener — minder enthousiast bij continuation (we hadden 'm al verwelkomd).
@@ -62,14 +63,28 @@ export function buildResultSummary(args: {
       ? `Voor ${who}${ageBit}`
       : `Voor ${age ? `iemand van ${spelledAge(age)}` : "een kind"}`;
 
+  // Als er memory is gebruikt, noem dit natuurlijk in de gesproken tekst
+  let memoryBit = "";
+  if (memoryUsed && memoryUsed.length > 0) {
+    const val = memoryUsed[0].value;
+    const subj = memoryUsed[0].subject && memoryUsed[0].subject !== "het feestje"
+      ? (memoryUsed[0].subject.toLowerCase() === "dochter" || memoryUsed[0].subject.toLowerCase() === "zoon" ? `je ${memoryUsed[0].subject.toLowerCase()}` : memoryUsed[0].subject)
+      : (who && who !== "het feestje" ? (who.toLowerCase() === "dochter" || who.toLowerCase() === "zoon" ? `je ${who.toLowerCase()}` : who) : "ze");
+    memoryBit = `Je vertelde eerder dat ${subj} van ${val} houdt. Dan zou`;
+  }
+
   let ideeenZin = "";
   if (top.length === 3) {
-    const conn = pick(turnId + "c", LIST_CONNECTORS);
-    ideeenZin = `${persoonlijk} ${conn(top[0], top[1], top[2])}.`;
+    if (memoryBit) {
+      ideeenZin = `${memoryBit} ${top[0]}, ${top[1]} of ${top[2]} leuk kunnen zijn.`;
+    } else {
+      const conn = pick(turnId + "c", LIST_CONNECTORS);
+      ideeenZin = `${persoonlijk} ${conn(top[0], top[1], top[2])}.`;
+    }
   } else if (top.length === 2) {
-    ideeenZin = `${persoonlijk} zou ${top[0]} of ${top[1]} leuk zijn.`;
+    ideeenZin = `${memoryBit ? memoryBit : `${persoonlijk} zou`} ${top[0]} of ${top[1]} leuk zijn.`;
   } else if (top.length === 1) {
-    ideeenZin = `${persoonlijk} dacht ik aan ${top[0]}.`;
+    ideeenZin = `${memoryBit ? `${memoryBit} ${top[0]} leuk zijn.` : `${persoonlijk} dacht ik aan ${top[0]}.`}`;
   }
 
   let vervolgZin = "";
