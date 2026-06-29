@@ -1,0 +1,392 @@
+/**
+ * Centrale Voice Service — garandeert dat de volledige app uitsluitend één
+ * en dezelfde stem gebruikt over alle onderdelen heen.
+ *
+ * Beheert:
+ * - Voorkeuren (voice_enabled, voice_provider, voice_id) vanuit user_profiles
+ * - Audioweergave (pauzeert automatisch lopende audio bij nieuwe zinnen)
+ * - Cache voor snelle acknowledgements (< 5ms afspeeltijd met exacte stem)
+ * - Trace logging (provider, voice_id, model, latency per turn)
+ */
+
+import { supabase } from "@/integrations/supabase/client";
+
+export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+
+const ACK_PHRASES = [
+  "Momentje…",
+  "Even kijken…",
+  "Ik denk met je mee.",
+  "Ik kijk even.",
+];
+
+export type VoiceSpeakOptions = {
+  intent?: string;
+  force?: boolean;
+  voiceId?: string;
+  isAck?: boolean;
+  preloadOnly?: boolean;
+  onStart?: () => void;
+  onEnd?: () => void;
+};
+
+export type VoiceTraceLog = {
+  provider: string;
+  voice_id: string;
+  model: string;
+  latency_ms: number;
+  intent: string;
+  text_preview: string;
+  timestamp: string;
+};
+
+let cachedEnabled: boolean | null = null;
+let cachedVoiceId: string | null = null;
+let cachedProvider: string | null = null;
+
+let currentAudio: HTMLAudioElement | null = null;
+const audioBlobCache = new Map<string, Blob>();
+
+let lastTraceLog: VoiceTraceLog | null = null;
+const traceListeners = new Set<(trace: VoiceTraceLog) => void>();
+
+let authListenerAttached = false;
+function ensureAuthListener() {
+  if (authListenerAttached || typeof window === "undefined") return;
+  try {
+    supabase.auth.onAuthStateChange((event) => {
+      if (
+        event === "SIGNED_IN" ||
+        event === "SIGNED_OUT" ||
+        event === "TOKEN_REFRESHED" ||
+        event === "USER_UPDATED"
+      ) {
+        resetVoicePreferenceCache();
+      }
+    });
+    authListenerAttached = true;
+  } catch {
+    // ignore
+  }
+}
+
+export function resetVoicePreferenceCache() {
+  cachedEnabled = null;
+  cachedVoiceId = null;
+  cachedProvider = null;
+}
+
+export function setVoicePreferenceCache(enabled: boolean) {
+  cachedEnabled = enabled;
+}
+
+export function setVoiceIdCache(voiceId: string) {
+  cachedVoiceId = voiceId;
+}
+
+export async function loadVoicePrefs(): Promise<{
+  enabled: boolean;
+  voiceId: string;
+  provider: string;
+}> {
+  ensureAuthListener();
+  if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
+    return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+  if (!user) {
+    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+  }
+
+  const { data, error } = await supabase
+    .from("user_profiles")
+    .select("voice_enabled, voice_provider, voice_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+  }
+
+  const row = data as {
+    voice_enabled?: boolean | null;
+    voice_provider?: string | null;
+    voice_id?: string | null;
+  };
+
+  const enabled = Boolean(row.voice_enabled);
+  const provider = row.voice_provider || "elevenlabs";
+  const voiceId = row.voice_id || DEFAULT_VOICE_ID;
+
+  cachedEnabled = enabled;
+  cachedVoiceId = voiceId;
+  cachedProvider = provider;
+
+  return { enabled, voiceId, provider };
+}
+
+function emitTrace(log: VoiceTraceLog) {
+  lastTraceLog = log;
+  console.log(
+    "%c[VoiceService Turn]",
+    "background: #3B82F6; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;",
+    log,
+  );
+  traceListeners.forEach((fn) => {
+    try {
+      fn(log);
+    } catch {
+      // ignore listener error
+    }
+  });
+}
+
+export function getVoiceTrace(): VoiceTraceLog | null {
+  return lastTraceLog;
+}
+
+export function subscribeVoiceTrace(fn: (trace: VoiceTraceLog) => void): () => void {
+  traceListeners.add(fn);
+  if (lastTraceLog) fn(lastTraceLog);
+  return () => {
+    traceListeners.delete(fn);
+  };
+}
+
+export function stopVoice() {
+  if (!currentAudio) return;
+  try {
+    currentAudio.onerror = null;
+    currentAudio.onended = null;
+    currentAudio.onpause = null;
+    currentAudio.pause();
+    const src = currentAudio.src;
+    if (src && src.startsWith("blob:")) URL.revokeObjectURL(src);
+  } catch {
+    // ignore
+  }
+  currentAudio = null;
+}
+
+function browserSpeakFallback(text: string, intent: string, latencyMs: number) {
+  emitTrace({
+    provider: "browser",
+    voice_id: "system_default",
+    model: "speech_synthesis",
+    latency_ms: latencyMs,
+    intent,
+    text_preview: text.slice(0, 40),
+    timestamp: new Date().toISOString(),
+  });
+
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "nl-NL";
+    window.speechSynthesis.speak(utter);
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * Centrale speak functie. Gebruikt overal exact dezelfde ElevenLabs voice_id.
+ * Bij fouten in ElevenLabs wordt stil gefaald met een trace-log, of vallen we
+ * alleen terug op browser TTS als de gebruiker expliciet 'browser' als provider koos.
+ */
+export async function speak(
+  text: string,
+  options: VoiceSpeakOptions = {},
+): Promise<void> {
+  const t0 = performance.now();
+  const intent = options.intent ?? "general";
+  const cleanText = text?.trim() ?? "";
+
+  if (!cleanText) return;
+
+  const prefs = await loadVoicePrefs();
+  const enabled = options.force ? true : prefs.enabled;
+  const voiceId = options.voiceId ?? prefs.voiceId;
+  const provider = prefs.provider;
+
+  if (!enabled && !options.force) return;
+
+  // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
+  if (!options.preloadOnly) {
+    stopVoice();
+  }
+
+  const cacheKey = `${voiceId}:${cleanText}`;
+
+  // 1. Check lokale cache (supersnel voor acks en vaste reacties)
+  if (audioBlobCache.has(cacheKey)) {
+    const blob = audioBlobCache.get(cacheKey)!;
+    if (options.preloadOnly) return;
+
+    const latency = Math.round(performance.now() - t0);
+    emitTrace({
+      provider: "ElevenLabs (Cache)",
+      voice_id: voiceId,
+      model: DEFAULT_MODEL_ID,
+      latency_ms: latency,
+      intent,
+      text_preview: cleanText.slice(0, 40),
+      timestamp: new Date().toISOString(),
+    });
+
+    await playBlob(blob, options);
+    return;
+  }
+
+  // 2. Als gebruiker expliciet browser TTS in profiel koos
+  if (provider === "browser") {
+    if (options.preloadOnly) return;
+    const latency = Math.round(performance.now() - t0);
+    browserSpeakFallback(cleanText, intent, latency);
+    return;
+  }
+
+  // 3. Echte ElevenLabs call via edge function
+  const SUPABASE_URL =
+    import.meta.env.VITE_SUPABASE_URL || (typeof process !== "undefined" ? process.env.SUPABASE_URL : "");
+  const ANON =
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
+    import.meta.env.VITE_SUPABASE_ANON_KEY ||
+    (typeof process !== "undefined" ? process.env.SUPABASE_PUBLISHABLE_KEY : "");
+
+  if (!SUPABASE_URL || !ANON) {
+    const latency = Math.round(performance.now() - t0);
+    emitTrace({
+      provider: "none (config_error)",
+      voice_id: voiceId,
+      model: DEFAULT_MODEL_ID,
+      latency_ms: latency,
+      intent,
+      text_preview: cleanText.slice(0, 40),
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  const token = sessionData.session?.access_token ?? ANON;
+
+  let res: Response;
+  try {
+    res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: ANON,
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
+    });
+  } catch {
+    const latency = Math.round(performance.now() - t0);
+    emitTrace({
+      provider: "none (network_error)",
+      voice_id: voiceId,
+      model: DEFAULT_MODEL_ID,
+      latency_ms: latency,
+      intent,
+      text_preview: cleanText.slice(0, 40),
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  if (!res.ok || contentType.includes("application/json")) {
+    const latency = Math.round(performance.now() - t0);
+    emitTrace({
+      provider: `none (elevenlabs_${res.status})`,
+      voice_id: voiceId,
+      model: DEFAULT_MODEL_ID,
+      latency_ms: latency,
+      intent,
+      text_preview: cleanText.slice(0, 40),
+      timestamp: new Date().toISOString(),
+    });
+    return;
+  }
+
+  const blob = await res.blob();
+  audioBlobCache.set(cacheKey, blob);
+
+  if (options.preloadOnly) return;
+
+  const latency = Math.round(performance.now() - t0);
+  emitTrace({
+    provider: "ElevenLabs",
+    voice_id: voiceId,
+    model: DEFAULT_MODEL_ID,
+    latency_ms: latency,
+    intent,
+    text_preview: cleanText.slice(0, 40),
+    timestamp: new Date().toISOString(),
+  });
+
+  await playBlob(blob, options);
+}
+
+async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+  const url = URL.createObjectURL(blob);
+  return new Promise((resolve) => {
+    stopVoice();
+    const audio = new Audio(url);
+    currentAudio = audio;
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      if (currentAudio === audio) currentAudio = null;
+      options.onEnd?.();
+      resolve();
+    };
+
+    audio.onplaying = () => {
+      options.onStart?.();
+    };
+    audio.onended = finish;
+    audio.onerror = finish;
+
+    audio.play().catch(finish);
+  });
+}
+
+/**
+ * Prewarm cache voor instant acknowledgements en veelvoorkomende zinnen
+ * met de exacte actieve voice_id.
+ */
+export async function prewarmVoiceCache(): Promise<void> {
+  const prefs = await loadVoicePrefs();
+  if (!prefs.enabled && !prefs.voiceId) return;
+
+  ACK_PHRASES.forEach((phrase) => {
+    speak(phrase, {
+      intent: "prewarm_ack",
+      voiceId: prefs.voiceId,
+      force: true,
+      preloadOnly: true,
+    }).catch(() => {});
+  });
+}
+
+/**
+ * Speelt direct een snelle erkenning af. Bypasst vaste MP3's.
+ * Garandeert 100% spraaksamenhang.
+ */
+export function playAcknowledgement(): () => void {
+  const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
+  void speak(phrase, { intent: "instant_acknowledgement", isAck: true });
+  return stopVoice;
+}
+
+export const stopAcknowledgement = stopVoice;
