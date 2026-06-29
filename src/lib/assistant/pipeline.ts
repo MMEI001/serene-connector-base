@@ -185,6 +185,11 @@ export async function runAssistantTurn(
     }
   }
 
+  // Experience-kaart aan resultaat hangen — UI rendert 'm boven de bevestiging.
+  if (experienceCard) {
+    result.experience_card = experienceCard;
+  }
+
   // Memory write-back (no-op sprint 1/2).
   void remember(supabase, userId, conv.value);
 
