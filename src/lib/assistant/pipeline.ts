@@ -3,8 +3,10 @@
  *
  *   Memory → Context → Conversation → Initiative → Suggestion → Decision → Execution
  *
- * Sprint 2: bouwt een rijke, privacy-veilige EngineTrace mee (tellingen,
- * timings, enum-redenen, signatures — geen ruwe gebruikersdata).
+ * Sprint 2: bouwt een rijke, privacy-veilige EngineTrace mee.
+ * Sprint 3: Initiative Engine v2 (Opportunity Score).
+ * Sprint 4: Experience 001 — gift_event.
+ * Sprint 5: continuation-aware experiences + adaptieve clarify-vraag.
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -15,7 +17,17 @@ import { shouldTakeInitiative } from "./initiative-engine";
 import { propose } from "./suggestion-engine";
 import { decide } from "./decision-engine";
 import { execute } from "./execution-engine";
-import { isGiftEventConv, runGiftEvent } from "./experiences/gift-event";
+import {
+  isGiftEventConv,
+  runGiftEvent,
+  type GiftEventInput,
+} from "./experiences/gift-event";
+import {
+  clearExperienceState,
+  loadExperienceState,
+  saveExperienceState,
+} from "./experiences/state-store";
+import { mergeGiftData } from "./experiences/continuation";
 import type { ExperienceCardData } from "@/components/experience-card";
 import type {
   AssistantInput,
@@ -91,8 +103,13 @@ export async function runAssistantTurn(
     snapshot: ctxSnap.value,
   };
 
-  // 3. Conversation
-  const conv = await withTiming(() => understand(input.text, mem.value.persona));
+  // 2b. Experience-state laden (lopende gift_event in 15-min window).
+  const expState = await loadExperienceState(supabase, userId, now);
+
+  // 3. Conversation (continuation-aware)
+  const conv = await withTiming(() =>
+    understand(input.text, mem.value.persona, { state: expState }),
+  );
   timings.conversation = conv.ms;
   trace.conversation = {
     primary: conv.value.primary,
@@ -107,36 +124,102 @@ export async function runAssistantTurn(
   let experienceCard: ExperienceCardData | null = null;
   let experienceSpokenSummary: string | null = null;
   const primary = conv.value.actions[0];
-  const giftInput = primary ? isGiftEventConv(primary.payload) : null;
+
+  // Merge state-data met wat de classifier (of continuation-path) eruit haalde.
+  let giftInput: GiftEventInput | null = primary ? isGiftEventConv(primary.payload) : null;
+  if (giftInput && expState?.kind === "gift_event") {
+    giftInput = mergeGiftData(expState.data, giftInput);
+    // Schrijf merged data terug in payload zodat downstream engines die zien.
+    primary!.payload.experience_data = giftInput;
+  } else if (!giftInput && expState?.kind === "gift_event" && conv.value.isContinuation) {
+    giftInput = expState.data;
+  }
+
   if (giftInput) {
-    const exp = await withTiming(() => runGiftEvent(supabase, userId, giftInput, now));
+    const exp = await withTiming(() =>
+      runGiftEvent(supabase, userId, giftInput!, now, {
+        persona: mem.value.persona,
+        clarifyCount: expState?.clarifyCount ?? 0,
+        isContinuation: conv.value.isContinuation,
+        turnId: turn_id,
+      }),
+    );
     timings.experience = exp.ms;
-    trace.experience = {
-      kind: "gift_event",
-      had_existing_event: !!exp.value.existingAppointmentId,
-      had_existing_reminder: !!exp.value.existingReminderId,
-      ideas_count: exp.value.ideas.length,
-      ms: exp.ms,
-    };
-    experienceCard = exp.value.card;
-    experienceSpokenSummary = exp.value.spokenSummary || null;
-    // Voeg het reminder-voorstel toe als suggested_action zodat de
-    // Suggestion Engine 'm als gewone Proposal oppakt.
-    if (exp.value.reminderAction) {
-      const existing = Array.isArray(primary.payload.suggested_actions)
-        ? (primary.payload.suggested_actions as unknown[])
-        : [];
-      primary.payload.suggested_actions = [
-        ...existing,
+
+    if (exp.value.mode === "clarify") {
+      // Persist + verlaat experience-tak met alleen tekst (geen voorstellen).
+      await saveExperienceState(
+        supabase,
+        userId,
         {
-          intent: exp.value.reminderAction.intent,
-          payload: exp.value.reminderAction.payload,
+          kind: "gift_event",
+          data: giftInput,
+          askedField: exp.value.askedField,
+          clarifyCount: (expState?.clarifyCount ?? 0) + 1,
         },
-      ];
+        now,
+      );
+
+      // Strip suggested_actions zodat Suggestion Engine niets voorstelt.
+      if (primary) {
+        primary.payload.experience_mode = "clarify";
+        delete primary.payload.suggested_actions;
+        // Geef de classifier-reply een vervangende waarde voor Execution.
+        primary.payload.reply = exp.value.question;
+      }
+      conv.value.assistantReply = exp.value.question;
+      experienceSpokenSummary = exp.value.spokenSummary;
+
+      trace.experience = {
+        kind: "gift_event",
+        mode: "clarify",
+        asked_field: exp.value.askedField,
+        clarify_count: (expState?.clarifyCount ?? 0) + 1,
+        had_state: !!expState,
+        state_age_ms: expState?.ageMs ?? null,
+        is_continuation: conv.value.isContinuation,
+        had_existing_event: false,
+        had_existing_reminder: false,
+        ideas_count: 0,
+        ms: exp.ms,
+      };
+    } else {
+      experienceCard = exp.value.card;
+      experienceSpokenSummary = exp.value.spokenSummary || null;
+      if (exp.value.reminderAction && primary) {
+        const existing = Array.isArray(primary.payload.suggested_actions)
+          ? (primary.payload.suggested_actions as unknown[])
+          : [];
+        primary.payload.suggested_actions = [
+          ...existing,
+          {
+            intent: exp.value.reminderAction.intent,
+            payload: exp.value.reminderAction.payload,
+          },
+        ];
+      }
+      // Klaar met deze experience — state opruimen.
+      if (expState) {
+        void clearExperienceState(supabase, userId);
+      }
+
+      trace.experience = {
+        kind: "gift_event",
+        mode: "results",
+        asked_field: null,
+        clarify_count: expState?.clarifyCount ?? 0,
+        had_state: !!expState,
+        state_age_ms: expState?.ageMs ?? null,
+        is_continuation: conv.value.isContinuation,
+        had_existing_event: !!exp.value.existingAppointmentId,
+        had_existing_reminder: !!exp.value.existingReminderId,
+        ideas_count: exp.value.ideas.length,
+        ms: exp.ms,
+      };
     }
   }
 
-  // 4. Initiative (v2 — bepaalt ook Opportunity Score + motivaties)
+  // 4. Initiative
   const init = await withTiming(() => shouldTakeInitiative(ctx, conv.value));
   timings.initiative = init.ms;
   trace.initiative = {
@@ -156,7 +239,7 @@ export async function runAssistantTurn(
     ms: sug.ms,
   };
 
-  // 6. Decision (krijgt initiative — Opportunity Score stuurt cap)
+  // 6. Decision
   const dec = await withTiming(() => decide(ctx, conv.value, sug.value, init.value));
   timings.decision = dec.ms;
   trace.decision = {
@@ -166,7 +249,6 @@ export async function runAssistantTurn(
     reason: dec.value.reason,
     ms: dec.ms,
   };
-
 
   // 7. Execution
   const exec = await withTiming(() => execute(ctx, dec.value));
@@ -187,7 +269,6 @@ export async function runAssistantTurn(
     }
   }
 
-  // Experience-kaart aan resultaat hangen — UI rendert 'm boven de bevestiging.
   if (experienceCard) {
     result.experience_card = experienceCard;
   }
@@ -203,11 +284,14 @@ export async function runAssistantTurn(
   result.engine_trace = trace;
 
   const chosenActions: import("@/lib/voice/types").VoiceAction[] =
-    dec.value.proposals.map((p) => ({
-      intent: p.skill,
-      payload: p.payload,
-      confidence: 0.8,
-    }));
+    dec.value.proposals
+      // Geen DB-acties bij clarify-pad — alleen tekst + state-update.
+      .filter((p) => p.skill !== "assistant_chat")
+      .map((p) => ({
+        intent: p.skill,
+        payload: p.payload,
+        confidence: 0.8,
+      }));
 
   return { result, trace, chosenActions };
 }

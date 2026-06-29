@@ -66,9 +66,30 @@ export function shouldTakeInitiative(
   // Experience: gift_event → standaard score 3 (advies + voorstel reminder).
   const primary = conv.actions[0];
   const isGiftEvent = primary?.payload.experience === "gift_event";
+  const isClarifyTurn = primary?.payload.experience_mode === "clarify";
   if (isGiftEvent) {
     addReason(reasons, "experience_gift_event");
   }
+
+  // Sprint 5 — clarify-modus: alleen één korte vraag terug. Geen voorstellen,
+  // geen reminder. Decision Engine moet zelfs assistant_suggested wegcappen.
+  if (isClarifyTurn) {
+    addReason(reasons, "needs_clarification");
+    return buildInitiative({
+      allow: false,
+      reason: "advisory_question",
+      score: 1,
+      reasons,
+    });
+  }
+
+  // Continuation-turns (vervolg op lopende experience) loggen we, maar
+  // verder gedraagt het zich als een gewone gift_event resultaat-turn.
+  if (isGiftEvent && primary?.payload.is_continuation === true) {
+    addReason(reasons, "continuation_turn");
+  }
+
+
 
   // 2. Persona-rust → score 0/1, geen voorstellen.
   const tone = ctx.persona.hints.tone;

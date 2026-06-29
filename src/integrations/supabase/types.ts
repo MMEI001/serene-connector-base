@@ -554,6 +554,36 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_experience_state: {
+        Row: {
+          asked_field: string | null
+          clarify_count: number
+          data: Json
+          expires_at: string
+          kind: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          asked_field?: string | null
+          clarify_count?: number
+          data?: Json
+          expires_at?: string
+          kind: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          asked_field?: string | null
+          clarify_count?: number
+          data?: Json
+          expires_at?: string
+          kind?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       voice_intents: {
         Row: {
           ambiguous: boolean

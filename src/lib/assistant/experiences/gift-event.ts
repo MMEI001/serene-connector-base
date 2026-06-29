@@ -1,6 +1,8 @@
 /**
  * Experience 001 — Kinderfeestje / gift_event.
  *
+ * Sprint 5: adaptieve vragen, persoonlijkere ideeën, continuation-aware.
+ *
  * Een Experience is een herkenbaar levenspatroon dat door het Intelligence
  * Framework als geheel wordt afgehandeld. Geen losse handler of route — we
  * verrijken alleen de bestaande engines:
@@ -16,6 +18,13 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { VoiceAction } from "@/lib/voice/types";
+import type { UserPersona } from "@/lib/voice/persona";
+import type { AskField } from "./continuation";
+import {
+  buildClarifyQuestion,
+  buildResultSummary,
+  detectMissingField,
+} from "./spoken-summary";
 
 export type GiftEventInput = {
   who?: string;        // "dochter", "zoon", "Anne", ...
@@ -27,13 +36,20 @@ export type GiftEventInput = {
   budget_currency?: string;
 };
 
-export type GiftEventOutcome = {
+export type GiftEventClarifyOutcome = {
+  mode: "clarify";
+  askedField: AskField;
+  question: string;
+  spokenSummary: string;
+};
+
+export type GiftEventResultOutcome = {
+  mode: "results";
   ideas: string[];
   existingAppointmentId: string | null;
   existingReminderId: string | null;
   leadDays: number;
   reminderAction: VoiceAction | null;
-  /** Korte gesproken samenvatting (1-2 zinnen) voor TTS. */
   spokenSummary: string;
   card: {
     kind: "gift_event";
@@ -45,9 +61,12 @@ export type GiftEventOutcome = {
   };
 };
 
+export type GiftEventOutcome = GiftEventClarifyOutcome | GiftEventResultOutcome;
+
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 const MODEL = "google/gemini-3-flash-preview";
 const DEFAULT_LEAD_DAYS = 3;
+const MAX_CLARIFY_ROUNDS = 2;
 
 const PARTY_KEYWORDS = ["kinderfeest", "feestje", "verjaard", "partij"];
 
@@ -72,21 +91,29 @@ function capitalize(s: string): string {
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }
 
-async function generateIdeas(input: GiftEventInput): Promise<string[]> {
+async function generateIdeas(
+  input: GiftEventInput,
+  persona?: UserPersona,
+): Promise<string[]> {
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) return defaultIdeas(input);
 
-  const ageHint = input.age ? `${input.age} jaar` : "leeftijd 6–8 (default)";
+  const ageHint = input.age ? `${input.age} jaar` : "leeftijd onbekend";
   const budgetHint = input.budget
     ? `${input.budget} ${input.budget_currency ?? "EUR"}`
-    : "ca. 15–20 EUR";
+    : "ca. 15–25 EUR";
   const interestsHint = input.interests?.length
     ? input.interests.join(", ")
     : "onbekend";
+  const toneHint = persona?.hints.tone === "minimal" ? "extra beknopt" : "warm en concreet";
 
   const sys = `Je geeft drie korte, concrete cadeau-ideeën in het Nederlands.
-Regels: max 6 woorden per idee, geen merknamen, geen prijzen, geen uitleg.
-Antwoord ALLEEN als JSON array van 3 strings, niets anders.`;
+Regels:
+- Max 6 woorden per idee.
+- Geen merknamen, geen prijzen, geen uitleg.
+- Pas IDEEN aan op de gegeven leeftijd en interesses (cruciaal).
+- Toon: ${toneHint}.
+- Antwoord ALLEEN als JSON array van 3 strings, niets anders.`;
   const user = `Voor wie: ${input.who ?? "kind"}
 Gelegenheid: ${input.event_type ?? "kinderfeestje"}
 Leeftijd: ${ageHint}
@@ -131,15 +158,15 @@ Budget: ${budgetHint}`;
 }
 
 function defaultIdeas(input: GiftEventInput): string[] {
-  const isKid = (input.age ?? 7) <= 12;
-  return isKid
-    ? ["Knutselset of tekenpakket", "Boek of leeshoekje-cadeau", "Bouwspeelgoed of puzzel"]
-    : ["Een mooi boek", "Bloemen of een plant", "Cadeaubon voor iets leuks"];
+  const age = input.age ?? 7;
+  if (age <= 4) return ["Houten puzzel", "Knuffel of stoffen boekje", "Speel-keukenset"];
+  if (age <= 8) return ["Knutselset of tekenpakket", "Voorleesboek met avontuur", "Bouwspeelgoed of puzzel"];
+  if (age <= 12) return ["Creatief experimenteer-set", "Leesboek voor zijn/haar leeftijd", "Buitenspel of sport-cadeau"];
+  return ["Een mooi boek", "Bloemen of een plant", "Cadeaubon voor iets leuks"];
 }
 
 /**
  * Zoek of er al een appointment / reminder in de buurt van het event staat.
- * Lichte heuristiek: zelfde week + matching trefwoord.
  */
 async function lookupExisting(
   supabase: SupabaseClient,
@@ -187,24 +214,59 @@ async function lookupExisting(
   };
 }
 
+export type RunGiftEventOpts = {
+  persona?: UserPersona;
+  /** Aantal eerdere clarify-rondes voor deze experience. */
+  clarifyCount?: number;
+  /** Of dit een vervolgturn is binnen dezelfde experience (continuation). */
+  isContinuation?: boolean;
+  /** Stabiele id voor deterministische TTS-variatie. */
+  turnId?: string;
+};
+
 export async function runGiftEvent(
   supabase: SupabaseClient,
   userId: string,
   input: GiftEventInput,
   now: Date,
+  opts: RunGiftEventOpts = {},
 ): Promise<GiftEventOutcome> {
   const whenIso = typeof input.iso_datetime === "string" ? input.iso_datetime : null;
-  const who = capitalize((input.who ?? "").trim()) || "het feestje";
+  const whoRaw = (input.who ?? "").trim();
+  const who = capitalize(whoRaw) || "het feestje";
   const eventLabel = (input.event_type ?? "kinderfeestje").trim();
+  const turnId = opts.turnId ?? `t_${now.getTime()}`;
+  const isContinuation = !!opts.isContinuation;
+  const clarifyCount = opts.clarifyCount ?? 0;
 
-  // 1. Context-lookup parallel met idee-generatie.
+  // 1. Adaptieve vraag — alleen als persona "wel mag" doorvragen, en we
+  //    nog niet te vaak hebben doorgevraagd.
+  const allowFollowup = opts.persona?.hints.allowFollowupQuestion !== false;
+  const missing = detectMissingField(input);
+  if (missing && allowFollowup && clarifyCount < MAX_CLARIFY_ROUNDS) {
+    const question = buildClarifyQuestion({
+      turnId,
+      who,
+      field: missing,
+      isContinuation,
+    });
+    return {
+      mode: "clarify",
+      askedField: missing,
+      question,
+      spokenSummary: question,
+    };
+  }
+
+  // 2. Context-lookup parallel met idee-generatie.
   const [existing, ideas] = await Promise.all([
     lookupExisting(supabase, userId, whenIso),
-    generateIdeas(input),
+    generateIdeas(input, opts.persona),
   ]);
 
-  // 2. Bepaal reminder-datum (event − leadDays, niet in het verleden).
+  // 3. Bepaal reminder-datum (event − leadDays, niet in het verleden).
   let reminderAction: VoiceAction | null = null;
+  let reminderIso: string | null = null;
   if (whenIso && !existing.reminderId) {
     const eventDate = new Date(whenIso);
     if (!Number.isNaN(eventDate.getTime()) && eventDate.getTime() > now.getTime()) {
@@ -217,13 +279,13 @@ export async function runGiftEvent(
 
       const title = `Cadeautje kopen voor ${who}`;
       const description = `Ideeën: ${ideas.join(" · ")}`;
-      const iso = amsterdamIso(reminderDate, 9, 0);
+      reminderIso = amsterdamIso(reminderDate, 9, 0);
 
       reminderAction = {
         intent: "reminder",
         payload: {
           title,
-          iso_datetime: iso,
+          iso_datetime: reminderIso,
           description,
           related_appointment_id: existing.appointmentId ?? undefined,
         },
@@ -232,15 +294,19 @@ export async function runGiftEvent(
     }
   }
 
-  const spokenSummary = buildSpokenSummary({
+  const spokenSummary = buildResultSummary({
+    turnId,
     who,
+    age: input.age,
     ideas,
-    reminderAction,
+    whenIso,
+    reminderIso,
     existingReminder: !!existing.reminderId,
-    now,
+    isContinuation,
   });
 
   return {
+    mode: "results",
     ideas,
     existingAppointmentId: existing.appointmentId,
     existingReminderId: existing.reminderId,
@@ -256,59 +322,6 @@ export async function runGiftEvent(
       existingReminder: !!existing.reminderId,
     },
   };
-}
-
-function buildSpokenSummary(args: {
-  who: string;
-  ideas: string[];
-  reminderAction: VoiceAction | null;
-  existingReminder: boolean;
-  now: Date;
-}): string {
-  const { who, ideas, reminderAction, existingReminder } = args;
-  const top = ideas.slice(0, 3).map((s) => s.replace(/\.$/, ""));
-  let ideeenZin = "";
-  if (top.length === 3) {
-    ideeenZin = `Ik heb drie cadeau-ideeën voor je: ${top[0]}, ${top[1]} of ${top[2]}.`;
-  } else if (top.length === 2) {
-    ideeenZin = `Ik heb twee cadeau-ideeën: ${top[0]} of ${top[1]}.`;
-  } else if (top.length === 1) {
-    ideeenZin = `Een idee: ${top[0]}.`;
-  }
-
-  let vervolgZin = "";
-  if (existingReminder) {
-    vervolgZin = "Er staat al een reminder klaar om een cadeautje te kopen.";
-  } else if (reminderAction) {
-    const iso = String(reminderAction.payload.iso_datetime ?? "");
-    const when = formatDutchWhen(iso);
-    const naam = who && who !== "het feestje" ? ` voor ${who}` : "";
-    vervolgZin = when
-      ? `Zal ik je ${when} herinneren om een cadeautje${naam} te kopen?`
-      : `Zal ik je een paar dagen van tevoren herinneren om een cadeautje${naam} te kopen?`;
-  }
-
-  return [ideeenZin, vervolgZin].filter(Boolean).join(" ").trim();
-}
-
-const DUTCH_DAYS = ["zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"];
-
-function formatDutchWhen(iso: string): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  // Reken naar Amsterdam-tijd voor weergave.
-  const parts = new Intl.DateTimeFormat("nl-NL", {
-    timeZone: "Europe/Amsterdam",
-    weekday: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(d);
-  const weekday = parts.find((p) => p.type === "weekday")?.value ?? DUTCH_DAYS[d.getDay()];
-  const hh = parts.find((p) => p.type === "hour")?.value ?? "09";
-  const mm = parts.find((p) => p.type === "minute")?.value ?? "00";
-  return `${weekday} om ${hh}:${mm}`;
 }
 
 export function isGiftEventConv(payload: Record<string, unknown>): GiftEventInput | null {

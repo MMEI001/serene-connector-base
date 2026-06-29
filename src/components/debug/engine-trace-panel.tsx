@@ -100,6 +100,28 @@ export function EngineTracePanel({ trace }: Props) {
         : [],
     },
     {
+      name: "Experience",
+      ms: trace.experience?.ms,
+      chips: trace.experience
+        ? [
+            `kind: ${trace.experience.kind}`,
+            `mode: ${trace.experience.mode}`,
+            trace.experience.asked_field ? `asked: ${trace.experience.asked_field}` : "",
+            trace.experience.is_continuation ? "continuation" : "",
+            trace.experience.had_state ? "had_state" : "no_state",
+            trace.experience.state_age_ms != null
+              ? `age: ${Math.round(trace.experience.state_age_ms / 1000)}s`
+              : "",
+            trace.experience.clarify_count != null
+              ? `clarify#: ${trace.experience.clarify_count}`
+              : "",
+            trace.experience.had_existing_event ? "existing_event" : "",
+            trace.experience.had_existing_reminder ? "existing_reminder" : "",
+            `ideas: ${trace.experience.ideas_count}`,
+          ].filter(Boolean)
+        : [],
+    },
+    {
       name: "Execution",
       ms: trace.execution?.ms,
       chips: trace.execution
@@ -110,6 +132,7 @@ export function EngineTracePanel({ trace }: Props) {
           ].filter(Boolean)
         : [],
     },
+
   ];
 
   const max = Math.max(1, ...engines.map((e) => e.ms ?? 0));
