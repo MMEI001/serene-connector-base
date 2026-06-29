@@ -118,6 +118,7 @@ export function EngineTracePanel({ trace }: Props) {
             trace.experience.had_existing_event ? "existing_event" : "",
             trace.experience.had_existing_reminder ? "existing_reminder" : "",
             `ideas: ${trace.experience.ideas_count}`,
+            trace.experience.memory_used_count ? `mem_used: ${trace.experience.memory_used_count}` : "",
           ].filter(Boolean)
         : [],
     },
