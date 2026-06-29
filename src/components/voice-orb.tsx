@@ -89,6 +89,11 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [lastVoiceLog, setLastVoiceLog] = useState<VoiceTraceLog | null>(null);
+
+  useEffect(() => {
+    return subscribeVoiceTrace(setLastVoiceLog);
+  }, []);
 
   // Wrapper: zet orb-mode op "speaking" zolang de TTS-call (incl. afspelen) loopt.
   const speakAndAnimate = useCallback(
