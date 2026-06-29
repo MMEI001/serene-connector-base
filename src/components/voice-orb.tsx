@@ -102,7 +102,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       // Het echte AI-antwoord begint nu te spreken — kap de wacht-erkenning af.
       stopAcknowledgement();
       try {
-        await speakText(text, opts);
+        await speakText(text, { route: "assistant_reply", ...opts });
       } finally {
         setIsSpeaking(false);
       }
@@ -204,15 +204,15 @@ export function VoiceOrb({ onCompleted }: Props) {
         let spokenIntent: string;
         if (result.spoken_summary?.trim()) {
           spokenConfirm = result.spoken_summary.trim();
-          spokenIntent = "experience_confirm";
+          spokenIntent = "spoken_summary";
         } else if (result.assistant_reply?.trim()) {
           spokenConfirm = `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`;
           spokenIntent = "assistant_chat_confirm";
         } else {
           spokenConfirm = "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-          spokenIntent = "confirm";
+          spokenIntent = "confirmation";
         }
-        void speakAndAnimate(spokenConfirm, { intent: spokenIntent });
+        void speakAndAnimate(spokenConfirm, { intent: spokenIntent, route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation" });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -242,12 +242,20 @@ export function VoiceOrb({ onCompleted }: Props) {
       setConfirmation(result.confirmation);
       setConfirming(null);
       // Prioriteit: spoken_summary (experience) → assistant_reply → query-intro → confirmation → fallback.
+      const hasSpokenSummary = Boolean(result.spoken_summary?.trim());
+      const hasAssistantReply = Boolean(result.assistant_reply?.trim());
+      const hasQueryIntro = Boolean(result.query_result?.intro?.trim());
       const spoken = result.spoken_summary?.trim()
         || result.assistant_reply?.trim()
         || result.query_result?.intro?.trim()
         || result.confirmation
         || "Staat erin.";
-      void speakAndAnimate(spoken, { intent: result.intent });
+      const route = hasSpokenSummary
+        ? "spoken_summary"
+        : hasAssistantReply || hasQueryIntro
+          ? "assistant_reply"
+          : "confirmation";
+      void speakAndAnimate(spoken, { intent: result.intent, route });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
 
@@ -677,14 +685,20 @@ export function VoiceOrb({ onCompleted }: Props) {
       {lastVoiceLog && (
         <div className="mt-4 mb-2 inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full bg-black/5 dark:bg-white/10 px-3 py-1 text-[10px] font-mono text-muted-foreground backdrop-blur-md">
           <span className="font-semibold text-foreground/80">Voice Trace:</span>
+          <span>provider:</span>
           <span className="text-foreground">{lastVoiceLog.provider}</span>
           <span>•</span>
+          <span>voice_id:</span>
           <span>{lastVoiceLog.voice_id}</span>
           <span>•</span>
+          <span>model:</span>
           <span>{lastVoiceLog.model}</span>
           <span>•</span>
+          <span>route:</span>
+          <span>{lastVoiceLog.route}</span>
+          <span>•</span>
           <span>{lastVoiceLog.latency_ms}ms</span>
-          <span className="opacity-70">({lastVoiceLog.intent})</span>
+          <span className="opacity-70">({lastVoiceLog.status ?? lastVoiceLog.source ?? lastVoiceLog.intent})</span>
         </div>
       )}
 
