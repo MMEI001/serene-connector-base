@@ -1,72 +1,112 @@
-# Sprint 4 — Experience 001: Kinderfeestje
+## Doel
+Experience 001 (kinderfeestje) voelt nu correct, maar nog AI-achtig: ze gokt direct drie cadeau-ideeën zonder context op te halen, kan niet doorpraten in een tweede turn, en de TTS leest het lijstje voor in plaats van mee te denken. Sprint 5 verbetert die vier punten zonder de bestaande flow te breken.
 
-Eerste end-to-end "ervaring" die volledig door het Intelligence Framework loopt. Geen losse handler-logica, geen aparte route: één type vraag ("kinderfeestje volgende week") leidt tot een samenhangende reactie — begrijpen, contextcheck, advies, 3 cadeau-ideeën, voorstel voor herinnering, bewerken, bevestigen.
+## Stap 1 — Continuïteit (nieuwe `experience_state` tabel)
 
-## Aanpak
+Een tweede turn als "het is een meisje van acht" moet de lopende Experience verder vullen, niet opnieuw starten. We persisteren per gebruiker één actieve Experience.
 
-We introduceren het concept **Experience** in het framework. Een Experience is een herkenbaar patroon dat in de Conversation/Initiative/Suggestion-engines wordt herkend en de bestaande engines extra inkleurt — geen parallelle pipeline.
+Migratie:
+```text
+voice_experience_state(
+  user_id uuid PK references auth.users,
+  kind text check (kind in ('gift_event')),
+  data jsonb not null default '{}',
+  asked_field text,            -- welk veld is laatst opgevraagd
+  updated_at timestamptz,
+  expires_at timestamptz       -- 15 min sliding window
+)
+```
++ GRANT SELECT/INSERT/UPDATE/DELETE aan `authenticated`, ALL aan `service_role`, RLS-policies per `auth.uid()`.
 
-### 1. Conversation Engine — uitbreiden
-- Voeg in de Gemini system-prompt een paragraaf toe over "ervarings-patronen": als een gebruiker een sociale gebeurtenis voor een ander noemt (kinderfeestje, verjaardag, bruiloft, etentje) → classificeer als `assistant_chat` met `experience: "gift_event"` in payload. Extract entities: `who` (dochter/zoon/vriendin/…), `event_type` (kinderfeestje), `iso_datetime` (datum), optionele `age`, `interests`, `budget`.
-- Aanvullen `tool` schema met optionele `experience` enum + `experience_data` object. Persona-prompt blijft.
-- Reply moet warm-praktisch zijn ("Leuk! Dan is het handig om alvast een cadeautje te regelen.") — niet een directe vraag stellen.
+## Stap 2 — Conversation Engine herkent continuatie
 
-### 2. Context Engine — uitbreiden
-`snapshot()` krijgt een optionele `lookup` parameter. Voor een gift_event-turn vraagt de orchestrator extra:
-- bestaat er al een appointment rond die datum met matchende titel-trefwoorden (kinderfeestje / verjaardag / feestje)?
-- bestaat er al een reminder met "cadeau" + datum binnen 7 dagen vóór die datum?
-Resultaat: `snapshot.experience = { existingAppointmentId?, existingReminderId?, leadDays }`.
+In `conversation-engine.ts` voor de classifier-call:
+1. Laad actieve experience-state (niet vervallen).
+2. Als die bestaat én de utterance lijkt op aanvullende info (korte zin, bevat leeftijd/getal, "meisje/jongen", "budget", "houdt van …", "interesse", of de Engine herkent `asked_field`-keyword), sla Gemini over en bouw zelf een `assistant_chat`-actie met `experience=gift_event` en gemergede `experience_data`.
+3. Anders: normale classify; als het resultaat een nieuwe `gift_event` is, vervang state; bij iets totaal anders, expire de oude state.
 
-### 3. Initiative Engine — uitbreiden
-Voor `experience === "gift_event"`:
-- Score start op 3 (advies + voorstel reminder).
-- Reden `future_time_marker` + nieuwe reason `experience_gift_event` (privacy-veilig enum).
-- Als reminder al bestaat → score = 1 (alleen bevestigen dat het al staat), reason `existing_followup_present`.
-- Als event in het verleden ligt → score = 0.
+Het mergen gebeurt server-side in een nieuw klein bestand `src/lib/assistant/experiences/continuation.ts` met pure helpers (`mergeGiftData`, `looksLikeContinuation`, `extractFieldsFromUtterance`) zodat het testbaar blijft.
 
-### 4. Suggestion Engine — uitbreiden
-Nieuwe helper `proposeGiftIdeas(ctx, conv)`:
-- Tweede, korte Gemini-call (gemini-3-flash) met strikte JSON-output: 3 cadeau-ideeën op basis van `age`, `interests`, `budget` met sensible defaults wanneer onbekend (leeftijd 6–8, budget 15–20 €).
-- Output wordt **geen** Proposal (geen DB-actie), maar `conv.experience.gift_ideas: string[]`.
-- Daarnaast 1 reminder-proposal: titel `"Cadeautje kopen voor {who}"`, datum = event-datum minus `leadDays` (default 3) om 09:00, `related_appointment_id` indien gevonden, `description` = de 3 ideeën samengevat (1 regel per idee).
+## Stap 3 — Adaptieve vragen in gift-event
 
-### 5. Decision Engine
-Geen wijziging in logica; cap uit Sprint 3 staat de ene reminder-proposal toe (score ≥ 2). Voegt rejection-reason toe als reminder al bestaat (`duplicate`).
+`runGiftEvent` krijgt een nieuwe pre-stap:
+1. Bepaal `missingFields` uit `age`, `interests`, `budget` met een prioriteit (age → interests → budget). `who` en `iso_datetime` blijven verplicht voor het reminder-voorstel maar worden niet meer "gevraagd" — slimme defaults blijven.
+2. Als er minstens één essentieel veld mist én er nog géén clarificatie is gesteld voor dit veld (kijk in state.asked_field), retourneer een nieuwe outcome-mode:
+   ```text
+   { kind: "clarify", askField, question, spokenSummary }
+   ```
+   Bijvoorbeeld `askField="age"` → `question="Hoe oud wordt ze?"`, `spokenSummary="Leuk! Hoe oud wordt ze? Dan kan ik je een paar passende cadeau-ideeën geven."`
+3. Schrijf state weg met `asked_field=age` en gemergede data.
+4. Als alle gewenste velden ingevuld zijn (of we hebben al één keer doorgevraagd) → genereer ideeën zoals nu en wis de state.
 
-### 6. Execution Engine / Confirmation
-- Reminder-proposal heeft `requiresConsent: true` → standaard `needs_confirmation`-pad via bestaande `voice_actions` + `commitVoiceBundle`. Bewerken-knop in `VoiceOrb` werkt al voor titel/datum/tijd.
-- Voor `gift_ideas` voegt de orchestrator `result.experience_card = { kind: "gift_event", who, iso, ideas[] }` toe naast de bestaande confirmation. UI rendert dit boven de Bevestig/Annuleer-knoppen.
+In de pipeline (`pipeline.ts`) krijgt de clarify-tak een eigen pad:
+- Geen reminder-proposal, geen DB-actie.
+- `experience_card` wordt een lichte variant `kind: "gift_event_clarify"` met de vraag.
+- `result.status = "completed"`, `assistant_reply = question`, `spoken_summary = spokenSummary`.
 
-### 7. UI
-- Nieuwe component `src/components/experience-card.tsx` — toont titel ("Cadeau voor {who}"), context-regel ("kinderfeestje {dag} {datum}"), 3 ideeën als bullets, en de subtekst "Reminder staat klaar — pas aan of bevestig hieronder".
-- `VoiceOrb`: in `confirming`-state, als `result.experience_card` bestaat, render `ExperienceCard` boven het bestaande confirmation-blok.
-- TTS-reply is kort: het advies + "Ik heb drie cadeau-ideeën en zet een reminder klaar — wil je die zo bevestigen?".
+`ExperienceCard` UI krijgt een tweede render-tak voor `gift_event_clarify` (alleen tekst — geen ideeën, geen knoppen).
 
-### 8. Types & trace
-- `src/lib/assistant/types.ts`: voeg toe `ExperienceKind = "gift_event"`, `ExperiencePayload`, en in `Conversation.meta` veld `experience?`. Trace krijgt `experience?: { kind, had_existing_event, had_existing_reminder, ideas_count }` — geen ruwe tekst.
-- `OpportunityReason` krijgt `experience_gift_event`, `existing_followup_present`.
+## Stap 4 — Persoonlijkere cadeau-ideeën
+
+`generateIdeas`:
+- Krijgt `persona` mee en (indien aanwezig) `memoryHits` voor latere uitbreiding.
+- Prompt wordt aangevuld met persona-stijl ("rustig", "gestructureerd") en eventuele eerdere notitie-keys (privacy: alleen sleutel/categorie, nooit ruwe waarden uit memoryHits).
+- Default-ideeën vertakken op leeftijdsbanden (0–3, 4–7, 8–11, 12+) i.p.v. één algemene 6–8-default.
+- Bij gemengde of onbekende interesses: gebruik een licht-veiligere prompt ("vermijd lawaaiig speelgoed als ouder rust waardeert").
+
+## Stap 5 — Natuurlijker gesproken samenvatting
+
+`buildSpokenSummary` wordt herschreven:
+- Random uit ~4 openers ("Leuk", "Wat lief", "Mooi", "Goed dat je het noemt") — deterministisch op `user_id`+`turn_id` zodat dezelfde turn altijd dezelfde regel geeft.
+- Combineert ideeën als zinsdeel, niet als opsomming met `, of`: "Ik dacht aan een knutselset, iets om mee te bouwen, of een mooi prentenboek."
+- Vervolgzin verwijst naar geleverde context als die er is ("voor een meisje van acht"): "Zal ik je vrijdag om negen uur herinneren om iets voor haar uit te kiezen?"
+- Bij clarify: korte rustige vraag, geen "Ik denk met je mee"-prefix.
+- Cijfers worden uitgeschreven in TTS-vriendelijk Nederlands (09:00 → "negen uur", 8 → "acht").
+
+## Stap 6 — EngineTrace uitbreiding
+
+In `types.ts` wordt `experience` uitgebreid (privacy-veilig — alleen enums/tellingen):
+```ts
+experience?: {
+  kind: "gift_event";
+  had_existing_event: boolean;
+  had_existing_reminder: boolean;
+  ideas_count: number;
+  mode: "ideas" | "clarify";
+  missing_fields: Array<"age" | "interests" | "budget">;
+  asked_field: "age" | "interests" | "budget" | null;
+  continuation_used: boolean;
+  state_age_ms: number | null;
+  ms: number;
+};
+```
+
+Nieuwe `OpportunityReason`-enum-waarde `needs_clarification` voor de Initiative Engine zodat de Decision Engine geen DB-actie doorlaat zolang de clarify-tak loopt.
+
+Het debug-paneel (`engine-trace-panel.tsx`) toont deze extra chips.
+
+## Niet-doelen
+- Geen wijzigingen aan andere Experiences (er is er maar één).
+- Geen wijzigingen aan auth, agenda, reminders-schema.
+- Geen voicechange — alleen samenvatting-tekst.
+- Geen multi-experience state (één actieve per user volstaat).
+
+## Technische details
+- Continuation-window: 15 minuten sliding (`updated_at + 15m`). Bij commit/cancel van een reminder-voorstel uit dezelfde experience, wis state direct.
+- Max één clarify-ronde per Experience — daarna doorgaan met defaults, anders blijven we vragen stellen.
+- Pipeline-tak voor clarify schrijft géén `voice_actions`-rij; alleen `voice_intents` audit-log met `engine_trace.experience.mode = "clarify"`.
+- State-tabel is auth-only (geen `anon` grant); reads/writes uitsluitend via `requireSupabaseAuth`-server-functions (geen edge cron).
+- Random-opener wordt seeded met een hash van `user_id|turn_id` (geen `Math.random` aan server-zijde voor reproduceerbare debug-runs).
 
 ## Bestanden
-
-Nieuw:
-- `src/components/experience-card.tsx`
-- `src/lib/assistant/experiences/gift-event.ts` (idee-generator + context-lookup)
-
-Aanpassen:
-- `src/lib/voice/process-voice-input.ts` (tool-schema + system-prompt uitbreiden)
-- `src/lib/assistant/context-engine.ts` (optionele experience-lookup)
-- `src/lib/assistant/initiative-engine.ts` (gift_event-tak)
-- `src/lib/assistant/suggestion-engine.ts` (gift-event-tak roept gift-event helper aan)
-- `src/lib/assistant/pipeline.ts` (threading + experience-trace + result.experience_card)
-- `src/lib/assistant/types.ts` (Experience-types + reasons + trace-veld)
-- `src/lib/voice/types.ts` (ActionResult krijgt optioneel `experience_card`)
-- `src/components/voice-orb.tsx` (render ExperienceCard in confirming-state)
-- `src/lib/assistant/flags.ts` (zorg dat gift_event onder `chat_only` valt zodat hij door framework loopt)
-
-## Veiligheid
-- Geen automatische schrijfacties; reminder blijft altijd `needs_confirmation`.
-- Gift-ideeën zijn tekst-only, niets in DB tot bevestiging.
-- Trace bevat alleen tellingen/enums, geen namen of interesses.
-
-## Test
-Na build: zeg "Mijn dochter heeft volgende week vrijdag een kinderfeestje". Verwacht: warm advies + experience-kaart met 3 ideeën + bewerkbare reminder-bevestiging (3 dagen ervoor 09:00) + bevestigen schrijft naar `reminders`.
+- migratie: `supabase/migrations/<ts>_voice_experience_state.sql`
+- nieuw: `src/lib/assistant/experiences/continuation.ts`
+- nieuw: `src/lib/assistant/experiences/spoken-summary.ts` (uit gift-event gehaald, herschreven)
+- update: `src/lib/assistant/experiences/gift-event.ts` (clarify-modus, persona-prompt, lees/schrijf state)
+- update: `src/lib/assistant/conversation-engine.ts` (continuation-detectie)
+- update: `src/lib/assistant/pipeline.ts` (clarify-tak, trace)
+- update: `src/lib/assistant/types.ts` (trace + reason)
+- update: `src/lib/assistant/initiative-engine.ts` (`needs_clarification` reason → score 0)
+- update: `src/components/experience-card.tsx` (`gift_event_clarify` variant)
+- update: `src/components/debug/engine-trace-panel.tsx` (nieuwe chips)
+- update: `src/integrations/supabase/types.ts` (gegenereerd na migratie)
