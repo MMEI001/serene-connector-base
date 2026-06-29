@@ -133,6 +133,23 @@ export function EngineTracePanel({ trace }: Props) {
         : [],
     },
 
+    {
+      name: "Memory write-back",
+      ms: trace.memory_writeback?.ms,
+      chips: trace.memory_writeback
+        ? [
+            trace.memory_writeback.handled_confirmation ? "confirmed" : "",
+            trace.memory_writeback.created_pending ? "new_pending" : "",
+            trace.memory_writeback.category
+              ? `cat: ${trace.memory_writeback.category}`
+              : "",
+            trace.memory_writeback.future_value != null
+              ? `fv: ${trace.memory_writeback.future_value}`
+              : "",
+            `active: ${trace.memory_writeback.active_records_count}`,
+          ].filter(Boolean)
+        : [],
+    },
   ];
 
   const max = Math.max(1, ...engines.map((e) => e.ms ?? 0));
