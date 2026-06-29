@@ -11,7 +11,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { understand } from "./conversation-engine";
-import { recall, remember } from "./memory-engine";
+import { processMemoryForTurn, recall } from "./memory-engine";
 import { snapshot } from "./context-engine";
 import { shouldTakeInitiative } from "./initiative-engine";
 import { propose } from "./suggestion-engine";
@@ -40,6 +40,14 @@ async function withTiming<T>(fn: () => Promise<T> | T): Promise<{ value: T; ms: 
   const start = performance.now();
   const value = await fn();
   return { value, ms: Math.round(performance.now() - start) };
+}
+
+function appendLine(base: string | undefined, extra: string): string {
+  const a = (base ?? "").trim();
+  const b = extra.trim();
+  if (!a) return b;
+  if (!b) return a;
+  return `${a} ${b}`;
 }
 
 function pickSlowest(timings: Record<string, number>): string {
@@ -276,8 +284,35 @@ export async function runAssistantTurn(
     result.spoken_summary = experienceSpokenSummary;
   }
 
-  // Memory write-back (no-op sprint 1/2).
-  void remember(supabase, userId, conv.value);
+  // Memory write-back (Sprint 6) — bevestiging afhandelen of nieuwe
+  // pending kandidaat aanmaken. Hangt natuurlijke vraag aan reply.
+  const memOutcome = await withTiming(() =>
+    processMemoryForTurn(supabase, userId, input.text, now, { turnId: turn_id }),
+  );
+  timings.memory_writeback = memOutcome.ms;
+  const m = memOutcome.value;
+
+  if (m.confirmationAck) {
+    result.assistant_reply = appendLine(result.assistant_reply, m.confirmationAck);
+    if (result.status === "completed" && !result.query_result) {
+      result.confirmation = result.assistant_reply ?? result.confirmation;
+    }
+  }
+  if (m.pendingQuestion) {
+    result.assistant_reply = appendLine(result.assistant_reply, m.pendingQuestion);
+    if (result.status === "completed" && !result.query_result) {
+      result.confirmation = result.assistant_reply ?? result.confirmation;
+    }
+  }
+
+  trace.memory_writeback = {
+    handled_confirmation: m.handledConfirmation,
+    created_pending: m.createdPending,
+    category: m.category,
+    future_value: m.futureValue,
+    active_records_count: mem.value.records.length,
+    ms: memOutcome.ms,
+  };
 
   trace.total_ms = Math.round(performance.now() - turnStart);
   trace.slowest_engine = pickSlowest(timings);

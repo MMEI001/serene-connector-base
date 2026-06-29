@@ -101,6 +101,57 @@ export type Database = {
         }
         Relationships: []
       }
+      assistant_memory: {
+        Row: {
+          category: Database["public"]["Enums"]["memory_category"]
+          confidence: number
+          created_at: string
+          future_value_score: number
+          id: string
+          last_used_at: string | null
+          source_action_id: string | null
+          source_turn_id: string | null
+          status: Database["public"]["Enums"]["memory_status"]
+          subject: string | null
+          updated_at: string
+          use_count: number
+          user_id: string
+          value: string
+        }
+        Insert: {
+          category: Database["public"]["Enums"]["memory_category"]
+          confidence?: number
+          created_at?: string
+          future_value_score?: number
+          id?: string
+          last_used_at?: string | null
+          source_action_id?: string | null
+          source_turn_id?: string | null
+          status?: Database["public"]["Enums"]["memory_status"]
+          subject?: string | null
+          updated_at?: string
+          use_count?: number
+          user_id: string
+          value: string
+        }
+        Update: {
+          category?: Database["public"]["Enums"]["memory_category"]
+          confidence?: number
+          created_at?: string
+          future_value_score?: number
+          id?: string
+          last_used_at?: string | null
+          source_action_id?: string | null
+          source_turn_id?: string | null
+          status?: Database["public"]["Enums"]["memory_status"]
+          subject?: string | null
+          updated_at?: string
+          use_count?: number
+          user_id?: string
+          value?: string
+        }
+        Relationships: []
+      }
       calendar_connections: {
         Row: {
           access_token: string
@@ -682,6 +733,22 @@ export type Database = {
         | "onboarding"
         | "system"
       let_go_status: "active" | "archived" | "processed"
+      memory_category:
+        | "child_interest"
+        | "child_activity"
+        | "favorite"
+        | "reminder_preference"
+        | "shop_preference"
+        | "hobby"
+        | "gift_preference"
+        | "planning_preference"
+        | "shopping_preference"
+        | "travel_preference"
+        | "food_preference"
+        | "pet"
+        | "family_member"
+        | "other"
+      memory_status: "pending_confirmation" | "active" | "rejected" | "archived"
       reminder_status: "active" | "done" | "snoozed" | "deleted"
       suggestion_status: "pending" | "accepted" | "dismissed" | "deleted"
       voice_action_status:
@@ -834,6 +901,23 @@ export const Constants = {
         "system",
       ],
       let_go_status: ["active", "archived", "processed"],
+      memory_category: [
+        "child_interest",
+        "child_activity",
+        "favorite",
+        "reminder_preference",
+        "shop_preference",
+        "hobby",
+        "gift_preference",
+        "planning_preference",
+        "shopping_preference",
+        "travel_preference",
+        "food_preference",
+        "pet",
+        "family_member",
+        "other",
+      ],
+      memory_status: ["pending_confirmation", "active", "rejected", "archived"],
       reminder_status: ["active", "done", "snoozed", "deleted"],
       suggestion_status: ["pending", "accepted", "dismissed", "deleted"],
       voice_action_status: [
