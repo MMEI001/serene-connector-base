@@ -100,10 +100,16 @@ export async function runAssistantTurn(
     ms: conv.ms,
   };
 
-  // 4. Initiative
+  // 4. Initiative (v2 — bepaalt ook Opportunity Score + motivaties)
   const init = await withTiming(() => shouldTakeInitiative(ctx, conv.value));
   timings.initiative = init.ms;
-  trace.initiative = { ...init.value, ms: init.ms };
+  trace.initiative = {
+    ...init.value,
+    ms: init.ms,
+    score: init.value.score,
+    help_kind: init.value.helpKind,
+    reasons: init.value.reasons,
+  };
 
   // 5. Suggestion
   const sug = await withTiming(() => propose(ctx, conv.value));
@@ -114,8 +120,8 @@ export async function runAssistantTurn(
     ms: sug.ms,
   };
 
-  // 6. Decision
-  const dec = await withTiming(() => decide(ctx, conv.value, sug.value));
+  // 6. Decision (krijgt initiative — Opportunity Score stuurt cap)
+  const dec = await withTiming(() => decide(ctx, conv.value, sug.value, init.value));
   timings.decision = dec.ms;
   trace.decision = {
     kept: dec.value.proposals.length,
@@ -124,6 +130,7 @@ export async function runAssistantTurn(
     reason: dec.value.reason,
     ms: dec.ms,
   };
+
 
   // 7. Execution
   const exec = await withTiming(() => execute(ctx, dec.value));

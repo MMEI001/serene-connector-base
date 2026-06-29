@@ -71,9 +71,16 @@ export function EngineTracePanel({ trace }: Props) {
       name: "Initiative",
       ms: trace.initiative?.ms,
       chips: trace.initiative
-        ? [trace.initiative.allow ? "allow" : "skip", trace.initiative.reason]
+        ? [
+            trace.initiative.allow ? "allow" : "skip",
+            trace.initiative.reason,
+            `score: ${trace.initiative.score}`,
+            `kind: ${trace.initiative.help_kind}`,
+            ...trace.initiative.reasons,
+          ]
         : [],
     },
+
     {
       name: "Suggestion",
       ms: trace.suggestion?.ms,
