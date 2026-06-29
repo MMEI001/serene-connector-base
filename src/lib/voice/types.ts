@@ -83,6 +83,9 @@ export type ActionResult = {
   /** Rijke kaart bij ervaringen zoals gift_event. Wordt boven de
    *  bevestigingsknoppen getoond — bevat geen actie-zekerheden. */
   experience_card?: import("@/components/experience-card").ExperienceCardData;
+  /** Korte gesproken samenvatting voor TTS (1-2 zinnen). Heeft voorrang
+   *  boven assistant_reply/confirmation bij experience-kaarten. */
+  spoken_summary?: string;
 
   // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
   editable?: {
