@@ -24,6 +24,8 @@ import {
 } from "@/lib/voice/ack-audio";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
+import type { EngineTrace } from "@/lib/assistant/types";
+import { EngineTracePanel } from "@/components/debug/engine-trace-panel";
 
 const MAX_RECORDING_SECONDS = 60;
 const DONE_HOLD_MS = 1600;
@@ -73,6 +75,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [pending, setPending] = useState<Pending>(null);
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
+  const [lastTrace, setLastTrace] = useState<EngineTrace | null>(null);
   // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -170,6 +173,7 @@ export function VoiceOrb({ onCompleted }: Props) {
 
   const handleResult = useCallback(
     (result: PipelineResult) => {
+      if (result.engine_trace) setLastTrace(result.engine_trace);
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
@@ -647,9 +651,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         />
       )}
 
-
-
-
+      <EngineTracePanel trace={lastTrace} />
     </div>
   );
 }
