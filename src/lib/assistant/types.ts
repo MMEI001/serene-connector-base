@@ -116,7 +116,9 @@ export type OpportunityReason =
   | "low_confidence"
   | "persona_quiet"
   | "suggested_actions_present"
-  | "no_actionable_followup";
+  | "no_actionable_followup"
+  | "experience_gift_event"
+  | "existing_followup_present";
 
 /** Een Proposal is een potentiële actie — nog niet besloten. */
 export type Proposal = {
