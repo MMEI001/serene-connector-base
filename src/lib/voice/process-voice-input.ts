@@ -118,6 +118,27 @@ const TOOL = {
                       required: ["intent", "payload"],
                     },
                   },
+                  /** Sprint 4 — herkenbaar levenspatroon (Experience). */
+                  experience: {
+                    type: "string",
+                    enum: ["gift_event"],
+                    description:
+                      "Markeer een herkenbaar patroon zodat het framework er rijker mee om kan gaan.",
+                  },
+                  experience_data: {
+                    type: "object",
+                    description:
+                      "Geëxtraheerde entiteiten voor de experience (bv. who/event_type/iso_datetime/age/interests/budget).",
+                    properties: {
+                      who: { type: "string" },
+                      event_type: { type: "string" },
+                      iso_datetime: { type: "string" },
+                      age: { type: "number" },
+                      interests: { type: "array", items: { type: "string" } },
+                      budget: { type: "number" },
+                      budget_currency: { type: "string" },
+                    },
+                  },
                 },
               },
             },
@@ -160,6 +181,14 @@ ASSISTANT_CHAT REGELS:
   - Voorbeeld: "Ik heb zaterdag een verjaardag, zal ik bloemen kopen?" → reply: "Ja, bloemen zijn een fijn idee. Ik kan je vrijdag om 09:00 herinneren om ze te halen." + suggested_actions: [{ intent:"reminder", payload:{ title:"Bloemen kopen", iso_datetime:"<vrijdag 09:00 ISO>" } }]
 - suggested_actions worden NOOIT direct uitgevoerd — de gebruiker bevestigt eerst via de bevestigingskaart. Gebruik exact dezelfde payload-velden als gewone reminder/event/note.
 - Bij twijfel tussen query en assistant_chat: kies query als er een agenda/reminder-antwoord is, anders assistant_chat.
+
+EXPERIENCE PATRONEN (alleen bij intent=assistant_chat):
+- Als de gebruiker een sociale gebeurtenis voor iemand anders noemt (kinderfeestje, verjaardag, bruiloft, etentje, doopfeest), zet:
+    payload.experience = "gift_event"
+    payload.experience_data = { who?, event_type?, iso_datetime?, age?, interests?, budget? }
+- "Mijn dochter heeft volgende week een kinderfeestje" → experience=gift_event, who="dochter", event_type="kinderfeestje", iso_datetime=<ISO van die dag 12:00>.
+- Geef ALTIJD ook een warm-praktische reply ("Leuk! Dan is het handig om alvast een cadeautje te regelen.").
+- LAAT in dit geval suggested_actions WEG — het framework bouwt zelf het cadeau-voorstel; jij zou de iso_datetime alleen maar verkeerd raden.
 
 MULTI-ACTION REGELS (voor gewone event+reminder, niet voor assistant_chat):
 - "Zet een afspraak X EN herinner me Y" → 2 acties: [event, reminder].

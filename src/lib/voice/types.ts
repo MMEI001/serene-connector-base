@@ -79,6 +79,11 @@ export type ActionResult = {
   /** Privacy-veilige reasoning-trace van het Intelligence Framework. */
   engine_trace?: import("@/lib/assistant/types").EngineTrace;
 
+  // ---- experience-uitbreiding (Sprint 4) ----
+  /** Rijke kaart bij ervaringen zoals gift_event. Wordt boven de
+   *  bevestigingsknoppen getoond — bevat geen actie-zekerheden. */
+  experience_card?: import("@/components/experience-card").ExperienceCardData;
+
   // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
   editable?: {
     intent: "reminder" | "event";

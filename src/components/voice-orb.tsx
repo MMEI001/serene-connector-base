@@ -26,6 +26,7 @@ import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
 import { EngineTracePanel } from "@/components/debug/engine-trace-panel";
+import { ExperienceCard, type ExperienceCardData } from "@/components/experience-card";
 
 const MAX_RECORDING_SECONDS = 60;
 const DONE_HOLD_MS = 1600;
@@ -76,6 +77,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [confirming, setConfirming] = useState<Confirming>(null);
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [lastTrace, setLastTrace] = useState<EngineTrace | null>(null);
+  const [experienceCard, setExperienceCard] = useState<ExperienceCardData | null>(null);
   // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -167,6 +169,7 @@ export function VoiceOrb({ onCompleted }: Props) {
     resetTimerRef.current = setTimeout(() => {
       setConfirmation("");
       setQueryResult(null);
+      setExperienceCard(null);
       dispatch({ type: "RESET" });
     }, DONE_HOLD_MS);
   }, []);
@@ -174,6 +177,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const handleResult = useCallback(
     (result: PipelineResult) => {
       if (result.engine_trace) setLastTrace(result.engine_trace);
+      setExperienceCard(result.experience_card ?? null);
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
@@ -403,7 +407,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (confirmTimerRef.current) clearTimeout(confirmTimerRef.current);
       setConfirming(null);
       setIsEditing(false);
-
+      setExperienceCard(null);
       setConfirmation("");
       dispatch({ type: "CANCEL" });
       cancelFn({ data: { action_id: actionId } }).catch(() => {});
@@ -522,6 +526,7 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       {confirming && !isEditing && state !== "processing" && state !== "listening" && (
         <div className="mt-4 flex flex-col items-center gap-3">
+          {experienceCard && <ExperienceCard data={experienceCard} />}
           {confirming.preview.includes("\n") && (() => {
             const [head, ...rest] = confirming.preview.split("\n");
             const sub = rest.join(" ").trim();

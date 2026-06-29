@@ -224,9 +224,10 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
       const suggestedRaw = primary?.payload.suggested_actions;
       const hasSuggested =
         Array.isArray(suggestedRaw) && suggestedRaw.length > 0;
+      const hasExperience = primary?.payload.experience === "gift_event";
       if (
         primary &&
-        isEligibleForAssistantLayer(mode, primary.intent, hasSuggested)
+        isEligibleForAssistantLayer(mode, primary.intent, hasSuggested, hasExperience)
       ) {
         const { result: assistantResult, trace } = await runAssistantTurn(
           supabase,
