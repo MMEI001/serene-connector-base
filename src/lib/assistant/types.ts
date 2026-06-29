@@ -188,12 +188,19 @@ export type EngineTrace = {
     snapshot_keys: string[];
     ms: number;
   };
-  initiative?: Initiative & { ms: number };
+  initiative?: Initiative & {
+    ms: number;
+    /** Sprint 3 — gekopieerd voor snelle filter/aggregatie zonder spread-typing. */
+    score: OpportunityScore;
+    help_kind: HelpKind;
+    reasons: OpportunityReason[];
+  };
   suggestion?: {
     proposals_count: number;
     skills: VoiceIntent[];
     ms: number;
   };
+
   decision?: {
     kept: number;
     rejected: number;
