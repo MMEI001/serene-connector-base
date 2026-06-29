@@ -61,10 +61,45 @@ export type MemoryHit = {
   confidence: number;
 };
 
-/** Lichte snapshot van wat er vandaag speelt. */
+export type FreeTimeBlock = {
+  start: string; // "10:30"
+  end: string;   // "12:00"
+  durationMinutes: number;
+};
+
+export type NextAppointmentCompact = {
+  title: string;
+  whenIso: string; // "2026-06-29T14:00"
+  date: string;
+  startTime: string;
+};
+
+export type ContextCategoryCount = {
+  category:
+    | "appointments_today"
+    | "next_appointment"
+    | "free_time_blocks"
+    | "open_reminders"
+    | "relevant_memories"
+    | "upcoming_birthdays"
+    | "travel_time"
+    | "time_context";
+  count: number;
+};
+
+/** Compacte snapshot van wat er op dit moment en vandaag relevant is. */
 export type ContextSnapshot = {
   todayCount: number;
-  nextEvent?: { title: string; whenIso: string } | null;
+  nextEvent?: NextAppointmentCompact | null;
+  freeBlocksToday: FreeTimeBlock[];
+  openRemindersCount: number;
+  relevantMemoriesCount: number;
+  memoriesCountByCategory: Record<string, number>;
+  upcomingBirthdaysCount: number;
+  travelTimeAvailable: boolean;
+  timeOfDay: "morning" | "afternoon" | "evening" | "night";
+  dayOfWeek: "maandag" | "dinsdag" | "woensdag" | "donderdag" | "vrijdag" | "zaterdag" | "zondag";
+  categories: ContextCategoryCount[];
 };
 
 /** Vast vocabulaire van redenen — voorkomt vrij-tekst lekken in trace. */
@@ -202,6 +237,7 @@ export type EngineTrace = {
     today_count: number;
     has_next_event: boolean;
     snapshot_keys: string[];
+    categories?: Array<{ category: string; count: number }>;
     ms: number;
   };
   initiative?: Initiative & {
