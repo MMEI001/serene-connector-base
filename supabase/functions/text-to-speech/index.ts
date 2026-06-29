@@ -7,6 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Expose-Headers": "x-voice-id, x-voice-model, x-voice-provider",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -117,6 +118,9 @@ Deno.serve(async (req) => {
         ...corsHeaders,
         "Content-Type": "audio/mpeg",
         "Cache-Control": "no-store",
+        "x-voice-provider": "elevenlabs",
+        "x-voice-id": voiceId,
+        "x-voice-model": MODEL_ID,
       },
     });
   } catch (err) {
