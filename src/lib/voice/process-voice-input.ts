@@ -449,8 +449,30 @@ export async function processVoiceInput(
 
   const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
 
-  // Stap 1: interne Reasoning Brain (nooit zichtbaar voor gebruiker).
-  const reasoning = await runReasoning(trimmed, apiKey, opts.contextSummary, history);
+  // Voice-first: reasoning + quality staan default UIT (kostten samen ~5–7s).
+  // Alleen in test-mode (of expliciete override) draaien ze mee.
+  const mode = opts.mode ?? "voice";
+  const enableReasoning =
+    opts.enableReasoning ?? (mode === "test" || !!opts.debug);
+  const enableQuality =
+    opts.enableQuality ?? (mode === "test" || !!opts.debug);
+  const isVoice = mode === "voice";
+
+  // Stap 1: interne Reasoning Brain — alleen als expliciet aangezet.
+  //         Nooit zichtbaar voor de gebruiker; timeout hard begrensd.
+  let reasoning: string | null = null;
+  if (enableReasoning) {
+    try {
+      reasoning = await withTimeout(
+        runReasoning(trimmed, apiKey, opts.contextSummary, history),
+        OPTIONAL_STEP_TIMEOUT_MS,
+        "reasoning",
+      );
+    } catch (err) {
+      console.warn("[brain] reasoning skipped:", (err as Error).message);
+      reasoning = null;
+    }
+  }
 
   // Stap 2: hoofdantwoord — injecteer reasoning als extra system-context.
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -470,6 +492,14 @@ export async function processVoiceInput(
   }
   messages.push({ role: "user", content: trimmed });
 
+  // In voice-mode koppelen we een AbortController aan de hoofdcall zodat we
+  // NOOIT langer dan VOICE_BRAIN_TIMEOUT_MS wachten. Bij timeout → snelle
+  // fallback-reply zodat de orb altijd iets zegt.
+  const controller = isVoice ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), VOICE_BRAIN_TIMEOUT_MS)
+    : null;
+
   let res: Response;
   try {
     res = await fetch(GATEWAY_URL, {
@@ -486,11 +516,19 @@ export async function processVoiceInput(
         tool_choice: { type: "function", function: { name: "respond" } },
         temperature: 0.4,
       }),
+      signal: controller?.signal,
     });
   } catch (err) {
-    console.error("[brain] gateway fetch error", err);
-    return chatFallback("Er ging even iets mis met mijn verbinding. Probeer het zo opnieuw.");
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    const aborted = (err as { name?: string })?.name === "AbortError";
+    console.error("[brain] gateway fetch error", aborted ? "timeout" : err);
+    return chatFallback(
+      aborted
+        ? "Ik heb je wel gehoord, maar het duurde even te lang. Zeg het gerust nog een keer."
+        : "Er ging even iets mis met mijn verbinding. Probeer het zo opnieuw.",
+    );
   }
+  if (timeoutHandle) clearTimeout(timeoutHandle);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
