@@ -189,6 +189,48 @@ function Dashboard() {
             </Link>
           ))}
         </motion.div>
+
+        {briefing && (briefing.nextEvent || briefing.topReminder || briefing.freeBlock) && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-6 w-full max-w-sm rounded-3xl bg-white/60 px-5 py-4 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] text-left"
+          >
+            {briefing.nextEvent && (
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Eerstvolgende</span>
+                <span className="text-xs text-muted-foreground">
+                  {briefing.nextEvent.date === new Date().toISOString().slice(0, 10)
+                    ? briefing.nextEvent.startTime
+                    : new Date(briefing.nextEvent.whenIso).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" })}
+                </span>
+              </div>
+            )}
+            {briefing.nextEvent && (
+              <div className="mt-1 text-sm text-foreground/85">{briefing.nextEvent.title}</div>
+            )}
+            {briefing.topReminder && (
+              <div className={briefing.nextEvent ? "mt-3 pt-3 border-t border-white/60" : ""}>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Herinnering</div>
+                <div className="mt-1 text-sm text-foreground/85">{briefing.topReminder.title}</div>
+              </div>
+            )}
+            {briefing.freeBlock && !briefing.nextEvent && (
+              <div className="text-sm text-foreground/85">
+                Later vandaag heb je ruimte tussen {briefing.freeBlock.start} en {briefing.freeBlock.end}.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => playBriefing(briefing)}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+              Dagoverzicht opnieuw horen
+            </button>
+          </motion.div>
+        )}
       </section>
 
       <section className="mt-14 mb-10">
