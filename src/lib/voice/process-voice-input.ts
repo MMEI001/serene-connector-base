@@ -221,10 +221,6 @@ export async function processVoiceInput(
     actions: [{ intent: "assistant_chat", payload: { reply }, confidence: 0.2 }],
     meta: { model: "fallback", prompt_tokens: null, completion_tokens: null, total_tokens: null },
   });
-  const fallback = (intent: VoiceIntent, payload: Record<string, unknown>, conf = 0.2): ClassifyResult => ({
-    actions: [{ intent, payload, confidence: conf }],
-    meta: { model: "fallback", prompt_tokens: null, completion_tokens: null, total_tokens: null },
-  });
 
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
