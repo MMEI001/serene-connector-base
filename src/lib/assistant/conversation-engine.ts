@@ -8,7 +8,7 @@
  * intent, en we houden de experience-context vast.
  */
 
-import { processVoiceInput } from "@/lib/voice/process-voice-input";
+import { processVoiceInput, type BrainHistoryEntry } from "@/lib/voice/process-voice-input";
 import type { UserPersona } from "@/lib/voice/persona";
 import type { Conversation } from "./types";
 import type { GiftEventInput } from "./experiences/gift-event";
@@ -21,6 +21,8 @@ import type { ExperienceState } from "./experiences/state-store";
 
 export type UnderstandOptions = {
   state?: ExperienceState | null;
+  contextSummary?: string | null;
+  history?: BrainHistoryEntry[];
 };
 
 export type UnderstandResult = Conversation & {
