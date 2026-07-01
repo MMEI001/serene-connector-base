@@ -372,10 +372,21 @@ export async function speak(
 }
 
 async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+  // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
+  // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
+  stopVoice();
   const url = URL.createObjectURL(blob);
   return new Promise((resolve) => {
-    stopVoice();
-    const audio = new Audio(url);
+    const audio = new Audio();
+    // iOS Safari-vereisten: playsInline voorkomt fullscreen-playback en
+    // preload='auto' zorgt dat de volledige blob geladen is voordat we
+    // .play() aanroepen — dit voorkomt dat playback halverwege stopt.
+    audio.preload = "auto";
+    // @ts-expect-error — playsInline bestaat op HTMLAudioElement in iOS.
+    audio.playsInline = true;
+    audio.setAttribute("playsinline", "true");
+    audio.src = url;
+
     currentAudio = audio;
     currentAudioRoute = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
 
@@ -383,7 +394,9 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     const finish = () => {
       if (settled) return;
       settled = true;
-      URL.revokeObjectURL(url);
+      // Kleine defer zodat iOS de laatste samples nog uitspeelt voordat
+      // we de blob-URL revoken.
+      setTimeout(() => URL.revokeObjectURL(url), 250);
       if (currentAudio === audio) {
         currentAudio = null;
         currentAudioRoute = null;
@@ -398,7 +411,27 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     audio.onended = finish;
     audio.onerror = finish;
 
-    audio.play().catch(finish);
+    // Wacht tot de audio écht klaar is om af te spelen — voorkomt
+    // dat iOS Safari midden in de eerste zin afkapt bij een half-geladen buffer.
+    const start = () => {
+      audio.play().catch(finish);
+    };
+    if (audio.readyState >= 3 /* HAVE_FUTURE_DATA */) {
+      start();
+    } else {
+      const onReady = () => {
+        audio.removeEventListener("canplaythrough", onReady);
+        audio.removeEventListener("loadeddata", onReady);
+        start();
+      };
+      audio.addEventListener("canplaythrough", onReady, { once: true });
+      audio.addEventListener("loadeddata", onReady, { once: true });
+      // Safety net: als geen event komt binnen 800ms, gewoon starten.
+      setTimeout(() => {
+        if (!settled && audio.paused) start();
+      }, 800);
+      audio.load();
+    }
   });
 }
 
