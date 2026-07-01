@@ -216,14 +216,29 @@ export async function speak(
   const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
 
-  if (!cleanText) return;
+  console.log("[Voice 3] speak() entry", {
+    route,
+    intent,
+    length: cleanText.length,
+    preview: cleanText.slice(0, 60),
+  });
+
+  if (!cleanText) {
+    console.warn("[Voice 3!] speak aborted: empty text");
+    return;
+  }
 
   const prefs = await loadVoicePrefs();
   const enabled = options.force ? true : prefs.enabled;
   const voiceId = options.voiceId ?? prefs.voiceId;
   const provider = prefs.provider;
 
-  if (!enabled && !options.force) return;
+  console.log("[Voice 3a] prefs", { enabled, voiceId, provider, force: !!options.force });
+
+  if (!enabled && !options.force) {
+    console.warn("[Voice 3!] speak aborted: voice disabled in user profile");
+    return;
+  }
 
   // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
   if (!options.preloadOnly) {
@@ -292,6 +307,7 @@ export async function speak(
 
   let res: Response;
   try {
+    console.log("[Voice 4] TTS fetch →", `${SUPABASE_URL}/functions/v1/text-to-speech`, { voiceId });
     res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
       method: "POST",
       headers: {
@@ -301,7 +317,9 @@ export async function speak(
       },
       body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
     });
-  } catch {
+    console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
+  } catch (err) {
+    console.error("[Voice 4!] TTS fetch failed", err);
     const latency = Math.round(performance.now() - t0);
     emitTrace({
       provider: "elevenlabs",
@@ -351,6 +369,7 @@ export async function speak(
   }
 
   const blob = await res.blob();
+  console.log("[Voice 5] TTS blob received", { size: blob.size, type: blob.type });
   audioBlobCache.set(cacheKey, blob);
 
   if (options.preloadOnly) return;
@@ -372,6 +391,7 @@ export async function speak(
 }
 
 async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+  console.log("[Voice 6] playBlob start", { size: blob.size, route: options.route });
   // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
   // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
   stopVoice();
@@ -391,11 +411,10 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     currentAudioRoute = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
 
     let settled = false;
-    const finish = () => {
+    const finish = (reason: string) => {
       if (settled) return;
       settled = true;
-      // Kleine defer zodat iOS de laatste samples nog uitspeelt voordat
-      // we de blob-URL revoken.
+      console.log("[Voice 6c] playBlob finish", { reason, route: currentAudioRoute });
       setTimeout(() => URL.revokeObjectURL(url), 250);
       if (currentAudio === audio) {
         currentAudio = null;
@@ -406,15 +425,38 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     };
 
     audio.onplaying = () => {
+      console.log("[Voice 6b] audio.onplaying");
       options.onStart?.();
     };
-    audio.onended = finish;
-    audio.onerror = finish;
+    audio.onended = () => finish("ended");
+    audio.onerror = (e) => {
+      console.error("[Voice 6!] audio.onerror", {
+        error: audio.error,
+        code: audio.error?.code,
+        message: audio.error?.message,
+        event: e,
+      });
+      finish("error");
+    };
+    audio.onpause = () => {
+      if (!audio.ended && !settled) {
+        console.warn("[Voice 6?] audio.onpause (unexpected, before end)", {
+          currentTime: audio.currentTime,
+          duration: audio.duration,
+        });
+      }
+    };
 
-    // Wacht tot de audio écht klaar is om af te spelen — voorkomt
-    // dat iOS Safari midden in de eerste zin afkapt bij een half-geladen buffer.
     const start = () => {
-      audio.play().catch(finish);
+      console.log("[Voice 6a] audio.play() call", { readyState: audio.readyState });
+      const p = audio.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => console.log("[Voice 6a✓] audio.play() resolved"))
+         .catch((err) => {
+           console.error("[Voice 6a!] audio.play() rejected", { name: err?.name, message: err?.message });
+           finish("play_rejected");
+         });
+      }
     };
     if (audio.readyState >= 3 /* HAVE_FUTURE_DATA */) {
       start();
@@ -426,9 +468,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
       };
       audio.addEventListener("canplaythrough", onReady, { once: true });
       audio.addEventListener("loadeddata", onReady, { once: true });
-      // Safety net: als geen event komt binnen 800ms, gewoon starten.
       setTimeout(() => {
-        if (!settled && audio.paused) start();
+        if (!settled && audio.paused) {
+          console.warn("[Voice 6?] readyState timeout, forcing start", { readyState: audio.readyState });
+          start();
+        }
       }, 800);
       audio.load();
     }

@@ -121,11 +121,19 @@ export function VoiceOrb({ onCompleted }: Props) {
   // Wrapper: zet orb-mode op "speaking" zolang de TTS-call (incl. afspelen) loopt.
   const speakAndAnimate = useCallback(
     async (text: string, opts?: Parameters<typeof speakText>[1]) => {
+      console.log("[Orb 2] speakAndAnimate called", {
+        route: opts?.route,
+        intent: opts?.intent,
+        length: text?.length ?? 0,
+        preview: text?.slice(0, 60),
+      });
       setIsSpeaking(true);
-      // Het echte AI-antwoord begint nu te spreken — kap de wacht-erkenning af.
       stopAcknowledgement();
       try {
         await speakText(text, { route: "assistant_reply", ...opts });
+        console.log("[Orb 2b] speakAndAnimate finished");
+      } catch (err) {
+        console.error("[Orb 2!] speakAndAnimate threw", err);
       } finally {
         setIsSpeaking(false);
       }
@@ -208,6 +216,13 @@ export function VoiceOrb({ onCompleted }: Props) {
 
   const handleResult = useCallback(
     (result: PipelineResult) => {
+      console.log("[Orb 1] handleResult", {
+        status: result.status,
+        intent: result.intent,
+        has_assistant_reply: Boolean(result.assistant_reply?.trim()),
+        has_spoken_summary: Boolean(result.spoken_summary?.trim()),
+        action_id: result.action_id,
+      });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
       if (result.status === "skipped") {
