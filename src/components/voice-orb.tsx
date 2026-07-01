@@ -216,6 +216,13 @@ export function VoiceOrb({ onCompleted }: Props) {
 
   const handleResult = useCallback(
     (result: PipelineResult) => {
+      console.log("[Orb 1] handleResult", {
+        status: result.status,
+        intent: result.intent,
+        has_assistant_reply: Boolean(result.assistant_reply?.trim()),
+        has_spoken_summary: Boolean(result.spoken_summary?.trim()),
+        action_id: result.action_id,
+      });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
       if (result.status === "skipped") {
