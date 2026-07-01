@@ -239,6 +239,16 @@ export type BrainOptions = {
   history?: BrainHistoryEntry[];
   /** Alleen voor Test Mode: retourneer de interne debug-trace. */
   debug?: boolean;
+  /**
+   * "voice"  → snelheid > alles: alleen hoofdcall, 6s harde timeout, fallback-reply.
+   * "text"   → als voice, maar zonder harde 6s cap (mag iets langer duren).
+   * "test"   → volledige pipeline inclusief reasoning + quality (voor /test-mode).
+   * Default = "voice".
+   */
+  mode?: "voice" | "text" | "test";
+  /** Optionele expliciete overrides. Alleen zinvol in test-mode. */
+  enableReasoning?: boolean;
+  enableQuality?: boolean;
 };
 
 // (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
