@@ -47,100 +47,98 @@ export type BrainOptions = {
   history?: BrainHistoryEntry[];
 };
 
-const INTENT_VALUES: VoiceIntent[] = [
-  "release",
-  "reminder",
-  "note",
-  "event",
-  "query",
-  "checkin",
-  "assistant_chat",
-];
+// (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
+
+
+/**
+ * Product-facing intent taxonomy. Wordt in de mapper omgezet naar de
+ * interne VoiceIntent die de handlers/pipeline gebruiken.
+ */
+const PRODUCT_INTENTS = [
+  "conversational_answer",
+  "advice_question",
+  "planning_help",
+  "calendar_action",
+  "reminder_action",
+  "task_action",
+  "shopping_list_action",
+  "clarification_needed",
+] as const;
+type ProductIntent = (typeof PRODUCT_INTENTS)[number];
+
+const SUGGESTED_ACTION_TYPES = ["event", "reminder", "note"] as const;
 
 const TOOL = {
   type: "function" as const,
   function: {
     name: "respond",
     description:
-      "Beantwoord de gebruiker en/of stel acties voor. Splits samengestelde commando's in losse acties (max 3).",
+      "Denk eerst na, beantwoord de gebruiker inhoudelijk in `reply`, en stel pas daarna eventueel acties voor. Maximaal 3 acties.",
     parameters: {
       type: "object",
       properties: {
-        actions: {
+        reply: {
+          type: "string",
+          description:
+            "Het natuurlijke antwoord dat HoofdRust uitspreekt. Beantwoord ALTIJD eerst de vraag inhoudelijk. Warm, menselijk Nederlands. Mag opsommingen bevatten als dat helpt. Nooit leeg.",
+        },
+        intent: {
+          type: "string",
+          enum: PRODUCT_INTENTS as unknown as string[],
+          description: "Het type intentie dat het beste past bij de gebruikersvraag.",
+        },
+        action_required: {
+          type: "boolean",
+          description: "True als er een concrete vervolgactie hoort bij dit antwoord (agenda, reminder, notitie, boodschappenlijst).",
+        },
+        needs_confirmation: {
+          type: "boolean",
+          description:
+            "True als de gebruiker eerst moet bevestigen voordat de actie wordt uitgevoerd. Bij twijfel: true.",
+        },
+        confidence: { type: "number", minimum: 0, maximum: 1 },
+        ambiguous: { type: "boolean" },
+        clarification_question: {
+          type: "string",
+          description: "Alleen bij écht cruciale ontbrekende info.",
+        },
+        suggested_actions: {
           type: "array",
-          minItems: 1,
           maxItems: MAX_ACTIONS,
+          description: "Concrete acties bij dit antwoord. Leeg wanneer action_required=false.",
           items: {
             type: "object",
             properties: {
-              intent: { type: "string", enum: INTENT_VALUES },
-              confidence: { type: "number", minimum: 0, maximum: 1 },
-              ambiguous: { type: "boolean" },
-              clarification_question: {
+              type: { type: "string", enum: SUGGESTED_ACTION_TYPES as unknown as string[] },
+              title: { type: "string" },
+              text: { type: "string" },
+              description: { type: "string" },
+              date: { type: "string", description: "YYYY-MM-DD of natuurlijke taal (bv. 'vrijdag')." },
+              iso_datetime: {
                 type: "string",
-                description: "Korte NL-vervolgvraag bij ontbrekende cruciale info.",
+                description: "Volledig ISO 8601 met Europe/Amsterdam offset, bv. 2026-06-27T09:00:00+02:00.",
               },
-              payload: {
-                type: "object",
-                description: "Intent-specifieke velden.",
-                properties: {
-                  text: { type: "string" },
-                  title: { type: "string" },
-                  description: { type: "string" },
-                  iso_datetime: { type: "string" },
-                  date: { type: "string" },
-                  start_time: { type: "string" },
-                  end_time: { type: "string" },
-                  scope: {
-                    type: "string",
-                    enum: ["today", "tomorrow", "this_week", "next_week", "specific_date"],
-                  },
-                  action: { type: "string", enum: ["create", "delete", "move"] },
-                  related_to_index: { type: "integer", minimum: 0 },
-                  reply: {
-                    type: "string",
-                    description:
-                      "assistant_chat: het inhoudelijke antwoord op de vraag van de gebruiker. Natuurlijk Nederlands. Mag meerdere zinnen en opsommingen bevatten wanneer dat helpt. Beantwoord de vraag EERST — bied pas daarna hulp aan.",
-                  },
-                  suggested_actions: {
-                    type: "array",
-                    maxItems: MAX_ACTIONS,
-                    items: {
-                      type: "object",
-                      properties: {
-                        intent: {
-                          type: "string",
-                          enum: ["event", "reminder", "note"],
-                        },
-                        payload: { type: "object" },
-                      },
-                      required: ["intent", "payload"],
-                    },
-                  },
-                  experience: {
-                    type: "string",
-                    enum: ["gift_event"],
-                  },
-                  experience_data: {
-                    type: "object",
-                    properties: {
-                      who: { type: "string" },
-                      event_type: { type: "string" },
-                      iso_datetime: { type: "string" },
-                      age: { type: "number" },
-                      interests: { type: "array", items: { type: "string" } },
-                      budget: { type: "number" },
-                      budget_currency: { type: "string" },
-                    },
-                  },
-                },
-              },
+              start_time: { type: "string", description: "HH:MM (voor event)." },
+              end_time: { type: "string" },
             },
-            required: ["intent", "confidence", "payload"],
+            required: ["type"],
+          },
+        },
+        experience: { type: "string", enum: ["gift_event"] },
+        experience_data: {
+          type: "object",
+          properties: {
+            who: { type: "string" },
+            event_type: { type: "string" },
+            iso_datetime: { type: "string" },
+            age: { type: "number" },
+            interests: { type: "array", items: { type: "string" } },
+            budget: { type: "number" },
+            budget_currency: { type: "string" },
           },
         },
       },
-      required: ["actions"],
+      required: ["reply", "intent", "action_required", "needs_confirmation"],
     },
   },
 };
@@ -154,59 +152,64 @@ function systemPrompt(nowIso: string, persona?: UserPersona, contextSummary?: st
 
   return `Je bent HoofdRust — een warme, slimme Nederlandse persoonlijke assistent die met de gebruiker praat via een spraak-orb. Je klinkt als een meedenkende vriend(in): natuurlijk, empathisch, kort waar het kan, uitgebreider waar het helpt.${personaBlock}${contextBlock}
 
-KERNREGEL (belangrijkste van allemaal)
-Beantwoord ALTIJD eerst de vraag van de gebruiker inhoudelijk in \`reply\`, alsof je een slimme persoonlijke assistent bent. Je mag NOOIT stilvallen omdat er geen agenda- of reminder-intent gevonden is. Als er geen actie nodig is, geef gewoon een goed, behulpzaam antwoord. Pas NA het antwoord mag je (optioneel) een concrete vervolgactie aanbieden.
+KERNREGEL
+Beantwoord ALTIJD eerst inhoudelijk in \`reply\`. Je mag NOOIT stilvallen. Als er geen actie nodig is: geef gewoon een goed antwoord en zet action_required=false. Pas NA het antwoord mag je (optioneel) een concrete vervolgactie aanbieden via suggested_actions.
 
-VOORBEELDEN VAN GOED GEDRAG
-- "Heb je borrelhapjes-suggesties voor zaterdag?" → geef een concrete lijst hapjes in \`reply\`, en bied dan aan: "Zal ik er meteen een boodschappenlijstje van maken?" (suggested_actions=[note met title="Boodschappenlijst"])
-- "Ik ben bang dat ik het cadeautje vergeet." → toon begrip en bied aan: "Zal ik donderdag een herinnering voor je zetten? Dan heb je nog genoeg tijd." (suggested_actions=[reminder])
-- "Wat eten we vanavond?" → denk mee, stel een korte natuurlijke wedervraag ín de reply: "Wil je iets makkelijks, gezonds of juist iets gezelligs voor het hele gezin?" (gewoon assistant_chat, GEEN clarification_needed-flag)
-- "Zet morgen 9 uur tandarts" → intent="event", bevestig kort in reply.
+STRUCTURED OUTPUT
+Elk antwoord bevat:
+- reply: het uitgesproken antwoord (verplicht, nooit leeg).
+- intent: één van ${PRODUCT_INTENTS.join(", ")}.
+- action_required: true bij concrete vervolgactie.
+- needs_confirmation: true als de gebruiker eerst moet bevestigen.
+- suggested_actions: array met acties (type + velden). Leeg bij action_required=false.
 
-INTENT-TYPES (product-taal → tool-intent)
-1. conversational_answer / advice_question / planning_help → intent="assistant_chat". Voor gewone vragen, advies, ideeën, uitleg, meedenken, planning-hulp. Ook als de zin een datum of onderwerp noemt maar geen expliciete agenda-inschrijving vraagt.
-2. calendar_action → intent="event". Alleen bij duidelijke agenda-intentie.
-3. reminder_action → intent="reminder". Alleen als de gebruiker expliciet herinnerd wil worden.
-4. task_action / shopping_list_action → intent="note". Losse notities, to-do's, of items voor een boodschappenlijstje. Boodschappenlijst: title="Boodschappenlijst", text="item1\\nitem2\\nitem3".
-5. confirmation_needed → intent="assistant_chat" MET \`suggested_actions\`. Als je een concrete vervolgactie aanbiedt die de gebruiker eerst moet bevestigen.
-6. clarification_needed → intent="assistant_chat" met \`ambiguous=true\` en \`clarification_question\`. ALLEEN bij écht cruciale ontbrekende info (bv. welke van twee bekende afspraken). NIET bij gewone adviesvragen.
+VOORBEELDEN
+- "Heb je borrelhapjes voor zaterdag?" → intent="advice_question", reply=lijst hapjes + aanbod, action_required=true, needs_confirmation=true, suggested_actions=[{type:"note", title:"Boodschappenlijst", text:"..."}].
+- "Ik ben bang dat ik het cadeautje vergeet." → intent="reminder_action", reply="Snap ik. Zal ik donderdag een herinnering zetten?", action_required=true, needs_confirmation=true, suggested_actions=[{type:"reminder", title:"Cadeautje kopen", date:"donderdag"}].
+- "Wat eten we vanavond?" → intent="planning_help", reply="Wil je iets makkelijks, gezonds of gezelligs?", action_required=false.
+- "Zet morgen 9 uur tandarts" → intent="calendar_action", reply="Ik heb tandarts morgen om 9 uur klaargezet — wil je bevestigen?", action_required=true, needs_confirmation=true, suggested_actions=[{type:"event", title:"Tandarts", date:"YYYY-MM-DD", start_time:"09:00"}].
 
-GEDRAG
-- Beantwoord ALTIJD eerst inhoudelijk in \`reply\`. Suggesties, ideeën, lijstjes, adviezen — allemaal welkom. Geen markdown-headers, wel nette prozalijstjes.
-- Forceer niets richting agenda/reminder. Alleen bij duidelijke actie-intentie of logisch aanbod: voeg \`suggested_actions\` toe.
-- Als je een vervolgactie aanbiedt, zeg dat expliciet in \`reply\` — de gebruiker bevestigt via de UI.
-- Gebruik de HUIDIGE CONTEXT en eerdere conversatie in je antwoord.
-- Klink menselijk en warm. Vermijd bullet-tekens en emoji.
-- Pure "even loslaten"-momenten (gebruiker uit een zorg/gedachte, geen vraag): intent="release".
-
-VELDEN PER INTENT
-- release   → { text }
-- reminder  → { title, iso_datetime (ISO 8601 met Europe/Amsterdam offset), description?, related_to_index? }
-- event     → { action:"create", title, date (YYYY-MM-DD), start_time (HH:MM), end_time?, description? }
-- note      → { text, title? }
-- query     → { scope, date? }
-- checkin   → { text }
-- assistant_chat → { reply, suggested_actions? }
+INTENT-KEUZE
+- conversational_answer / advice_question / planning_help → geen actie of vrijblijvend aanbod.
+- calendar_action → duidelijke agenda-inschrijving (type:"event").
+- reminder_action → gebruiker wil herinnerd worden (type:"reminder").
+- task_action / shopping_list_action → losse notitie of boodschappenlijst (type:"note"). Boodschappenlijst: title="Boodschappenlijst", text="item1\\nitem2".
+- clarification_needed → ambiguous=true + clarification_question (zeldzaam).
 
 SUGGESTED_ACTIONS REGELS
-- Alleen bij een concreet, nuttig aanbod. Anders leeg laten.
-- Vul zelf slimme defaults in — vraag NIETS terug via clarification.
+- Alleen bij actief aanbod. Anders leeg.
 - iso_datetime altijd volledig ISO 8601 met offset ("2026-06-27T09:00:00+02:00").
-- Reminder zonder tijd → 09:00 Europe/Amsterdam op een logische werkdag.
+- Reminder zonder tijd → 09:00 Europe/Amsterdam op een logische dag.
 - Titels kort en imperatief.
+- Vul zelf slimme defaults — vraag niets terug.
 
-EXPERIENCE PATRONEN (alleen bij assistant_chat)
-- Sociale gebeurtenis voor iemand anders (kinderfeestje, verjaardag, bruiloft) → payload.experience="gift_event" + payload.experience_data. LAAT dan suggested_actions weg. Geef wel een warme reply.
-
-MULTI-ACTION
-- "Zet afspraak X en herinner me Y" → 2 acties [event, reminder]. Reminder krijgt related_to_index.
-- "X dagen/uur van tevoren" → bereken iso_datetime = event-tijd − X.
+EXPERIENCE
+- Sociale gebeurtenis voor iemand anders (kinderfeestje, verjaardag, bruiloft) → experience="gift_event" + experience_data. Laat suggested_actions leeg, geef warme reply.
 
 ALGEMEEN
 - "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam.
 - confidence 0..1, eerlijk laag bij twijfel.
-- Antwoord uitsluitend via het \`respond\`-tool. Bij twijfel: kies assistant_chat met een goed antwoord — NOOIT stilvallen.`;
+- Antwoord uitsluitend via het \`respond\`-tool. Bij twijfel: intent="conversational_answer" met een goed antwoord — NOOIT stilvallen.`;
 }
+
+/** Map product-intent + suggested_action.type → interne VoiceIntent. */
+function mapProductIntent(intent: ProductIntent, actionType?: string): VoiceIntent {
+  if (actionType === "event") return "event";
+  if (actionType === "reminder") return "reminder";
+  if (actionType === "note") return "note";
+  switch (intent) {
+    case "calendar_action":
+      return "event";
+    case "reminder_action":
+      return "reminder";
+    case "task_action":
+    case "shopping_list_action":
+      return "note";
+    default:
+      return "assistant_chat";
+  }
+}
+
 
 export async function processVoiceInput(
   text: string,
@@ -216,10 +219,6 @@ export async function processVoiceInput(
   const trimmed = text.trim();
   const chatFallback = (reply: string): ClassifyResult => ({
     actions: [{ intent: "assistant_chat", payload: { reply }, confidence: 0.2 }],
-    meta: { model: "fallback", prompt_tokens: null, completion_tokens: null, total_tokens: null },
-  });
-  const fallback = (intent: VoiceIntent, payload: Record<string, unknown>, conf = 0.2): ClassifyResult => ({
-    actions: [{ intent, payload, confidence: conf }],
     meta: { model: "fallback", prompt_tokens: null, completion_tokens: null, total_tokens: null },
   });
 
@@ -284,14 +283,28 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar wist even niet wat te doen. Kun je het anders zeggen?");
   }
 
+  type SuggestedActionRaw = {
+    type?: string;
+    title?: string;
+    text?: string;
+    description?: string;
+    date?: string;
+    iso_datetime?: string;
+    start_time?: string;
+    end_time?: string;
+    [k: string]: unknown;
+  };
   let parsed: {
-    actions?: Array<{
-      intent?: string;
-      confidence?: number;
-      ambiguous?: boolean;
-      clarification_question?: string;
-      payload?: Record<string, unknown>;
-    }>;
+    reply?: string;
+    intent?: string;
+    action_required?: boolean;
+    needs_confirmation?: boolean;
+    confidence?: number;
+    ambiguous?: boolean;
+    clarification_question?: string;
+    suggested_actions?: SuggestedActionRaw[];
+    experience?: string;
+    experience_data?: Record<string, unknown>;
   };
   try {
     parsed = JSON.parse(call.function.arguments);
@@ -299,25 +312,65 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
 
-  const rawActions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, MAX_ACTIONS) : [];
-  if (rawActions.length === 0) {
+  const reply = (parsed.reply ?? "").trim();
+  if (!reply) {
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
 
-  const actions: VoiceAction[] = rawActions.map((a) => {
-    const intent = INTENT_VALUES.includes(a.intent as VoiceIntent)
-      ? (a.intent as VoiceIntent)
-      : "release";
-    const payload = a.payload ?? {};
-    if (intent === "release" && !payload.text) payload.text = trimmed;
-    return {
-      intent,
-      payload,
-      confidence: typeof a.confidence === "number" ? a.confidence : 0.6,
-      ambiguous: !!a.ambiguous,
-      clarification_question: a.clarification_question?.trim() || null,
-    };
-  });
+  const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
+    ? (parsed.intent as ProductIntent)
+    : "conversational_answer";
+  const rawSuggested = Array.isArray(parsed.suggested_actions)
+    ? parsed.suggested_actions.slice(0, MAX_ACTIONS)
+    : [];
+  const actionRequired = !!parsed.action_required && rawSuggested.length > 0;
+  const needsConfirmation = !!parsed.needs_confirmation;
+  const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.7;
+
+  // Bouw suggested_actions in het intern verwachte {intent, payload} formaat.
+  const suggestedActions = rawSuggested
+    .filter((s) => s.type && SUGGESTED_ACTION_TYPES.includes(s.type as (typeof SUGGESTED_ACTION_TYPES)[number]))
+    .map((s) => {
+      const payload: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(s)) {
+        if (k === "type") continue;
+        if (v !== undefined && v !== null && v !== "") payload[k] = v;
+      }
+      return { intent: s.type as VoiceIntent, payload };
+    });
+
+  const actions: VoiceAction[] = [];
+
+  // Directe uitvoering zonder bevestiging → emit interne intent direct.
+  if (actionRequired && !needsConfirmation && suggestedActions.length > 0) {
+    for (const sa of suggestedActions) {
+      const intent = mapProductIntent(productIntent, sa.intent);
+      actions.push({
+        intent,
+        payload: { ...sa.payload, reply },
+        confidence,
+        ambiguous: false,
+        clarification_question: null,
+      });
+    }
+  } else {
+    // Standaard: assistant_chat met reply + optionele suggested_actions
+    // (deze vormen de bevestigings-kaart in de UI).
+    const chatPayload: Record<string, unknown> = { reply };
+    if (actionRequired && suggestedActions.length > 0) {
+      chatPayload.suggested_actions = suggestedActions;
+    }
+    if (parsed.experience) chatPayload.experience = parsed.experience;
+    if (parsed.experience_data) chatPayload.experience_data = parsed.experience_data;
+    actions.push({
+      intent: "assistant_chat",
+      payload: chatPayload,
+      confidence,
+      ambiguous: !!parsed.ambiguous,
+      clarification_question: parsed.clarification_question?.trim() || null,
+    });
+  }
+
 
   return {
     actions,
