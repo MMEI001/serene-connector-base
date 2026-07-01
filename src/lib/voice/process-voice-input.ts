@@ -308,6 +308,8 @@ export async function processVoiceInput(
 
   const nowIso = new Date().toISOString();
 
+  const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
+
   // Stap 1: interne Reasoning Brain (nooit zichtbaar voor gebruiker).
   const reasoning = await runReasoning(trimmed, apiKey, opts.contextSummary, history);
 
