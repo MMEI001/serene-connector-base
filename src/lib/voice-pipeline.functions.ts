@@ -181,10 +181,25 @@ function wordCount(s: string) {
 export const runVoicePipeline = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator(
-    (data: { text: string; transcription_id?: string | null }) => ({
+    (data: {
+      text: string;
+      transcription_id?: string | null;
+      history?: Array<{ role: "user" | "assistant"; content: string }>;
+    }) => ({
       text: typeof data?.text === "string" ? data.text : "",
       transcription_id:
         typeof data?.transcription_id === "string" ? data.transcription_id : null,
+      history: Array.isArray(data?.history)
+        ? data.history
+            .filter(
+              (h): h is { role: "user" | "assistant"; content: string } =>
+                !!h &&
+                (h.role === "user" || h.role === "assistant") &&
+                typeof h.content === "string" &&
+                !!h.content.trim(),
+            )
+            .slice(-6)
+        : [],
     }),
   )
   .handler(async ({ data, context }): Promise<PipelineResult> => {
@@ -212,7 +227,10 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     const persona = await loadUserPersona(supabase, userId);
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
-    const { actions: classified, meta } = await processVoiceInput(text, persona);
+    //    Brain-laag krijgt de conversation history en (later) contextsamenvatting.
+    const { actions: classified, meta } = await processVoiceInput(text, persona, {
+      history: data.history,
+    });
     const primary = classified[0];
 
 
@@ -251,7 +269,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         const { result: assistantResult, trace, chosenActions } = await runAssistantTurn(
           supabase,
           userId,
-          { text, transcription_id: data.transcription_id },
+          { text, transcription_id: data.transcription_id, history: data.history },
         );
         // Audit-log voor de framework-turn met volledige trace.
         supabase

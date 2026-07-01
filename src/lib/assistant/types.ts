@@ -24,6 +24,8 @@ import type {
 export type AssistantInput = {
   text: string;
   transcription_id?: string | null;
+  /** Recente conversatie-turns (client-side session history). */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
 };
 
 /** Door alle engines gedeelde context. */

@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { understand } from "./conversation-engine";
 import { processMemoryForTurn, recall } from "./memory-engine";
 import { snapshot } from "./context-engine";
+import { buildContextSummary } from "./context-summary";
 import { shouldTakeInitiative } from "./initiative-engine";
 import { propose } from "./suggestion-engine";
 import { decide } from "./decision-engine";
@@ -115,9 +116,14 @@ export async function runAssistantTurn(
   // 2b. Experience-state laden (lopende gift_event in 15-min window).
   const expState = await loadExperienceState(supabase, userId, now);
 
-  // 3. Conversation (continuation-aware)
+  // 3. Conversation (continuation-aware, context + history verrijkt)
+  const contextSummary = buildContextSummary(ctxSnap.value, mem.value.records);
   const conv = await withTiming(() =>
-    understand(input.text, mem.value.persona, { state: expState }),
+    understand(input.text, mem.value.persona, {
+      state: expState,
+      contextSummary,
+      history: input.history,
+    }),
   );
   timings.conversation = conv.ms;
   trace.conversation = {

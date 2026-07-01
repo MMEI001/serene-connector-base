@@ -16,8 +16,8 @@ export type AssistantFrameworkMode = "off" | "chat_only" | "full";
 function envDefault(): AssistantFrameworkMode {
   const raw = process.env.ASSISTANT_FRAMEWORK?.toLowerCase();
   if (raw === "off" || raw === "chat_only" || raw === "full") return raw;
-  // Default: chat_only — laagste risico, hoogste leerwaarde.
-  return "chat_only";
+  // Default: full — de Brain-laag is het brein van HoofdRust.
+  return "full";
 }
 
 /**
