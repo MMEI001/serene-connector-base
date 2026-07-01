@@ -301,7 +301,7 @@ export async function processVoiceInput(
 
   const rawActions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, MAX_ACTIONS) : [];
   if (rawActions.length === 0) {
-    return fallback("release", { text: trimmed });
+    return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
 
   const actions: VoiceAction[] = rawActions.map((a) => {
