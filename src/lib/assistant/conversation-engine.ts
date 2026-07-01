@@ -79,7 +79,10 @@ export async function understand(
   }
 
   // Normaal pad — classifier.
-  const { actions, meta } = await processVoiceInput(text, persona);
+  const { actions, meta } = await processVoiceInput(text, persona, {
+    contextSummary: opts.contextSummary,
+    history: opts.history,
+  });
   const primary = actions[0];
 
   let assistantReply: string | undefined;
