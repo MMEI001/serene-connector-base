@@ -263,7 +263,7 @@ export async function processVoiceInput(
     });
   } catch (err) {
     console.error("[brain] gateway fetch error", err);
-    return fallback("release", { text: trimmed });
+    return chatFallback("Er ging even iets mis met mijn verbinding. Probeer het zo opnieuw.");
   }
 
   if (!res.ok) {
