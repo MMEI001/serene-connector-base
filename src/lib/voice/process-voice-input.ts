@@ -88,6 +88,90 @@ async function runReasoning(
   }
 }
 
+
+
+/**
+ * Response Quality Layer — interne critique-pas.
+ * Beoordeelt de concept-reply op 6 assen en levert desgewenst één verbeterde
+ * versie. De gebruiker ziet dit proces nooit.
+ */
+const QUALITY_PROMPT = `Je bent de interne kwaliteitslaag van HoofdRust. Deze output ziet de gebruiker NOOIT. Je krijgt: de gebruikersvraag, de concept-reply, en optioneel interne redenering.
+
+Beoordeel de concept-reply op:
+1. Is de vraag volledig beantwoord?
+2. Is de juiste context gebruikt?
+3. Kan het natuurlijker/warmer klinken (spreektaal, Nederlands, kort)?
+4. Is een kans gemist om behulpzaam te zijn?
+5. Is het niet te opdringerig?
+6. Past het bij HoofdRust: warm, slim, rustig, meedenkend, nooit belerend?
+
+Antwoord UITSLUITEND met geldige JSON, exact dit schema:
+{"ok": boolean, "improved_reply": string | null}
+
+- ok=true als de reply prima is → improved_reply=null.
+- ok=false als er duidelijk winst te halen is → geef één verbeterde reply in improved_reply (zelfde intentie, zelfde lengte-orde, geen nieuwe feiten verzinnen, geen acties toevoegen, natuurlijk Nederlands).
+Geen uitleg, geen markdown, alleen de JSON.`;
+
+async function runQualityCheck(
+  userText: string,
+  draftReply: string,
+  apiKey: string,
+  contextSummary?: string | null,
+  reasoning?: string | null,
+): Promise<string | null> {
+  const parts = [
+    `GEBRUIKERSVRAAG:\n${userText}`,
+    `CONCEPT-REPLY:\n${draftReply}`,
+  ];
+  if (contextSummary?.trim()) parts.push(`CONTEXT:\n${contextSummary.trim()}`);
+  if (reasoning?.trim()) parts.push(`INTERNE REDENERING:\n${reasoning.trim()}`);
+
+  try {
+    const res = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Lovable-API-Key": apiKey,
+        "X-Lovable-AIG-SDK": "raw-fetch",
+      },
+      body: JSON.stringify({
+        model: REASONING_MODEL,
+        messages: [
+          { role: "system", content: QUALITY_PROMPT },
+          { role: "user", content: parts.join("\n\n") },
+        ],
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+      }),
+    });
+    if (!res.ok) {
+      console.warn("[quality] gateway", res.status);
+      return null;
+    }
+    const json = (await res.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: string } }> }
+      | null;
+    const content = json?.choices?.[0]?.message?.content?.trim();
+    if (!content) return null;
+    let parsed: { ok?: boolean; improved_reply?: string | null };
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return null;
+    }
+    if (parsed.ok === false && typeof parsed.improved_reply === "string") {
+      const improved = parsed.improved_reply.trim();
+      if (improved && improved !== draftReply.trim()) return improved;
+    }
+    return null;
+  } catch (err) {
+    console.warn("[quality] fetch error", err);
+    return null;
+
+
+}
+}
+
 type ClassifyMeta = {
   model: string;
   prompt_tokens: number | null;
@@ -400,10 +484,15 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
 
-  const reply = (parsed.reply ?? "").trim();
+  let reply = (parsed.reply ?? "").trim();
   if (!reply) {
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
+
+  // Response Quality Layer — interne kwaliteitscheck (nooit zichtbaar).
+  // Mag reply één keer verbeteren als de kwaliteit onvoldoende is.
+  const improved = await runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning);
+  if (improved) reply = improved;
 
   const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
     ? (parsed.intent as ProductIntent)
