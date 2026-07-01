@@ -269,7 +269,7 @@ export async function processVoiceInput(
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     console.error("[brain] gateway", res.status, body.slice(0, 300));
-    return fallback("release", { text: trimmed });
+    return chatFallback("Ik kreeg geen goed antwoord terug. Wil je het nog eens proberen?");
   }
 
   type GatewayResp = {
