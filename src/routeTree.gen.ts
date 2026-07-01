@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TestModeRouteImport } from './routes/test-mode'
 import { Route as SuggestiesRouteImport } from './routes/suggesties'
 import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
@@ -34,6 +35,11 @@ import { Route as RemindersIdBewerkenRouteImport } from './routes/reminders.$id.
 import { Route as AgendaIdBewerkenRouteImport } from './routes/agenda.$id.bewerken'
 import { Route as ApiPublicHooksSyncIcsRouteImport } from './routes/api/public/hooks/sync-ics'
 
+const TestModeRoute = TestModeRouteImport.update({
+  id: '/test-mode',
+  path: '/test-mode',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuggestiesRoute = SuggestiesRouteImport.update({
   id: '/suggesties',
   path: '/suggesties',
@@ -162,6 +168,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
+  '/test-mode': typeof TestModeRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agendas/callback': typeof AgendasCallbackRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
+  '/test-mode': typeof TestModeRoute
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agendas/callback': typeof AgendasCallbackRoute
   '/laat-los/nieuw': typeof LaatLosNieuwRoute
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/onboarding': typeof OnboardingRoute
   '/profiel': typeof ProfielRoute
   '/suggesties': typeof SuggestiesRoute
+  '/test-mode': typeof TestModeRoute
   '/agenda/$id': typeof AgendaIdRouteWithChildren
   '/agenda/nieuw': typeof AgendaNieuwRoute
   '/agendas/callback': typeof AgendasCallbackRoute
@@ -240,6 +249,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
+    | '/test-mode'
     | '/agenda/$id'
     | '/agenda/nieuw'
     | '/agendas/callback'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
+    | '/test-mode'
     | '/agenda/nieuw'
     | '/agendas/callback'
     | '/laat-los/nieuw'
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/profiel'
     | '/suggesties'
+    | '/test-mode'
     | '/agenda/$id'
     | '/agenda/nieuw'
     | '/agendas/callback'
@@ -316,6 +328,7 @@ export interface RootRouteChildren {
   OnboardingRoute: typeof OnboardingRoute
   ProfielRoute: typeof ProfielRoute
   SuggestiesRoute: typeof SuggestiesRoute
+  TestModeRoute: typeof TestModeRoute
   AgendaIdRoute: typeof AgendaIdRouteWithChildren
   AgendaNieuwRoute: typeof AgendaNieuwRoute
   AgendasCallbackRoute: typeof AgendasCallbackRoute
@@ -333,6 +346,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/test-mode': {
+      id: '/test-mode'
+      path: '/test-mode'
+      fullPath: '/test-mode'
+      preLoaderRoute: typeof TestModeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/suggesties': {
       id: '/suggesties'
       path: '/suggesties'
@@ -551,6 +571,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingRoute: OnboardingRoute,
   ProfielRoute: ProfielRoute,
   SuggestiesRoute: SuggestiesRoute,
+  TestModeRoute: TestModeRoute,
   AgendaIdRoute: AgendaIdRouteWithChildren,
   AgendaNieuwRoute: AgendaNieuwRoute,
   AgendasCallbackRoute: AgendasCallbackRoute,

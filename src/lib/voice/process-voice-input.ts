@@ -179,9 +179,26 @@ type ClassifyMeta = {
   total_tokens: number | null;
 };
 
+export type BrainDebug = {
+  transcript: string;
+  contextSummary: string | null;
+  reasoning: string | null;
+  draftReply: string;
+  qualityImproved: string | null;
+  finalReply: string;
+  intent: string;
+  actionRequired: boolean;
+  needsConfirmation: boolean;
+  suggestedActions: Array<{ intent: string; payload: Record<string, unknown> }>;
+  confidence: number;
+  ambiguous: boolean;
+  clarificationQuestion: string | null;
+};
+
 export type ClassifyResult = {
   actions: VoiceAction[];
   meta: ClassifyMeta;
+  debug?: BrainDebug;
 };
 
 export type BrainHistoryEntry = {
@@ -194,6 +211,8 @@ export type BrainOptions = {
   contextSummary?: string | null;
   /** Recente conversatie-turns (max ~6) voor natuurlijk vervolg. */
   history?: BrainHistoryEntry[];
+  /** Alleen voor Test Mode: retourneer de interne debug-trace. */
+  debug?: boolean;
 };
 
 // (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
@@ -549,6 +568,24 @@ export async function processVoiceInput(
   }
 
 
+  const debug: BrainDebug | undefined = opts.debug
+    ? {
+        transcript: trimmed,
+        contextSummary: opts.contextSummary ?? null,
+        reasoning: reasoning ?? null,
+        draftReply: (parsed.reply ?? "").trim(),
+        qualityImproved: improved ?? null,
+        finalReply: reply,
+        intent: productIntent,
+        actionRequired,
+        needsConfirmation,
+        suggestedActions: suggestedActions.map((s) => ({ intent: s.intent, payload: s.payload })),
+        confidence,
+        ambiguous: !!parsed.ambiguous,
+        clarificationQuestion: parsed.clarification_question?.trim() || null,
+      }
+    : undefined;
+
   return {
     actions,
     meta: {
@@ -557,5 +594,6 @@ export async function processVoiceInput(
       completion_tokens: json?.usage?.completion_tokens ?? null,
       total_tokens: json?.usage?.total_tokens ?? null,
     },
+    debug,
   };
 }
