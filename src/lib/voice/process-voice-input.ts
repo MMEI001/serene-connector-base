@@ -568,6 +568,24 @@ export async function processVoiceInput(
   }
 
 
+  const debug: BrainDebug | undefined = opts.debug
+    ? {
+        transcript: trimmed,
+        contextSummary: opts.contextSummary ?? null,
+        reasoning: reasoning ?? null,
+        draftReply: (parsed.reply ?? "").trim(),
+        qualityImproved: improved ?? null,
+        finalReply: reply,
+        intent: productIntent,
+        actionRequired,
+        needsConfirmation,
+        suggestedActions: suggestedActions.map((s) => ({ intent: s.intent, payload: s.payload })),
+        confidence,
+        ambiguous: !!parsed.ambiguous,
+        clarificationQuestion: parsed.clarification_question?.trim() || null,
+      }
+    : undefined;
+
   return {
     actions,
     meta: {
@@ -576,5 +594,6 @@ export async function processVoiceInput(
       completion_tokens: json?.usage?.completion_tokens ?? null,
       total_tokens: json?.usage?.total_tokens ?? null,
     },
+    debug,
   };
 }
