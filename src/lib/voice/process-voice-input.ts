@@ -85,7 +85,10 @@ async function runReasoning(
   } catch (err) {
     console.warn("[reasoning] fetch error", err);
     return null;
+  }
 }
+
+
 
 /**
  * Response Quality Layer — interne critique-pas.
