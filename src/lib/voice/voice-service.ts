@@ -307,6 +307,7 @@ export async function speak(
 
   let res: Response;
   try {
+    console.log("[Voice 4] TTS fetch →", `${SUPABASE_URL}/functions/v1/text-to-speech`, { voiceId });
     res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
       method: "POST",
       headers: {
@@ -316,7 +317,9 @@ export async function speak(
       },
       body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
     });
-  } catch {
+    console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
+  } catch (err) {
+    console.error("[Voice 4!] TTS fetch failed", err);
     const latency = Math.round(performance.now() - t0);
     emitTrace({
       provider: "elevenlabs",
