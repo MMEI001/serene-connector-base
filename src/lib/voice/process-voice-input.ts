@@ -19,11 +19,37 @@ import type { UserPersona } from "./persona";
  */
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-/** Sterker reasoning-model dan de klassieke flash-classifier. */
-const MODEL = "google/gemini-3.1-pro-preview";
+/**
+ * Voice-first: snelheid en betrouwbaarheid gaan boven perfecte reasoning.
+ * Tijdelijk teruggeschakeld van gemini-3.1-pro-preview (7–10s p50) naar
+ * gemini-3-flash-preview zodat een volledige turn binnen 2–4s past.
+ */
+const MODEL = "google/gemini-3-flash-preview";
 /** Snel, goedkoop model voor de interne reasoning-stap (nooit zichtbaar). */
 const REASONING_MODEL = "google/gemini-3-flash-preview";
 const MAX_ACTIONS = 3;
+
+/** Harde deadline voor de hoofdcall in voice-mode — daarna fallback-reply. */
+const VOICE_BRAIN_TIMEOUT_MS = 6000;
+/** Zachte deadline voor optionele sub-calls (reasoning/quality) in test-mode. */
+const OPTIONAL_STEP_TIMEOUT_MS = 4000;
+
+/** Werp na `ms` een timeout-fout zodat we in de main-flow kunnen fallbacken. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label}_timeout_${ms}ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 
 /**
  * Interne Reasoning Brain — nooit zichtbaar voor de gebruiker.
@@ -213,6 +239,16 @@ export type BrainOptions = {
   history?: BrainHistoryEntry[];
   /** Alleen voor Test Mode: retourneer de interne debug-trace. */
   debug?: boolean;
+  /**
+   * "voice"  → snelheid > alles: alleen hoofdcall, 6s harde timeout, fallback-reply.
+   * "text"   → als voice, maar zonder harde 6s cap (mag iets langer duren).
+   * "test"   → volledige pipeline inclusief reasoning + quality (voor /test-mode).
+   * Default = "voice".
+   */
+  mode?: "voice" | "text" | "test";
+  /** Optionele expliciete overrides. Alleen zinvol in test-mode. */
+  enableReasoning?: boolean;
+  enableQuality?: boolean;
 };
 
 // (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
@@ -413,8 +449,30 @@ export async function processVoiceInput(
 
   const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
 
-  // Stap 1: interne Reasoning Brain (nooit zichtbaar voor gebruiker).
-  const reasoning = await runReasoning(trimmed, apiKey, opts.contextSummary, history);
+  // Voice-first: reasoning + quality staan default UIT (kostten samen ~5–7s).
+  // Alleen in test-mode (of expliciete override) draaien ze mee.
+  const mode = opts.mode ?? "voice";
+  const enableReasoning =
+    opts.enableReasoning ?? (mode === "test" || !!opts.debug);
+  const enableQuality =
+    opts.enableQuality ?? (mode === "test" || !!opts.debug);
+  const isVoice = mode === "voice";
+
+  // Stap 1: interne Reasoning Brain — alleen als expliciet aangezet.
+  //         Nooit zichtbaar voor de gebruiker; timeout hard begrensd.
+  let reasoning: string | null = null;
+  if (enableReasoning) {
+    try {
+      reasoning = await withTimeout(
+        runReasoning(trimmed, apiKey, opts.contextSummary, history),
+        OPTIONAL_STEP_TIMEOUT_MS,
+        "reasoning",
+      );
+    } catch (err) {
+      console.warn("[brain] reasoning skipped:", (err as Error).message);
+      reasoning = null;
+    }
+  }
 
   // Stap 2: hoofdantwoord — injecteer reasoning als extra system-context.
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -434,6 +492,14 @@ export async function processVoiceInput(
   }
   messages.push({ role: "user", content: trimmed });
 
+  // In voice-mode koppelen we een AbortController aan de hoofdcall zodat we
+  // NOOIT langer dan VOICE_BRAIN_TIMEOUT_MS wachten. Bij timeout → snelle
+  // fallback-reply zodat de orb altijd iets zegt.
+  const controller = isVoice ? new AbortController() : null;
+  const timeoutHandle = controller
+    ? setTimeout(() => controller.abort(), VOICE_BRAIN_TIMEOUT_MS)
+    : null;
+
   let res: Response;
   try {
     res = await fetch(GATEWAY_URL, {
@@ -450,11 +516,19 @@ export async function processVoiceInput(
         tool_choice: { type: "function", function: { name: "respond" } },
         temperature: 0.4,
       }),
+      signal: controller?.signal,
     });
   } catch (err) {
-    console.error("[brain] gateway fetch error", err);
-    return chatFallback("Er ging even iets mis met mijn verbinding. Probeer het zo opnieuw.");
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+    const aborted = (err as { name?: string })?.name === "AbortError";
+    console.error("[brain] gateway fetch error", aborted ? "timeout" : err);
+    return chatFallback(
+      aborted
+        ? "Ik heb je wel gehoord, maar het duurde even te lang. Zeg het gerust nog een keer."
+        : "Er ging even iets mis met mijn verbinding. Probeer het zo opnieuw.",
+    );
   }
+  if (timeoutHandle) clearTimeout(timeoutHandle);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -508,10 +582,22 @@ export async function processVoiceInput(
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
 
-  // Response Quality Layer — interne kwaliteitscheck (nooit zichtbaar).
-  // Mag reply één keer verbeteren als de kwaliteit onvoldoende is.
-  const improved = await runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning);
-  if (improved) reply = improved;
+  // Response Quality Layer — alleen als expliciet aangezet (test-mode).
+  // In voice-mode overslaan we deze om binnen de 2–4s target te blijven.
+  let improved: string | null = null;
+  if (enableQuality) {
+    try {
+      improved = await withTimeout(
+        runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning),
+        OPTIONAL_STEP_TIMEOUT_MS,
+        "quality",
+      );
+    } catch (err) {
+      console.warn("[brain] quality skipped:", (err as Error).message);
+      improved = null;
+    }
+    if (improved) reply = improved;
+  }
 
   const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
     ? (parsed.intent as ProductIntent)

@@ -72,6 +72,7 @@ export const runBrainTest = createServerFn({ method: "POST" })
         contextSummary: null,
         history: [],
         debug: true,
+        mode: "test",
       });
       const d = result.debug;
       if (!d) return EMPTY(data.text, "geen debug-trace ontvangen");
