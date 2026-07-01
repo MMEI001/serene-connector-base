@@ -196,23 +196,33 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
-        // Prioriteit voor TTS bij bevestiging:
-        // 1) spoken_summary (rijke experience-kaart) — laat het de hele zin doen.
-        // 2) assistant_reply (advies) + standaard bevestigingsvraag.
-        // 3) Fallback.
-        let spokenConfirm: string;
-        let spokenIntent: string;
-        if (result.spoken_summary?.trim()) {
-          spokenConfirm = result.spoken_summary.trim();
-          spokenIntent = "spoken_summary";
-        } else if (result.assistant_reply?.trim()) {
-          spokenConfirm = `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`;
-          spokenIntent = "assistant_chat_confirm";
-        } else {
-          spokenConfirm = "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-          spokenIntent = "confirmation";
+        // Bouw de volledige gesproken zin op — nooit alleen een fragment.
+        // Volgorde: (spoken_summary of assistant_reply) + preview-context + korte bevestigingsvraag.
+        const previewClean = (result.preview ?? "")
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(", ");
+        const advies = result.spoken_summary?.trim() || result.assistant_reply?.trim() || "";
+        const question = "Wil je dit zo bevestigen?";
+        const parts: string[] = [];
+        if (advies) parts.push(advies);
+        if (previewClean && !advies.toLowerCase().includes(previewClean.toLowerCase().slice(0, 12))) {
+          parts.push(`Ik heb voor je klaargezet: ${previewClean}.`);
+        } else if (!advies) {
+          parts.push("Ik heb dit voor je klaargezet.");
         }
-        void speakAndAnimate(spokenConfirm, { intent: spokenIntent, route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation" });
+        parts.push(question);
+        const spokenConfirm = parts.join(" ");
+        const spokenIntent = result.spoken_summary?.trim()
+          ? "spoken_summary"
+          : result.assistant_reply?.trim()
+            ? "assistant_chat_confirm"
+            : "confirmation";
+        void speakAndAnimate(spokenConfirm, {
+          intent: spokenIntent,
+          route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
+        });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
