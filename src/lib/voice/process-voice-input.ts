@@ -47,15 +47,8 @@ export type BrainOptions = {
   history?: BrainHistoryEntry[];
 };
 
-const INTENT_VALUES: VoiceIntent[] = [
-  "release",
-  "reminder",
-  "note",
-  "event",
-  "query",
-  "checkin",
-  "assistant_chat",
-];
+// (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
+
 
 /**
  * Product-facing intent taxonomy. Wordt in de mapper omgezet naar de
