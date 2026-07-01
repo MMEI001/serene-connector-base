@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/empty-state";
 import { VoiceOrb } from "@/components/voice-orb";
-import { TypewriterGreeting } from "@/components/typewriter-greeting";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,15 +55,13 @@ function Dashboard() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [aiText, setAiText] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
-  const [greetDone, setGreetDone] = useState(false);
   const [showPills, setShowPills] = useState(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
 
   useEffect(() => {
-    if (!greetDone) return;
-    const t = window.setTimeout(() => setShowPills(true), 1000);
+    const t = window.setTimeout(() => setShowPills(true), 800);
     return () => window.clearTimeout(t);
-  }, [greetDone]);
+  }, []);
 
   async function handleClassify() {
     const text = aiText.trim();
