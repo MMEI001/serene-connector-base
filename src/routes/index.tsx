@@ -137,9 +137,6 @@ function Dashboard() {
           <VoiceOrb onCompleted={() => void loadSuggestions()} />
         </div>
 
-        <div className="min-h-[3.5rem] px-2">
-          <TypewriterGreeting onDone={() => setGreetDone(true)} />
-        </div>
 
         <motion.div
           className="mt-6 flex flex-wrap justify-center gap-2.5"
