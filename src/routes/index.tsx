@@ -161,8 +161,9 @@ function Dashboard() {
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
       void loadSuggestions();
+      void loadBriefing(true);
     })();
-  }, [user, loadSuggestions]);
+  }, [user, loadSuggestions, loadBriefing]);
 
   return (
     <AppShell>
