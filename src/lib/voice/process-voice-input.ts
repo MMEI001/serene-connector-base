@@ -281,7 +281,7 @@ export async function processVoiceInput(
   const call = json?.choices?.[0]?.message?.tool_calls?.[0];
   if (!call?.function?.arguments) {
     console.warn("[brain] geen tool_call in response");
-    return fallback("release", { text: trimmed });
+    return chatFallback("Ik hoorde je, maar wist even niet wat te doen. Kun je het anders zeggen?");
   }
 
   let parsed: {
