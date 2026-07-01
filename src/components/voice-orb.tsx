@@ -88,6 +88,17 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editDateTime, setEditDateTime] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editTime, setEditTime] = useState("");
+  // Session-local conversation history (client-side, max ~6 turns).
+  const historyRef = useRef<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const pushHistory = useCallback(
+    (role: "user" | "assistant", content: string) => {
+      const trimmed = content?.trim();
+      if (!trimmed) return;
+      const next = [...historyRef.current, { role, content: trimmed }];
+      historyRef.current = next.slice(-6);
+    },
+    [],
+  );
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastVoiceLog, setLastVoiceLog] = useState<VoiceTraceLog | null>(null);
   const [continuousMode, setContinuousMode] = useState<boolean>(() => {
