@@ -582,10 +582,22 @@ export async function processVoiceInput(
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
 
-  // Response Quality Layer — interne kwaliteitscheck (nooit zichtbaar).
-  // Mag reply één keer verbeteren als de kwaliteit onvoldoende is.
-  const improved = await runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning);
-  if (improved) reply = improved;
+  // Response Quality Layer — alleen als expliciet aangezet (test-mode).
+  // In voice-mode overslaan we deze om binnen de 2–4s target te blijven.
+  let improved: string | null = null;
+  if (enableQuality) {
+    try {
+      improved = await withTimeout(
+        runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning),
+        OPTIONAL_STEP_TIMEOUT_MS,
+        "quality",
+      );
+    } catch (err) {
+      console.warn("[brain] quality skipped:", (err as Error).message);
+      improved = null;
+    }
+    if (improved) reply = improved;
+  }
 
   const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
     ? (parsed.intent as ProductIntent)
