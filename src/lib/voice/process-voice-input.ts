@@ -19,11 +19,37 @@ import type { UserPersona } from "./persona";
  */
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-/** Sterker reasoning-model dan de klassieke flash-classifier. */
-const MODEL = "google/gemini-3.1-pro-preview";
+/**
+ * Voice-first: snelheid en betrouwbaarheid gaan boven perfecte reasoning.
+ * Tijdelijk teruggeschakeld van gemini-3.1-pro-preview (7–10s p50) naar
+ * gemini-3-flash-preview zodat een volledige turn binnen 2–4s past.
+ */
+const MODEL = "google/gemini-3-flash-preview";
 /** Snel, goedkoop model voor de interne reasoning-stap (nooit zichtbaar). */
 const REASONING_MODEL = "google/gemini-3-flash-preview";
 const MAX_ACTIONS = 3;
+
+/** Harde deadline voor de hoofdcall in voice-mode — daarna fallback-reply. */
+const VOICE_BRAIN_TIMEOUT_MS = 6000;
+/** Zachte deadline voor optionele sub-calls (reasoning/quality) in test-mode. */
+const OPTIONAL_STEP_TIMEOUT_MS = 4000;
+
+/** Werp na `ms` een timeout-fout zodat we in de main-flow kunnen fallbacken. */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error(`${label}_timeout_${ms}ms`)), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 
 /**
  * Interne Reasoning Brain — nooit zichtbaar voor de gebruiker.
