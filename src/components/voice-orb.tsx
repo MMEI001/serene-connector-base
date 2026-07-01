@@ -90,6 +90,18 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editTime, setEditTime] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastVoiceLog, setLastVoiceLog] = useState<VoiceTraceLog | null>(null);
+  const [continuousMode, setContinuousMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("hoofdrust:continuous-voice") !== "0";
+  });
+  const continuousModeRef = useRef(continuousMode);
+  useEffect(() => {
+    continuousModeRef.current = continuousMode;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hoofdrust:continuous-voice", continuousMode ? "1" : "0");
+    }
+  }, [continuousMode]);
+  const shouldAutoListenRef = useRef(false);
 
   useEffect(() => {
     return subscribeVoiceTrace(setLastVoiceLog);
@@ -196,23 +208,33 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       if (result.status === "needs_confirmation" && result.action_id) {
         setConfirmation(result.confirmation);
-        // Prioriteit voor TTS bij bevestiging:
-        // 1) spoken_summary (rijke experience-kaart) — laat het de hele zin doen.
-        // 2) assistant_reply (advies) + standaard bevestigingsvraag.
-        // 3) Fallback.
-        let spokenConfirm: string;
-        let spokenIntent: string;
-        if (result.spoken_summary?.trim()) {
-          spokenConfirm = result.spoken_summary.trim();
-          spokenIntent = "spoken_summary";
-        } else if (result.assistant_reply?.trim()) {
-          spokenConfirm = `${result.assistant_reply.trim()} Wil je dit zo bevestigen?`;
-          spokenIntent = "assistant_chat_confirm";
-        } else {
-          spokenConfirm = "Ik heb dit voor je klaargezet. Wil je dit bevestigen?";
-          spokenIntent = "confirmation";
+        // Bouw de volledige gesproken zin op — nooit alleen een fragment.
+        // Volgorde: (spoken_summary of assistant_reply) + preview-context + korte bevestigingsvraag.
+        const previewClean = (result.preview ?? "")
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .join(", ");
+        const advies = result.spoken_summary?.trim() || result.assistant_reply?.trim() || "";
+        const question = "Wil je dit zo bevestigen?";
+        const parts: string[] = [];
+        if (advies) parts.push(advies);
+        if (previewClean && !advies.toLowerCase().includes(previewClean.toLowerCase().slice(0, 12))) {
+          parts.push(`Ik heb voor je klaargezet: ${previewClean}.`);
+        } else if (!advies) {
+          parts.push("Ik heb dit voor je klaargezet.");
         }
-        void speakAndAnimate(spokenConfirm, { intent: spokenIntent, route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation" });
+        parts.push(question);
+        const spokenConfirm = parts.join(" ");
+        const spokenIntent = result.spoken_summary?.trim()
+          ? "spoken_summary"
+          : result.assistant_reply?.trim()
+            ? "assistant_chat_confirm"
+            : "confirmation";
+        void speakAndAnimate(spokenConfirm, {
+          intent: spokenIntent,
+          route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
+        });
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -255,7 +277,14 @@ export function VoiceOrb({ onCompleted }: Props) {
         : hasAssistantReply || hasQueryIntro
           ? "assistant_reply"
           : "confirmation";
-      void speakAndAnimate(spoken, { intent: result.intent, route });
+      // Continue conversation: na een voltooide actie automatisch opnieuw luisteren
+      // zodra de assistent klaar is met spreken (tenzij er een query-kaart open blijft).
+      const shouldAutoListen = continuousModeRef.current && !result.query_result;
+      void speakAndAnimate(spoken, {
+        intent: result.intent,
+        route,
+        onEnd: shouldAutoListen ? () => { shouldAutoListenRef.current = true; } : undefined,
+      });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
 
@@ -396,6 +425,33 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
     }, 1000);
   }, [cleanupStream, runPipeline, stopTimer]);
+
+  // Continue conversation: zodra de assistent klaar is met spreken (isSpeaking
+  // false én shouldAutoListenRef gezet in de completed-branch), microfoon
+  // opnieuw activeren zonder dat de gebruiker hoeft te tikken.
+  useEffect(() => {
+    if (isSpeaking) return;
+    if (!shouldAutoListenRef.current) return;
+    if (!continuousModeRef.current) {
+      shouldAutoListenRef.current = false;
+      return;
+    }
+    // Reset guard direct — voorkomt dubbele triggers.
+    shouldAutoListenRef.current = false;
+    // Alleen doorluisteren als we in een neutrale state zitten.
+    if (state !== "done" && state !== "idle") return;
+    if (confirming) return;
+    if (queryResult) return;
+    // Kleine delay geeft iOS Safari tijd om de audio-tail vrij te geven
+    // voordat we opnieuw getUserMedia openen.
+    const t = setTimeout(() => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      setConfirmation("");
+      dispatch({ type: "RESET" });
+      startListening();
+    }, 350);
+    return () => clearTimeout(t);
+  }, [isSpeaking, state, confirming, queryResult, startListening]);
 
   const stopListening = useCallback(() => {
     if (recorderRef.current?.state === "recording") {
