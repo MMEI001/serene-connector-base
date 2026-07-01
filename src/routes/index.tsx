@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion } from "motion/react";
 import { toast } from "sonner";
+import { Volume2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
+import { getDailyBriefing, type DailyBriefing } from "@/lib/daily-briefing.functions";
 import { speakText } from "@/lib/speak";
 
 export const Route = createFileRoute("/")({
@@ -56,12 +58,44 @@ function Dashboard() {
   const [aiText, setAiText] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [showPills, setShowPills] = useState(false);
+  const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
+  const briefingSpokenRef = useRef(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
+  const fetchBriefing = useServerFn(getDailyBriefing);
 
   useEffect(() => {
     const t = window.setTimeout(() => setShowPills(true), 800);
     return () => window.clearTimeout(t);
   }, []);
+
+  const playBriefing = useCallback(
+    (b: DailyBriefing) => {
+      void speakText(b.text, { intent: "daily_briefing", route: "assistant_reply" });
+    },
+    [],
+  );
+
+  const loadBriefing = useCallback(
+    async (autoSpeak: boolean) => {
+      if (!user) return;
+      try {
+        const b = await fetchBriefing();
+        setBriefing(b);
+        if (!autoSpeak) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const key = `hoofdrust:daily-briefing:${user.id}:${today}`;
+        if (typeof window !== "undefined" && !window.localStorage.getItem(key)) {
+          window.localStorage.setItem(key, "1");
+          briefingSpokenRef.current = true;
+          // kleine pauze zodat de orb rustig verschijnt voor de stem begint
+          window.setTimeout(() => playBriefing(b), 1200);
+        }
+      } catch {
+        /* stil falen — dagoverzicht is niet-kritisch */
+      }
+    },
+    [user, fetchBriefing, playBriefing],
+  );
 
   async function handleClassify() {
     const text = aiText.trim();
@@ -127,8 +161,9 @@ function Dashboard() {
       setAppts(a.data ?? []);
       setReminders(r.data ?? []);
       void loadSuggestions();
+      void loadBriefing(true);
     })();
-  }, [user, loadSuggestions]);
+  }, [user, loadSuggestions, loadBriefing]);
 
   return (
     <AppShell>
@@ -154,6 +189,48 @@ function Dashboard() {
             </Link>
           ))}
         </motion.div>
+
+        {briefing && (briefing.nextEvent || briefing.topReminder || briefing.freeBlock) && (
+          <motion.div
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-6 w-full max-w-sm rounded-3xl bg-white/60 px-5 py-4 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] text-left"
+          >
+            {briefing.nextEvent && (
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">Eerstvolgende</span>
+                <span className="text-xs text-muted-foreground">
+                  {briefing.nextEvent.date === new Date().toISOString().slice(0, 10)
+                    ? briefing.nextEvent.startTime
+                    : new Date(briefing.nextEvent.whenIso).toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", month: "short" })}
+                </span>
+              </div>
+            )}
+            {briefing.nextEvent && (
+              <div className="mt-1 text-sm text-foreground/85">{briefing.nextEvent.title}</div>
+            )}
+            {briefing.topReminder && (
+              <div className={briefing.nextEvent ? "mt-3 pt-3 border-t border-white/60" : ""}>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Herinnering</div>
+                <div className="mt-1 text-sm text-foreground/85">{briefing.topReminder.title}</div>
+              </div>
+            )}
+            {briefing.freeBlock && !briefing.nextEvent && (
+              <div className="text-sm text-foreground/85">
+                Later vandaag heb je ruimte tussen {briefing.freeBlock.start} en {briefing.freeBlock.end}.
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => playBriefing(briefing)}
+              className="mt-3 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Volume2 className="h-3.5 w-3.5" />
+              Dagoverzicht opnieuw horen
+            </button>
+          </motion.div>
+        )}
       </section>
 
       <section className="mt-14 mb-10">
