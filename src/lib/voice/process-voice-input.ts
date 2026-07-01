@@ -200,12 +200,12 @@ function mapProductIntent(intent: ProductIntent, actionType?: string): VoiceInte
   if (actionType === "reminder") return "reminder";
   if (actionType === "note") return "note";
   switch (intent) {
-    case "calendar_action":
+    case "calendar":
       return "event";
-    case "reminder_action":
+    case "reminder":
       return "reminder";
-    case "task_action":
-    case "shopping_list_action":
+    case "todo":
+    case "shopping":
       return "note";
     default:
       return "assistant_chat";
