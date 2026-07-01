@@ -21,7 +21,72 @@ import type { UserPersona } from "./persona";
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
 /** Sterker reasoning-model dan de klassieke flash-classifier. */
 const MODEL = "google/gemini-3.1-pro-preview";
+/** Snel, goedkoop model voor de interne reasoning-stap (nooit zichtbaar). */
+const REASONING_MODEL = "google/gemini-3-flash-preview";
 const MAX_ACTIONS = 3;
+
+/**
+ * Interne Reasoning Brain — nooit zichtbaar voor de gebruiker.
+ * Beantwoordt 10 vaste vragen die de hoofd-Brain daarna gebruikt om
+ * een beter, warmer en proactiever antwoord te geven.
+ */
+const REASONING_PROMPT = `Je bent de interne Reasoning-laag van HoofdRust. Deze output ziet de gebruiker NOOIT. Je taak: analyseer de laatste gebruikersuiting en beantwoord kort (max 1 zin per punt) in het Nederlands:
+
+1. Wat probeert de gebruiker écht te bereiken?
+2. Welke context weet ik al?
+3. Welke persoonlijke informatie kan helpen?
+4. Welke vervolgvraag is logisch?
+5. Kan ik mentale belasting verminderen? Hoe?
+6. Kan ik proactief helpen? Hoe?
+7. Is een actie nodig? (ja/nee + welke)
+8. Is die actie nu verstandig of later?
+9. Kan ik iets voorstellen zonder opdringerig te zijn? Hoe?
+10. Hoe zou een uitstekende persoonlijke assistent reageren?
+
+Antwoord uitsluitend als genummerde lijst 1-10. Geen inleiding, geen afsluiting.`;
+
+async function runReasoning(
+  userText: string,
+  apiKey: string,
+  contextSummary?: string | null,
+  history: BrainHistoryEntry[] = [],
+): Promise<string | null> {
+  const contextBlock =
+    contextSummary && contextSummary.trim() ? `\n\nCONTEXT:\n${contextSummary.trim()}` : "";
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: REASONING_PROMPT + contextBlock },
+  ];
+  for (const h of history.slice(-4)) {
+    if (h?.content && (h.role === "user" || h.role === "assistant")) {
+      messages.push({ role: h.role, content: h.content });
+    }
+  }
+  messages.push({ role: "user", content: userText });
+
+  try {
+    const res = await fetch(GATEWAY_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Lovable-API-Key": apiKey,
+        "X-Lovable-AIG-SDK": "raw-fetch",
+      },
+      body: JSON.stringify({ model: REASONING_MODEL, messages, temperature: 0.3 }),
+    });
+    if (!res.ok) {
+      console.warn("[reasoning] gateway", res.status);
+      return null;
+    }
+    const json = (await res.json().catch(() => null)) as
+      | { choices?: Array<{ message?: { content?: string } }> }
+      | null;
+    const content = json?.choices?.[0]?.message?.content?.trim();
+    return content && content.length > 0 ? content : null;
+  } catch (err) {
+    console.warn("[reasoning] fetch error", err);
+    return null;
+  }
+}
 
 type ClassifyMeta = {
   model: string;
@@ -243,11 +308,21 @@ export async function processVoiceInput(
 
   const nowIso = new Date().toISOString();
 
-  // Bouw messages: system + geschiedenis + huidige user turn.
   const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
+
+  // Stap 1: interne Reasoning Brain (nooit zichtbaar voor gebruiker).
+  const reasoning = await runReasoning(trimmed, apiKey, opts.contextSummary, history);
+
+  // Stap 2: hoofdantwoord — injecteer reasoning als extra system-context.
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt(nowIso, persona, opts.contextSummary) },
   ];
+  if (reasoning) {
+    messages.push({
+      role: "system",
+      content: `INTERNE REDENERING (niet uitspreken, niet noemen — gebruik als denkkader voor je reply):\n${reasoning}`,
+    });
+  }
   for (const h of history) {
     if (!h?.content) continue;
     if (h.role === "user" || h.role === "assistant") {
