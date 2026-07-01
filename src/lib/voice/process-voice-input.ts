@@ -179,9 +179,26 @@ type ClassifyMeta = {
   total_tokens: number | null;
 };
 
+export type BrainDebug = {
+  transcript: string;
+  contextSummary: string | null;
+  reasoning: string | null;
+  draftReply: string;
+  qualityImproved: string | null;
+  finalReply: string;
+  intent: string;
+  actionRequired: boolean;
+  needsConfirmation: boolean;
+  suggestedActions: Array<{ intent: string; payload: Record<string, unknown> }>;
+  confidence: number;
+  ambiguous: boolean;
+  clarificationQuestion: string | null;
+};
+
 export type ClassifyResult = {
   actions: VoiceAction[];
   meta: ClassifyMeta;
+  debug?: BrainDebug;
 };
 
 export type BrainHistoryEntry = {
@@ -194,6 +211,8 @@ export type BrainOptions = {
   contextSummary?: string | null;
   /** Recente conversatie-turns (max ~6) voor natuurlijk vervolg. */
   history?: BrainHistoryEntry[];
+  /** Alleen voor Test Mode: retourneer de interne debug-trace. */
+  debug?: boolean;
 };
 
 // (INTENT_VALUES verwijderd — mapping loopt nu via mapProductIntent hieronder.)
