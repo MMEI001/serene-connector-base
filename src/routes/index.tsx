@@ -58,12 +58,44 @@ function Dashboard() {
   const [aiText, setAiText] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const [showPills, setShowPills] = useState(false);
+  const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
+  const briefingSpokenRef = useRef(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
+  const fetchBriefing = useServerFn(getDailyBriefing);
 
   useEffect(() => {
     const t = window.setTimeout(() => setShowPills(true), 800);
     return () => window.clearTimeout(t);
   }, []);
+
+  const playBriefing = useCallback(
+    (b: DailyBriefing) => {
+      void speakText(b.text, { intent: "daily_briefing", route: "assistant_reply" });
+    },
+    [],
+  );
+
+  const loadBriefing = useCallback(
+    async (autoSpeak: boolean) => {
+      if (!user) return;
+      try {
+        const b = await fetchBriefing({ data: {} });
+        setBriefing(b);
+        if (!autoSpeak) return;
+        const today = new Date().toISOString().slice(0, 10);
+        const key = `hoofdrust:daily-briefing:${user.id}:${today}`;
+        if (typeof window !== "undefined" && !window.localStorage.getItem(key)) {
+          window.localStorage.setItem(key, "1");
+          briefingSpokenRef.current = true;
+          // kleine pauze zodat de orb rustig verschijnt voor de stem begint
+          window.setTimeout(() => playBriefing(b), 1200);
+        }
+      } catch {
+        /* stil falen — dagoverzicht is niet-kritisch */
+      }
+    },
+    [user, fetchBriefing, playBriefing],
+  );
 
   async function handleClassify() {
     const text = aiText.trim();
