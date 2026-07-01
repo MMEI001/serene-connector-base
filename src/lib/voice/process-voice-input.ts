@@ -294,14 +294,28 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar wist even niet wat te doen. Kun je het anders zeggen?");
   }
 
+  type SuggestedActionRaw = {
+    type?: string;
+    title?: string;
+    text?: string;
+    description?: string;
+    date?: string;
+    iso_datetime?: string;
+    start_time?: string;
+    end_time?: string;
+    [k: string]: unknown;
+  };
   let parsed: {
-    actions?: Array<{
-      intent?: string;
-      confidence?: number;
-      ambiguous?: boolean;
-      clarification_question?: string;
-      payload?: Record<string, unknown>;
-    }>;
+    reply?: string;
+    intent?: string;
+    action_required?: boolean;
+    needs_confirmation?: boolean;
+    confidence?: number;
+    ambiguous?: boolean;
+    clarification_question?: string;
+    suggested_actions?: SuggestedActionRaw[];
+    experience?: string;
+    experience_data?: Record<string, unknown>;
   };
   try {
     parsed = JSON.parse(call.function.arguments);
@@ -309,25 +323,65 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
 
-  const rawActions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, MAX_ACTIONS) : [];
-  if (rawActions.length === 0) {
+  const reply = (parsed.reply ?? "").trim();
+  if (!reply) {
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
 
-  const actions: VoiceAction[] = rawActions.map((a) => {
-    const intent = INTENT_VALUES.includes(a.intent as VoiceIntent)
-      ? (a.intent as VoiceIntent)
-      : "release";
-    const payload = a.payload ?? {};
-    if (intent === "release" && !payload.text) payload.text = trimmed;
-    return {
-      intent,
-      payload,
-      confidence: typeof a.confidence === "number" ? a.confidence : 0.6,
-      ambiguous: !!a.ambiguous,
-      clarification_question: a.clarification_question?.trim() || null,
-    };
-  });
+  const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
+    ? (parsed.intent as ProductIntent)
+    : "conversational_answer";
+  const rawSuggested = Array.isArray(parsed.suggested_actions)
+    ? parsed.suggested_actions.slice(0, MAX_ACTIONS)
+    : [];
+  const actionRequired = !!parsed.action_required && rawSuggested.length > 0;
+  const needsConfirmation = !!parsed.needs_confirmation;
+  const confidence = typeof parsed.confidence === "number" ? parsed.confidence : 0.7;
+
+  // Bouw suggested_actions in het intern verwachte {intent, payload} formaat.
+  const suggestedActions = rawSuggested
+    .filter((s) => s.type && SUGGESTED_ACTION_TYPES.includes(s.type as (typeof SUGGESTED_ACTION_TYPES)[number]))
+    .map((s) => {
+      const payload: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(s)) {
+        if (k === "type") continue;
+        if (v !== undefined && v !== null && v !== "") payload[k] = v;
+      }
+      return { intent: s.type as VoiceIntent, payload };
+    });
+
+  const actions: VoiceAction[] = [];
+
+  // Directe uitvoering zonder bevestiging → emit interne intent direct.
+  if (actionRequired && !needsConfirmation && suggestedActions.length > 0) {
+    for (const sa of suggestedActions) {
+      const intent = mapProductIntent(productIntent, sa.intent);
+      actions.push({
+        intent,
+        payload: { ...sa.payload, reply },
+        confidence,
+        ambiguous: false,
+        clarification_question: null,
+      });
+    }
+  } else {
+    // Standaard: assistant_chat met reply + optionele suggested_actions
+    // (deze vormen de bevestigings-kaart in de UI).
+    const chatPayload: Record<string, unknown> = { reply };
+    if (actionRequired && suggestedActions.length > 0) {
+      chatPayload.suggested_actions = suggestedActions;
+    }
+    if (parsed.experience) chatPayload.experience = parsed.experience;
+    if (parsed.experience_data) chatPayload.experience_data = parsed.experience_data;
+    actions.push({
+      intent: "assistant_chat",
+      payload: chatPayload,
+      confidence,
+      ambiguous: !!parsed.ambiguous,
+      clarification_question: parsed.clarification_question?.trim() || null,
+    });
+  }
+
 
   return {
     actions,
