@@ -296,7 +296,7 @@ export async function processVoiceInput(
   try {
     parsed = JSON.parse(call.function.arguments);
   } catch {
-    return fallback("release", { text: trimmed });
+    return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
 
   const rawActions = Array.isArray(parsed.actions) ? parsed.actions.slice(0, MAX_ACTIONS) : [];
