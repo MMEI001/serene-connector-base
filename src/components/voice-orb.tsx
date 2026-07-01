@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { RotateCcw, Check, X, Pencil } from "lucide-react";
+import { RotateCcw, Check, X, Pencil, Mic } from "lucide-react";
 import { BreathingOrb } from "@/components/breathing-orb";
 import { QueryResultCard } from "@/components/voice-query-result";
 import { orbReducer, type OrbState } from "@/lib/voice/orb-state";
@@ -517,13 +517,16 @@ export function VoiceOrb({ onCompleted }: Props) {
   }, [state, pending, retryPending, startListening, stopListening]);
 
   const hint =
-    state === "listening" ? `Tik om te stoppen (${elapsed}s)`
-    : state === "processing" ? "Even verwerken…"
+    isSpeaking ? "Spreekt…"
+    : state === "listening" ? "Luistert…"
+    : state === "processing" ? "Denkt na…"
     : state === "confirming" ? (confirming?.preview?.includes("\n") ? "Klopt dit?" : confirming?.preview ?? "Klopt dit?")
     : state === "done" ? confirmation || "Klaar."
     : state === "error" && pending ? "Het lukte even niet. Tik om opnieuw te proberen."
     : state === "error" ? "Probeer opnieuw"
-    : "Tik om te spreken";
+    : "Tik om te praten";
+
+  const showDebug = import.meta.env.DEV;
 
   return (
     <div className="flex flex-col items-center">
@@ -545,9 +548,10 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       <p
         aria-live="polite"
-        className="mt-6 min-h-[1.5rem] text-sm text-muted-foreground text-center px-6"
+        className="mt-6 min-h-[1.5rem] inline-flex items-center justify-center gap-1.5 text-sm text-muted-foreground text-center px-6"
       >
-        {hint}
+        <Mic className="h-3.5 w-3.5 opacity-70" aria-hidden />
+        <span>{hint}</span>
       </p>
 
       {confirming && !isEditing && state !== "processing" && state !== "listening" && (
@@ -682,7 +686,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         />
       )}
 
-      {lastVoiceLog && (
+      {showDebug && lastVoiceLog && (
         <div className="mt-4 mb-2 inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full bg-black/5 dark:bg-white/10 px-3 py-1 text-[10px] font-mono text-muted-foreground backdrop-blur-md">
           <span className="font-semibold text-foreground/80">Voice Trace:</span>
           <span>provider:</span>
@@ -702,7 +706,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         </div>
       )}
 
-      <EngineTracePanel trace={lastTrace} />
+      {showDebug && <EngineTracePanel trace={lastTrace} />}
     </div>
   );
 }
