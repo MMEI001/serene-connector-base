@@ -167,7 +167,8 @@ async function runQualityCheck(
   } catch (err) {
     console.warn("[quality] fetch error", err);
     return null;
-  }
+
+
 }
 }
 
