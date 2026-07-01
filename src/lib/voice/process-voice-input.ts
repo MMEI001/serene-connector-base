@@ -308,11 +308,19 @@ export async function processVoiceInput(
 
   const nowIso = new Date().toISOString();
 
-  // Bouw messages: system + geschiedenis + huidige user turn.
-  const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
+  // Stap 1: interne Reasoning Brain (nooit zichtbaar voor gebruiker).
+  const reasoning = await runReasoning(trimmed, apiKey, opts.contextSummary, history);
+
+  // Stap 2: hoofdantwoord — injecteer reasoning als extra system-context.
   const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
     { role: "system", content: systemPrompt(nowIso, persona, opts.contextSummary) },
   ];
+  if (reasoning) {
+    messages.push({
+      role: "system",
+      content: `INTERNE REDENERING (niet uitspreken, niet noemen — gebruik als denkkader voor je reply):\n${reasoning}`,
+    });
+  }
   for (const h of history) {
     if (!h?.content) continue;
     if (h.role === "user" || h.role === "assistant") {
