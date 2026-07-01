@@ -2,13 +2,25 @@ import type { VoiceAction, VoiceIntent } from "./types";
 import type { UserPersona } from "./persona";
 
 /**
- * Fase B + multi-action classifier via Lovable AI Gateway.
- * Eén call → 1..3 acties. De model splitst samengestelde zinnen
- * (bv. "afspraak woensdag + reminder 2 dagen ervoor") in losse acties.
+ * Brain / Orchestrator laag (upgraded).
+ *
+ * Elke turn gaat door één sterk taalmodel dat de vraag EERST begrijpt en
+ * inhoudelijk beantwoordt, en pas daarna een eventuele vervolgactie
+ * voorstelt. Zes intent-types (conform product-visie):
+ *
+ *   1. conversational_answer  → assistant_chat (rijk antwoord, geen actie)
+ *   2. calendar_action        → event
+ *   3. reminder_action        → reminder
+ *   4. task_action            → note (to-do / boodschap)
+ *   5. confirmation_needed    → assistant_chat + suggested_actions
+ *   6. clarification_needed   → ambiguous=true + clarification_question
+ *
+ * Contract naar de rest van de app blijft ongewijzigd (ClassifyResult).
  */
 
 const GATEWAY_URL = "https://ai.gateway.lovable.dev/v1/chat/completions";
-const MODEL = "google/gemini-3-flash-preview";
+/** Sterker reasoning-model dan de klassieke flash-classifier. */
+const MODEL = "google/gemini-3.1-pro-preview";
 const MAX_ACTIONS = 3;
 
 type ClassifyMeta = {
@@ -23,6 +35,18 @@ export type ClassifyResult = {
   meta: ClassifyMeta;
 };
 
+export type BrainHistoryEntry = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type BrainOptions = {
+  /** Compacte context-samenvatting (agenda, reminders, memories). */
+  contextSummary?: string | null;
+  /** Recente conversatie-turns (max ~6) voor natuurlijk vervolg. */
+  history?: BrainHistoryEntry[];
+};
+
 const INTENT_VALUES: VoiceIntent[] = [
   "release",
   "reminder",
@@ -33,14 +57,12 @@ const INTENT_VALUES: VoiceIntent[] = [
   "assistant_chat",
 ];
 
-
-
 const TOOL = {
   type: "function" as const,
   function: {
-    name: "classify",
+    name: "respond",
     description:
-      "Classificeer wat de gebruiker tegen de spraak-orb zei. Splits samengestelde zinnen in losse acties (max 3).",
+      "Beantwoord de gebruiker en/of stel acties voor. Splits samengestelde commando's in losse acties (max 3).",
     parameters: {
       type: "object",
       properties: {
@@ -56,56 +78,33 @@ const TOOL = {
               ambiguous: { type: "boolean" },
               clarification_question: {
                 type: "string",
-                description: "Korte NL-vervolgvraag bij dubbelzinnige datum/tijd.",
+                description: "Korte NL-vervolgvraag bij ontbrekende cruciale info.",
               },
               payload: {
                 type: "object",
-                description:
-                  "Intent-specifieke velden. Zie systeem-prompt voor schema per intent.",
+                description: "Intent-specifieke velden.",
                 properties: {
                   text: { type: "string" },
                   title: { type: "string" },
                   description: { type: "string" },
-                  iso_datetime: {
-                    type: "string",
-                    description: "ISO 8601 in Europe/Amsterdam.",
-                  },
-                  date: { type: "string", description: "YYYY-MM-DD" },
-                  start_time: { type: "string", description: "HH:MM (24u)" },
-                  end_time: { type: "string", description: "HH:MM (24u)" },
+                  iso_datetime: { type: "string" },
+                  date: { type: "string" },
+                  start_time: { type: "string" },
+                  end_time: { type: "string" },
                   scope: {
                     type: "string",
-                    enum: [
-                      "today",
-                      "tomorrow",
-                      "this_week",
-                      "next_week",
-                      "specific_date",
-                    ],
+                    enum: ["today", "tomorrow", "this_week", "next_week", "specific_date"],
                   },
-                  action: {
-                    type: "string",
-                    enum: ["create", "delete", "move"],
-                  },
-                  /** Verwijzing naar een eerdere actie in dezelfde bundle (index 0..n-1). */
-                  related_to_index: {
-                    type: "integer",
-                    minimum: 0,
-                    description:
-                      "Index van een eerdere actie in deze bundle waar deze reminder bij hoort.",
-                  },
-                  /** Alleen voor intent=assistant_chat: korte adviserende reactie. */
+                  action: { type: "string", enum: ["create", "delete", "move"] },
+                  related_to_index: { type: "integer", minimum: 0 },
                   reply: {
                     type: "string",
                     description:
-                      "assistant_chat: korte, rustige Nederlandse reactie (max 2 zinnen).",
+                      "assistant_chat: het inhoudelijke antwoord op de vraag van de gebruiker. Natuurlijk Nederlands. Mag meerdere zinnen en opsommingen bevatten wanneer dat helpt. Beantwoord de vraag EERST — bied pas daarna hulp aan.",
                   },
-                  /** Alleen voor intent=assistant_chat: optionele vervolgacties. */
                   suggested_actions: {
                     type: "array",
                     maxItems: MAX_ACTIONS,
-                    description:
-                      "assistant_chat: optionele vervolgacties (event/reminder/note) die de gebruiker eerst moet bevestigen. Nooit direct uitvoeren.",
                     items: {
                       type: "object",
                       properties: {
@@ -118,17 +117,12 @@ const TOOL = {
                       required: ["intent", "payload"],
                     },
                   },
-                  /** Sprint 4 — herkenbaar levenspatroon (Experience). */
                   experience: {
                     type: "string",
                     enum: ["gift_event"],
-                    description:
-                      "Markeer een herkenbaar patroon zodat het framework er rijker mee om kan gaan.",
                   },
                   experience_data: {
                     type: "object",
-                    description:
-                      "Geëxtraheerde entiteiten voor de experience (bv. who/event_type/iso_datetime/age/interests/budget).",
                     properties: {
                       who: { type: "string" },
                       event_type: { type: "string" },
@@ -151,61 +145,68 @@ const TOOL = {
   },
 };
 
-function systemPrompt(nowIso: string, persona?: UserPersona) {
+function systemPrompt(nowIso: string, persona?: UserPersona, contextSummary?: string | null) {
   const personaBlock = persona?.promptFragment ? `\n\n${persona.promptFragment}` : "";
-  return `Je bent de intent-classifier van HoofdRust, een rustige Nederlandse spraak-app.${personaBlock}
-De gebruiker spreekt één korte zin in. Splits 'm in 1..${MAX_ACTIONS} acties — meestal één, maar bij samengestelde commando's één per actie.
+  const contextBlock =
+    contextSummary && contextSummary.trim()
+      ? `\n\nHUIDIGE CONTEXT (gebruik dit in je antwoord waar relevant):\n${contextSummary.trim()}`
+      : "";
 
-INTENTS:
-- release        → iets loslaten/luchten. payload: { text }
-- reminder       → herinnering met tijdstip. payload: { title, iso_datetime, description?, related_to_index? }
-- event          → afspraak. payload: { action="create", title, date, start_time?, end_time?, description? }
-- query          → vraag over agenda/reminders. payload: { scope, date? }
-- note           → losse notitie. payload: { text }
-- checkin        → stemmings-check. payload: { text }
-- assistant_chat → de gebruiker vraagt om advies, uitleg, een plan, of denkt hardop. payload: { reply, suggested_actions? }
+  return `Je bent HoofdRust — een rustige, slimme Nederlandse persoonlijke assistent die met de gebruiker praat via een spraak-orb. Je klinkt als een warme, meedenkende vriend(in): natuurlijk, kort waar het kan, uitgebreider waar het helpt.${personaBlock}${contextBlock}
 
-ASSISTANT_CHAT REGELS:
-- Kies dit zodra de gebruiker advies, een mening, een suggestie, of "zal ik..."-vragen stelt — ook als er een datum of onderwerp in zit ("Ik heb zaterdag een verjaardag, zal ik bloemen kopen?"). Dit is GEEN reminder/event, maar een adviesvraag.
-- reply: kort, rustig, adviserend Nederlands. Max 2 zinnen. Beantwoord eerst de vraag (ja/nee/tip). Geen lijstjes, geen markdown.
-- NOOIT om ontbrekende tijd of onderwerp vragen bij een adviesvraag. Geen ambiguous=true en geen clarification_question voor assistant_chat.
-- suggested_actions: ALLEEN toevoegen als er een logische vervolgactie is. Max ${MAX_ACTIONS}. Vul altijd zelf slimme defaults in — vraag NIETS terug.
-  - VERPLICHTE velden per intent moeten ALTIJD ingevuld zijn, anders weglaten:
-    * reminder → { title (kort, imperatief), iso_datetime (volledig ISO 8601 met Europe/Amsterdam offset, bv. "2026-06-26T09:00:00+02:00"), description? }
-    * event    → { action:"create", title, date (YYYY-MM-DD), start_time (HH:MM), end_time? }
-    * note     → { text }
-  - iso_datetime NOOIT als natuurlijke taal ("morgenochtend", "vrijdag 09:00") — alleen ISO 8601 met offset.
-  - Ontbrekende tijd voor een reminder → default 09:00 Europe/Amsterdam op een logische dag (bv. de werkdag vóór een weekend-afspraak: "vrijdag 09:00" als de gebruiker iets voor zaterdag voorbereidt).
-  - Ontbrekende titel → leid hem af uit de vraag, kort en imperatief ("Bloemen kopen", "Cadeau inpakken").
-  - Verwijs in de reply naar de voorgestelde tijd ("Ik kan je vrijdag om 09:00 herinneren om ze te kopen.").
-  - Voorbeeld: "Ik heb zaterdag een verjaardag, zal ik bloemen kopen?" → reply: "Ja, bloemen zijn een fijn idee. Ik kan je vrijdag om 09:00 herinneren om ze te halen." + suggested_actions: [{ intent:"reminder", payload:{ title:"Bloemen kopen", iso_datetime:"<vrijdag 09:00 ISO>" } }]
-- suggested_actions worden NOOIT direct uitgevoerd — de gebruiker bevestigt eerst via de bevestigingskaart. Gebruik exact dezelfde payload-velden als gewone reminder/event/note.
-- Bij twijfel tussen query en assistant_chat: kies query als er een agenda/reminder-antwoord is, anders assistant_chat.
+TAAK
+Je krijgt één zin van de gebruiker (soms met eerdere turns als context). Beslis wat de zin is en antwoord via het \`respond\`-tool. Je mag NOOIT stilvallen — er is altijd een antwoord.
 
-EXPERIENCE PATRONEN (alleen bij intent=assistant_chat):
-- Als de gebruiker een sociale gebeurtenis voor iemand anders noemt (kinderfeestje, verjaardag, bruiloft, etentje, doopfeest), zet:
-    payload.experience = "gift_event"
-    payload.experience_data = { who?, event_type?, iso_datetime?, age?, interests?, budget? }
-- "Mijn dochter heeft volgende week een kinderfeestje" → experience=gift_event, who="dochter", event_type="kinderfeestje", iso_datetime=<ISO van die dag 12:00>.
-- Geef ALTIJD ook een warm-praktische reply ("Leuk! Dan is het handig om alvast een cadeautje te regelen.").
-- LAAT in dit geval suggested_actions WEG — het framework bouwt zelf het cadeau-voorstel; jij zou de iso_datetime alleen maar verkeerd raden.
+ZES INTENT-TYPES
+1. conversational_answer → intent="assistant_chat". Gebruik dit voor gewone vragen, advies, ideeën, uitleg, gezellig meedenken, of hardop nadenken. Ook als de vraag een datum of onderwerp bevat maar de gebruiker niet expliciet om een agenda-inschrijving vraagt ("Heb je borrelhapjes-suggesties voor zaterdag?" → gewoon antwoorden).
+2. calendar_action → intent="event". Alleen als de gebruiker duidelijk een afspraak wil zetten/wijzigen/verplaatsen ("Zet morgen 9 uur tandarts").
+3. reminder_action → intent="reminder". Alleen als de gebruiker expliciet herinnerd wil worden ("Herinner me morgen om…").
+4. task_action → intent="note". Losse notities, to-do's, of items voor een boodschappenlijstje ("Zet melk op het lijstje").
+5. confirmation_needed → intent="assistant_chat" MET \`suggested_actions\`. Gebruik dit wanneer je op basis van de vraag een concrete vervolgactie aanbiedt die de gebruiker eerst moet bevestigen ("…zal ik een boodschappenlijstje voor je klaarzetten?").
+6. clarification_needed → intent="assistant_chat" met \`ambiguous=true\` en \`clarification_question\`. Alleen bij écht cruciale ontbrekende info (bv. welke van twee bekende afspraken). NIET bij gewone adviesvragen — die beantwoord je gewoon met slimme defaults.
 
-MULTI-ACTION REGELS (voor gewone event+reminder, niet voor assistant_chat):
-- "Zet een afspraak X EN herinner me Y" → 2 acties: [event, reminder].
-- Bij "X dagen/uur van tevoren": bereken iso_datetime = event-datum − X dagen/uur. Zonder kloktijd → default 09:00 Europe/Amsterdam.
-- Zet related_to_index op de reminder naar de index van het event in de actions-array (meestal 0).
-- Voor de reminder-title: kort en imperatief ("Cadeau kopen", "Tandartsbezoek voorbereiden") — niet de event-naam herhalen.
+GEDRAG (heel belangrijk)
+- Beantwoord ALTIJD eerst de vraag inhoudelijk in \`reply\`. Suggesties, ideeën, korte lijstjes, cijfermatige adviezen — allemaal welkom. Geen markdown-headers, wel nette prozalijstjes ("mini caprese-prikkers, bladerdeeghapjes met kaas, gevulde dadels…").
+- Forceer niets richting agenda/reminder. Alleen als er een duidelijke actie-intentie is (of als een concreet aanbod echt logisch is), voeg je \`suggested_actions\` toe.
+- Als je een vervolgactie aanbiedt, zeg dat expliciet in \`reply\` ("Zal ik daar meteen een boodschappenlijstje van maken?") — de gebruiker bevestigt via de UI.
+- Gebruik de HUIDIGE CONTEXT (agenda, reminders, memories) én de eerdere conversatie in je antwoord. Verwijs kort ("Vrijdag zit je al vol tot 15:00, dus…") als dat helpt.
+- Klink menselijk en warm, niet robotachtig. Vermijd bullet-tekens en emoji.
+- Bij pure "ik wil dit even loslaten"-momenten (geen vraag, geen actie): intent="release", payload={ text }.
 
-ALGEMENE REGELS:
+VELDEN PER INTENT
+- release   → { text }
+- reminder  → { title (kort, imperatief), iso_datetime (ISO 8601 met Europe/Amsterdam offset), description?, related_to_index? }
+- event     → { action:"create", title, date (YYYY-MM-DD), start_time (HH:MM), end_time?, description? }
+- note      → { text, title? }
+- query     → { scope, date? }
+- checkin   → { text }
+- assistant_chat → { reply, suggested_actions? }
+
+SUGGESTED_ACTIONS REGELS
+- Alleen toevoegen als je een concreet, nuttig aanbod doet. Anders leeg laten.
+- Vul zelf slimme defaults in — vraag NIETS terug via clarification.
+- iso_datetime altijd volledig ISO 8601 met offset ("2026-06-27T09:00:00+02:00"), nooit natuurlijke taal.
+- Bij ontbrekende tijd voor een reminder → 09:00 Europe/Amsterdam op een logische werkdag (bv. vrijdag vóór een zaterdag-event).
+- Titels kort en imperatief ("Bloemen kopen", "Boodschappen doen").
+
+EXPERIENCE PATRONEN (alleen bij assistant_chat)
+- Sociale gebeurtenis voor iemand anders (kinderfeestje, verjaardag, bruiloft, doopfeest) → payload.experience="gift_event" + payload.experience_data (who?, event_type?, iso_datetime?, age?, interests?, budget?). LAAT dan suggested_actions weg — het framework bouwt zelf het cadeau-voorstel. Geef wel een warme reply.
+
+MULTI-ACTION
+- "Zet afspraak X en herinner me Y" → 2 acties [event, reminder]. Reminder krijgt related_to_index naar de event-index.
+- "X dagen/uur van tevoren" → bereken iso_datetime = event-tijd − X. Default kloktijd 09:00.
+
+ALGEMEEN
 - "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam.
-- ISO-datetime altijd mét tijdzone-offset.
-- Bij twijfel over datum/tijd: ambiguous=true + clarification_question (kort, NL).
-- Geen duidelijke intent → één action: release met originele tekst.
-- confidence 0..1 — eerlijk laag bij twijfel.
-- Antwoord uitsluitend via de classify-tool.`;
+- confidence 0..1, eerlijk laag bij twijfel.
+- Antwoord uitsluitend via het \`respond\`-tool.`;
 }
 
-export async function processVoiceInput(text: string, persona?: UserPersona): Promise<ClassifyResult> {
+export async function processVoiceInput(
+  text: string,
+  persona?: UserPersona,
+  opts: BrainOptions = {},
+): Promise<ClassifyResult> {
   const trimmed = text.trim();
   const fallback = (intent: VoiceIntent, payload: Record<string, unknown>, conf = 0.2): ClassifyResult => ({
     actions: [{ intent, payload, confidence: conf }],
@@ -214,11 +215,24 @@ export async function processVoiceInput(text: string, persona?: UserPersona): Pr
 
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
-    console.warn("[classify] LOVABLE_API_KEY ontbreekt — fallback naar release");
+    console.warn("[brain] LOVABLE_API_KEY ontbreekt — fallback naar release");
     return fallback("release", { text: trimmed });
   }
 
   const nowIso = new Date().toISOString();
+
+  // Bouw messages: system + geschiedenis + huidige user turn.
+  const history = Array.isArray(opts.history) ? opts.history.slice(-6) : [];
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemPrompt(nowIso, persona, opts.contextSummary) },
+  ];
+  for (const h of history) {
+    if (!h?.content) continue;
+    if (h.role === "user" || h.role === "assistant") {
+      messages.push({ role: h.role, content: h.content });
+    }
+  }
+  messages.push({ role: "user", content: trimmed });
 
   let res: Response;
   try {
@@ -231,23 +245,20 @@ export async function processVoiceInput(text: string, persona?: UserPersona): Pr
       },
       body: JSON.stringify({
         model: MODEL,
-        messages: [
-          { role: "system", content: systemPrompt(nowIso, persona) },
-          { role: "user", content: trimmed },
-        ],
+        messages,
         tools: [TOOL],
-        tool_choice: { type: "function", function: { name: "classify" } },
-        temperature: 0.1,
+        tool_choice: { type: "function", function: { name: "respond" } },
+        temperature: 0.4,
       }),
     });
   } catch (err) {
-    console.error("[classify] gateway fetch error", err);
+    console.error("[brain] gateway fetch error", err);
     return fallback("release", { text: trimmed });
   }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    console.error("[classify] gateway", res.status, body.slice(0, 300));
+    console.error("[brain] gateway", res.status, body.slice(0, 300));
     return fallback("release", { text: trimmed });
   }
 
@@ -259,7 +270,7 @@ export async function processVoiceInput(text: string, persona?: UserPersona): Pr
   const json = (await res.json().catch(() => null)) as GatewayResp | null;
   const call = json?.choices?.[0]?.message?.tool_calls?.[0];
   if (!call?.function?.arguments) {
-    console.warn("[classify] geen tool_call in response");
+    console.warn("[brain] geen tool_call in response");
     return fallback("release", { text: trimmed });
   }
 
