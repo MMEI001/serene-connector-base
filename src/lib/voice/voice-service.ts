@@ -216,14 +216,29 @@ export async function speak(
   const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
 
-  if (!cleanText) return;
+  console.log("[Voice 3] speak() entry", {
+    route,
+    intent,
+    length: cleanText.length,
+    preview: cleanText.slice(0, 60),
+  });
+
+  if (!cleanText) {
+    console.warn("[Voice 3!] speak aborted: empty text");
+    return;
+  }
 
   const prefs = await loadVoicePrefs();
   const enabled = options.force ? true : prefs.enabled;
   const voiceId = options.voiceId ?? prefs.voiceId;
   const provider = prefs.provider;
 
-  if (!enabled && !options.force) return;
+  console.log("[Voice 3a] prefs", { enabled, voiceId, provider, force: !!options.force });
+
+  if (!enabled && !options.force) {
+    console.warn("[Voice 3!] speak aborted: voice disabled in user profile");
+    return;
+  }
 
   // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
   if (!options.preloadOnly) {
