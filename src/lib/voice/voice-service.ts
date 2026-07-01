@@ -369,6 +369,7 @@ export async function speak(
   }
 
   const blob = await res.blob();
+  console.log("[Voice 5] TTS blob received", { size: blob.size, type: blob.type });
   audioBlobCache.set(cacheKey, blob);
 
   if (options.preloadOnly) return;
@@ -390,6 +391,7 @@ export async function speak(
 }
 
 async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+  console.log("[Voice 6] playBlob start", { size: blob.size, route: options.route });
   // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
   // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
   stopVoice();
