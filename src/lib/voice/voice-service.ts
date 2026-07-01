@@ -411,11 +411,10 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     currentAudioRoute = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
 
     let settled = false;
-    const finish = () => {
+    const finish = (reason: string) => {
       if (settled) return;
       settled = true;
-      // Kleine defer zodat iOS de laatste samples nog uitspeelt voordat
-      // we de blob-URL revoken.
+      console.log("[Voice 6c] playBlob finish", { reason, route: currentAudioRoute });
       setTimeout(() => URL.revokeObjectURL(url), 250);
       if (currentAudio === audio) {
         currentAudio = null;
@@ -426,15 +425,38 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
     };
 
     audio.onplaying = () => {
+      console.log("[Voice 6b] audio.onplaying");
       options.onStart?.();
     };
-    audio.onended = finish;
-    audio.onerror = finish;
+    audio.onended = () => finish("ended");
+    audio.onerror = (e) => {
+      console.error("[Voice 6!] audio.onerror", {
+        error: audio.error,
+        code: audio.error?.code,
+        message: audio.error?.message,
+        event: e,
+      });
+      finish("error");
+    };
+    audio.onpause = () => {
+      if (!audio.ended && !settled) {
+        console.warn("[Voice 6?] audio.onpause (unexpected, before end)", {
+          currentTime: audio.currentTime,
+          duration: audio.duration,
+        });
+      }
+    };
 
-    // Wacht tot de audio écht klaar is om af te spelen — voorkomt
-    // dat iOS Safari midden in de eerste zin afkapt bij een half-geladen buffer.
     const start = () => {
-      audio.play().catch(finish);
+      console.log("[Voice 6a] audio.play() call", { readyState: audio.readyState });
+      const p = audio.play();
+      if (p && typeof p.then === "function") {
+        p.then(() => console.log("[Voice 6a✓] audio.play() resolved"))
+         .catch((err) => {
+           console.error("[Voice 6a!] audio.play() rejected", { name: err?.name, message: err?.message });
+           finish("play_rejected");
+         });
+      }
     };
     if (audio.readyState >= 3 /* HAVE_FUTURE_DATA */) {
       start();
@@ -446,9 +468,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
       };
       audio.addEventListener("canplaythrough", onReady, { once: true });
       audio.addEventListener("loadeddata", onReady, { once: true });
-      // Safety net: als geen event komt binnen 800ms, gewoon starten.
       setTimeout(() => {
-        if (!settled && audio.paused) start();
+        if (!settled && audio.paused) {
+          console.warn("[Voice 6?] readyState timeout, forcing start", { readyState: audio.readyState });
+          start();
+        }
       }, 800);
       audio.load();
     }
