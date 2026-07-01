@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { understand } from "./conversation-engine";
 import { processMemoryForTurn, recall } from "./memory-engine";
 import { snapshot } from "./context-engine";
+import { buildContextSummary } from "./context-summary";
 import { shouldTakeInitiative } from "./initiative-engine";
 import { propose } from "./suggestion-engine";
 import { decide } from "./decision-engine";
