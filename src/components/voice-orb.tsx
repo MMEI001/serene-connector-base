@@ -90,6 +90,18 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [editTime, setEditTime] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [lastVoiceLog, setLastVoiceLog] = useState<VoiceTraceLog | null>(null);
+  const [continuousMode, setContinuousMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return window.localStorage.getItem("hoofdrust:continuous-voice") !== "0";
+  });
+  const continuousModeRef = useRef(continuousMode);
+  useEffect(() => {
+    continuousModeRef.current = continuousMode;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("hoofdrust:continuous-voice", continuousMode ? "1" : "0");
+    }
+  }, [continuousMode]);
+  const shouldAutoListenRef = useRef(false);
 
   useEffect(() => {
     return subscribeVoiceTrace(setLastVoiceLog);
