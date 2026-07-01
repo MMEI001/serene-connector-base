@@ -321,7 +321,7 @@ export async function processVoiceInput(
 
   const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
     ? (parsed.intent as ProductIntent)
-    : "conversational_answer";
+    : "conversation";
   const rawSuggested = Array.isArray(parsed.suggested_actions)
     ? parsed.suggested_actions.slice(0, MAX_ACTIONS)
     : [];
