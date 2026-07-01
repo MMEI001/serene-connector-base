@@ -226,7 +226,7 @@ export async function processVoiceInput(
   const apiKey = process.env.LOVABLE_API_KEY;
   if (!apiKey) {
     console.warn("[brain] LOVABLE_API_KEY ontbreekt — fallback naar release");
-    return fallback("release", { text: trimmed });
+    return chatFallback("Ik kan je nu even niet goed helpen — probeer het zo nog eens.");
   }
 
   const nowIso = new Date().toISOString();
