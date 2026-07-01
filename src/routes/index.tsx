@@ -79,7 +79,7 @@ function Dashboard() {
     async (autoSpeak: boolean) => {
       if (!user) return;
       try {
-        const b = await fetchBriefing({ data: {} });
+        const b = await fetchBriefing();
         setBriefing(b);
         if (!autoSpeak) return;
         const today = new Date().toISOString().slice(0, 10);
