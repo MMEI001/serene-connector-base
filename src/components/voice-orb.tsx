@@ -426,6 +426,33 @@ export function VoiceOrb({ onCompleted }: Props) {
     }, 1000);
   }, [cleanupStream, runPipeline, stopTimer]);
 
+  // Continue conversation: zodra de assistent klaar is met spreken (isSpeaking
+  // false én shouldAutoListenRef gezet in de completed-branch), microfoon
+  // opnieuw activeren zonder dat de gebruiker hoeft te tikken.
+  useEffect(() => {
+    if (isSpeaking) return;
+    if (!shouldAutoListenRef.current) return;
+    if (!continuousModeRef.current) {
+      shouldAutoListenRef.current = false;
+      return;
+    }
+    // Reset guard direct — voorkomt dubbele triggers.
+    shouldAutoListenRef.current = false;
+    // Alleen doorluisteren als we in een neutrale state zitten.
+    if (state !== "done" && state !== "idle") return;
+    if (confirming) return;
+    if (queryResult) return;
+    // Kleine delay geeft iOS Safari tijd om de audio-tail vrij te geven
+    // voordat we opnieuw getUserMedia openen.
+    const t = setTimeout(() => {
+      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+      setConfirmation("");
+      dispatch({ type: "RESET" });
+      startListening();
+    }, 350);
+    return () => clearTimeout(t);
+  }, [isSpeaking, state, confirming, queryResult, startListening]);
+
   const stopListening = useCallback(() => {
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
