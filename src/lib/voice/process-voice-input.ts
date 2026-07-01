@@ -400,10 +400,15 @@ export async function processVoiceInput(
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
 
-  const reply = (parsed.reply ?? "").trim();
+  let reply = (parsed.reply ?? "").trim();
   if (!reply) {
     return chatFallback("Ik heb je gehoord — vertel eens iets meer, dan denk ik met je mee.");
   }
+
+  // Response Quality Layer — interne kwaliteitscheck (nooit zichtbaar).
+  // Mag reply één keer verbeteren als de kwaliteit onvoldoende is.
+  const improved = await runQualityCheck(trimmed, reply, apiKey, opts.contextSummary, reasoning);
+  if (improved) reply = improved;
 
   const productIntent = (PRODUCT_INTENTS as readonly string[]).includes(parsed.intent ?? "")
     ? (parsed.intent as ProductIntent)
