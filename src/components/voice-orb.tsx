@@ -277,7 +277,14 @@ export function VoiceOrb({ onCompleted }: Props) {
         : hasAssistantReply || hasQueryIntro
           ? "assistant_reply"
           : "confirmation";
-      void speakAndAnimate(spoken, { intent: result.intent, route });
+      // Continue conversation: na een voltooide actie automatisch opnieuw luisteren
+      // zodra de assistent klaar is met spreken (tenzij er een query-kaart open blijft).
+      const shouldAutoListen = continuousModeRef.current && !result.query_result;
+      void speakAndAnimate(spoken, {
+        intent: result.intent,
+        route,
+        onEnd: shouldAutoListen ? () => { shouldAutoListenRef.current = true; } : undefined,
+      });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
 
