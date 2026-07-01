@@ -121,11 +121,19 @@ export function VoiceOrb({ onCompleted }: Props) {
   // Wrapper: zet orb-mode op "speaking" zolang de TTS-call (incl. afspelen) loopt.
   const speakAndAnimate = useCallback(
     async (text: string, opts?: Parameters<typeof speakText>[1]) => {
+      console.log("[Orb 2] speakAndAnimate called", {
+        route: opts?.route,
+        intent: opts?.intent,
+        length: text?.length ?? 0,
+        preview: text?.slice(0, 60),
+      });
       setIsSpeaking(true);
-      // Het echte AI-antwoord begint nu te spreken — kap de wacht-erkenning af.
       stopAcknowledgement();
       try {
         await speakText(text, { route: "assistant_reply", ...opts });
+        console.log("[Orb 2b] speakAndAnimate finished");
+      } catch (err) {
+        console.error("[Orb 2!] speakAndAnimate threw", err);
       } finally {
         setIsSpeaking(false);
       }
