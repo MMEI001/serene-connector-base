@@ -75,7 +75,7 @@ export const getDailyBriefing = createServerFn({ method: "POST" })
       .from("reminders")
       .select("id,title,remind_at")
       .eq("user_id", userId)
-      .eq("is_completed", false)
+      .eq("status", "active")
       .or(`remind_at.is.null,and(remind_at.gte.${startOfDay},remind_at.lte.${endOfDay})`)
       .order("remind_at", { ascending: true, nullsFirst: false })
       .limit(1);
