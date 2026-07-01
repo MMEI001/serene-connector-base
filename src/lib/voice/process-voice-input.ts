@@ -55,14 +55,16 @@ export type BrainOptions = {
  * interne VoiceIntent die de handlers/pipeline gebruiken.
  */
 const PRODUCT_INTENTS = [
-  "conversational_answer",
-  "advice_question",
-  "planning_help",
-  "calendar_action",
-  "reminder_action",
-  "task_action",
-  "shopping_list_action",
-  "clarification_needed",
+  "conversation",
+  "advice",
+  "brainstorm",
+  "planning",
+  "calendar",
+  "reminder",
+  "shopping",
+  "todo",
+  "clarification",
+  "confirmation",
 ] as const;
 type ProductIntent = (typeof PRODUCT_INTENTS)[number];
 
