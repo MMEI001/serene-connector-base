@@ -343,9 +343,15 @@ export function VoiceOrb({ onCompleted }: Props) {
       setPending(null);
 
       try {
+        pushHistory("user", trans.text);
         const result = await pipeline({
-          data: { text: trans.text, transcription_id: trans.transcription_id },
+          data: {
+            text: trans.text,
+            transcription_id: trans.transcription_id,
+            history: historyRef.current.slice(0, -1), // exclude the just-added user turn
+          },
         });
+        if (result?.confirmation) pushHistory("assistant", result.confirmation);
         handleResult(result);
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Er ging iets mis.";
@@ -355,7 +361,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         scheduleReset();
       }
     },
-    [transcribe, pipeline, handleResult, scheduleReset, user?.id],
+    [transcribe, pipeline, handleResult, scheduleReset, user?.id, pushHistory],
   );
 
   const retryPending = useCallback(async () => {
