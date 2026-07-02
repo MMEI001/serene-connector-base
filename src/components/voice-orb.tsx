@@ -213,6 +213,8 @@ export function VoiceOrb({ onCompleted }: Props) {
       setConfirmation("");
       setQueryResult(null);
       setExperienceCard(null);
+      // products blijven staan totdat de gebruiker een nieuwe opname start —
+      // handig zodat je nog kunt tikken op een productkaart nadat de assistent uitgesproken is.
       dispatch({ type: "RESET" });
     }, DONE_HOLD_MS);
   }, []);
