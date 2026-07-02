@@ -363,6 +363,7 @@ export async function speak(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(requestBody),
+      signal: abortController?.signal,
     });
     console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
   } catch (err) {
