@@ -1,31 +1,38 @@
 ## Doel
-Bewijzen dat de main assistant reply op iPhone (Safari én Chrome) wél afspeelt door tijdelijk de acknowledgement-audio op mobile/iOS over te slaan.
+iPhone/mobile gebruikers krijgen altijd hoorbare feedback door de hoofdreply via browser `speechSynthesis` af te spelen. ElevenLabs blijft actief op desktop.
 
 ## Wijzigingen
 
-### 1. Mobile/iOS detectie helper
-Nieuwe util `src/lib/voice/is-mobile-audio.ts`:
-- Detecteert iOS (iPhone/iPad/iPod, inclusief iPadOS die zich als Mac voordoet met touch) én alle mobile browsers via UA + `matchMedia('(pointer: coarse)')`.
-- Exporteert `shouldSkipAckAudio()` die `true` teruggeeft op iOS én overige mobile devices.
-- SSR-safe (returnt `false` zonder `window`).
+### `src/lib/voice/voice-service.ts` — `speak()`
+Direct na het laden van voice-prefs, vóór cache-check en fetch, een mobile-guard toevoegen:
 
-### 2. Ack overslaan op mobile
-In `src/lib/voice/voice-service.ts`:
-- `playAcknowledgement()`: check `shouldSkipAckAudio()`. Zo ja: log `[ACK SKIP] mobile/iOS — main reply only`, return no-op stop-functie. Geen `speak()` call, geen fetch, geen audio element.
-- `prewarmVoiceCache()`: op mobile ook overslaan (geen zin om ack-clips te warmen die we niet spelen).
+```
+const skipReason = shouldSkipAckAudio(); // hergebruikt iOS/mobile detectie
+if (skipReason && !options.preloadOnly && !options.isAck) {
+  console.log("%c[iOS FALLBACK]", "color:#3b82f6;font-weight:bold",
+              `using speechSynthesis (${skipReason})`);
+  const latency = Math.round(performance.now() - t0);
+  browserSpeakFallback(cleanText, intent, route, latency);
+  options.onStart?.();
+  // browserSpeakFallback is fire-and-forget; onEnd wordt via utterance.onend afgevuurd
+  return;
+}
+```
 
-### 3. Logging voor verificatie
-Behoud bestaande `[MAIN TTS START]` / `[MAIN AUDIO PLAY]` / `[MAIN AUDIO END]` logs. Voeg `[ACK SKIP]` toe met reden (`ios` of `mobile`) zodat we in de console direct zien dat de ack-tak niet meer draait.
+`browserSpeakFallback` uitbreiden zodat het `options.onStart` / `options.onEnd` correct koppelt aan `utterance.onstart` / `utterance.onend` (nu ontbreekt dat). Dit zorgt dat de orb-state (Spreekt → Luistert) correct terugvalt en de continuous-mode werkt.
 
-### 4. Niet aanraken
-- Geen wijziging aan `VoiceOrb` — die blijft `playAcknowledgement()` aanroepen; de service bepaalt zelf of hij daadwerkelijk speelt.
-- Geen wijziging aan de pipeline of main-reply logica.
-- Desktop gedrag blijft ongewijzigd (ack blijft daar spelen).
+Ack-branch (`options.isAck`) blijft ongewijzigd — die wordt op mobile al geskipt via de bestaande `playAcknowledgement` guard.
 
-## Testplan
-1. Open app op iPhone (Safari en Chrome).
-2. Tik orb, spreek opdracht in.
-3. Verwacht in console: `[ACK SKIP] …` → `[MAIN TTS START]` → `[MAIN AUDIO PLAY]` → `[MAIN AUDIO END]`.
-4. Verwacht hoorbaar: geen "Even kijken", wel volledige hoofdreply.
+### Naming
+Detectie-helper hernoemen we niet; `shouldSkipAckAudio` dekt nu twee use-cases. We voegen alleen een korte JSDoc-noot toe dat de helper ook de "iOS TTS fallback" trigger is.
 
-Als de hoofdreply nu wél speelt: bevestigd dat ack de blocker was → we kunnen later een mobile-veilige ack-strategie ontwerpen (bv. één gecombineerde audio-stream). Zo niet: probleem zit dieper in de main-reply audio zelf en gaan we daar verder debuggen.
+### Niet aanraken
+- Geen wijzigingen in `voice-orb.tsx`, pipeline, of edge function.
+- Desktop-gedrag blijft 100% ongewijzigd (ElevenLabs + ack).
+- Trace-logging (`emitTrace` met `provider: browser`) blijft werken via `browserSpeakFallback`.
+
+## Verificatie op iPhone
+1. Tik orb, spreek opdracht.
+2. Console: `[iOS FALLBACK] using speechSynthesis (ios)` gevolgd door hoorbare browser-stem.
+3. Orb keert na uitspreken terug naar luister-state (dankzij `onEnd` hook).
+4. Desktop test: geen `[iOS FALLBACK]` log, ElevenLabs speelt normaal.
