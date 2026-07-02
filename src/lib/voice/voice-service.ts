@@ -187,7 +187,13 @@ export function stopVoice(route?: string) {
   currentAudioRoute = null;
 }
 
-function browserSpeakFallback(text: string, intent: string, route: string, latencyMs: number) {
+function browserSpeakFallback(
+  text: string,
+  intent: string,
+  route: string,
+  latencyMs: number,
+  hooks?: { onStart?: () => void; onEnd?: () => void },
+) {
   emitTrace({
     provider: "browser",
     voice_id: "system_default",
@@ -200,16 +206,34 @@ function browserSpeakFallback(text: string, intent: string, route: string, laten
     timestamp: new Date().toISOString(),
   });
 
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    hooks?.onEnd?.();
+    return;
+  }
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "nl-NL";
+    let started = false;
+    utter.onstart = () => {
+      started = true;
+      if (route !== "prewarm_ack") {
+        perf.mark("audio_play_start");
+        perf.emit({ route });
+      }
+      hooks?.onStart?.();
+    };
+    utter.onend = () => hooks?.onEnd?.();
+    utter.onerror = () => {
+      if (!started) hooks?.onStart?.();
+      hooks?.onEnd?.();
+    };
     window.speechSynthesis.speak(utter);
   } catch {
-    // ignore
+    hooks?.onEnd?.();
   }
 }
+
 
 /**
  * Centrale speak functie. Gebruikt overal exact dezelfde ElevenLabs voice_id.
