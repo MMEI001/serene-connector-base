@@ -84,6 +84,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [lastTrace, setLastTrace] = useState<EngineTrace | null>(null);
   const [experienceCard, setExperienceCard] = useState<ExperienceCardData | null>(null);
+  const [products, setProducts] = useState<ProductCardData[]>([]);
   // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
