@@ -338,6 +338,12 @@ export async function speak(
       status: "network_error",
       timestamp: new Date().toISOString(),
     });
+    // Voor de hoofd-reply MOET de gebruiker altijd iets horen — val terug
+    // op browser TTS zodat de uitleg niet verloren gaat.
+    if (isMainReply && !options.preloadOnly) {
+      console.warn("[Voice 4→browser] fallback naar browser TTS na network error");
+      browserSpeakFallback(cleanText, intent, route, latency);
+    }
     return;
   }
 
