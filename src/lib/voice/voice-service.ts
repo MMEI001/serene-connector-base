@@ -291,6 +291,31 @@ export async function speak(
     return;
   }
 
+  // iOS/mobile fallback: ElevenLabs audio speelt onbetrouwbaar af op mobile
+  // Safari/Chrome. Tijdelijk gebruiken we daar altijd browser speechSynthesis
+  // voor de hoofdreply, zodat de gebruiker altijd hoorbare feedback krijgt.
+  const mobileReason = shouldSkipAckAudio();
+  if (mobileReason && !options.preloadOnly && !options.isAck && provider !== "browser") {
+    console.log(
+      "%c[iOS FALLBACK]",
+      "color:#3b82f6;font-weight:bold",
+      `using speechSynthesis (${mobileReason})`,
+    );
+    const latency = Math.round(performance.now() - t0);
+    // Cancel eventueel lopende audio en in-flight ack fetch.
+    if (ackAbortController) {
+      ackAbortController.abort();
+      ackAbortController = null;
+    }
+    stopVoice();
+    browserSpeakFallback(cleanText, intent, route, latency, {
+      onStart: options.onStart,
+      onEnd: options.onEnd,
+    });
+    return;
+  }
+
+
   // Main reply cancelt eventuele in-flight ack fetch expliciet — anders
   // kan de ack later alsnog binnenkomen en het hoofdantwoord overschrijven.
   if (isMainReply && ackAbortController) {
