@@ -425,6 +425,9 @@ HOE JE JE ANTWOORD UITEINDELIJK LABELT (afgeleid van de behoefte, niet het start
 - todo → losse taak/notitie (note-actie).
 - clarification → alleen bij écht cruciale ontbrekende info; ambiguous=true.
 - confirmation → gebruiker bevestigt/annuleert een eerder voorstel.`;
+}
+
+
 
 /** Map product-intent + suggested_action.type → interne VoiceIntent. */
 function mapProductIntent(intent: ProductIntent, actionType?: string): VoiceIntent {
