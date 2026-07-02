@@ -307,6 +307,9 @@ export function VoiceOrb({ onCompleted }: Props) {
         : hasAssistantReply || hasQueryIntro
           ? "assistant_reply"
           : "confirmation";
+      console.log("[Orb 1a] Assistant reply (server):", result.assistant_reply);
+      console.log("[Orb 1a2] Spoken summary (server):", result.spoken_summary);
+      console.log("[Orb 1b] Spoken text (final, completed):", spoken);
       // Continue conversation: na een voltooide actie automatisch opnieuw luisteren
       // zodra de assistent klaar is met spreken (tenzij er een query-kaart open blijft).
       const shouldAutoListen = continuousModeRef.current && !result.query_result;
