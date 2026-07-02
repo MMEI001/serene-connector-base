@@ -430,6 +430,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
 
     audio.onplaying = () => {
       console.log("[Voice 6b] audio.onplaying");
+      const routeName = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
+      if (routeName !== "prewarm_ack") {
+        perf.mark("audio_play_start");
+        perf.emit({ route: routeName });
+      }
       options.onStart?.();
     };
     audio.onended = () => finish("ended");
