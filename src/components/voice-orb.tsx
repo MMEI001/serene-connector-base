@@ -26,6 +26,7 @@ import {
   subscribeVoiceTrace,
   type VoiceTraceLog,
 } from "@/lib/voice/voice-service";
+import * as perf from "@/lib/voice/perf";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
@@ -328,12 +329,16 @@ export function VoiceOrb({ onCompleted }: Props) {
 
   const runPipeline = useCallback(
     async (blob: Blob, mimeType: string, existingPendingId?: string) => {
+      perf.startTurn();
+      perf.mark("recording_end");
       let trans: Awaited<ReturnType<typeof transcribe>>;
       try {
         const file = new File([blob], `recording.${blobExt(mimeType)}`, { type: mimeType });
         const fd = new FormData();
         fd.append("file", file);
+        perf.mark("transcribe_start");
         trans = await transcribe({ data: fd });
+        perf.mark("transcribe_end");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Transcriptie lukte niet.";
         try {
@@ -350,6 +355,7 @@ export function VoiceOrb({ onCompleted }: Props) {
         setConfirmation("");
         dispatch({ type: "FAIL", message: msg });
         toast.error("Het lukte even niet. Tik op opnieuw om te proberen.");
+        perf.emit({ failed_at: "transcribe" });
         return;
       }
 
@@ -359,6 +365,7 @@ export function VoiceOrb({ onCompleted }: Props) {
 
       try {
         pushHistory("user", trans.text);
+        perf.mark("pipeline_start");
         const result = await pipeline({
           data: {
             text: trans.text,
@@ -366,6 +373,7 @@ export function VoiceOrb({ onCompleted }: Props) {
             history: historyRef.current.slice(0, -1), // exclude the just-added user turn
           },
         });
+        perf.mark("pipeline_end");
         if (result?.confirmation) pushHistory("assistant", result.confirmation);
         handleResult(result);
       } catch (err) {
@@ -374,10 +382,12 @@ export function VoiceOrb({ onCompleted }: Props) {
         dispatch({ type: "FAIL", message: msg });
         toast.error(msg);
         scheduleReset();
+        perf.emit({ failed_at: "pipeline" });
       }
     },
     [transcribe, pipeline, handleResult, scheduleReset, user?.id, pushHistory],
   );
+
 
   const retryPending = useCallback(async () => {
     if (!pending) return;

@@ -1,112 +1,83 @@
-## Doel
-Experience 001 (kinderfeestje) voelt nu correct, maar nog AI-achtig: ze gokt direct drie cadeau-ideeën zonder context op te halen, kan niet doorpraten in een tweede turn, en de TTS leest het lijstje voor in plaats van mee te denken. Sprint 5 verbetert die vier punten zonder de bestaande flow te breken.
+# Voice latency: profile + optimize
 
-## Stap 1 — Continuïteit (nieuwe `experience_state` tabel)
+Goal: first spoken word ≤ 2s, complete answer ≤ 5s. Latency > new features.
 
-Een tweede turn als "het is een meisje van acht" moet de lopende Experience verder vullen, niet opnieuw starten. We persisteren per gebruiker één actieve Experience.
+## 1. Profile the pipeline (measured, not guessed)
 
-Migratie:
-```text
-voice_experience_state(
-  user_id uuid PK references auth.users,
-  kind text check (kind in ('gift_event')),
-  data jsonb not null default '{}',
-  asked_field text,            -- welk veld is laatst opgevraagd
-  updated_at timestamptz,
-  expires_at timestamptz       -- 15 min sliding window
-)
+Add `perf.now()` timing stages into `voice-pipeline.functions.ts` and `voice-service.ts`, all emitted on one structured `[perf]` log line per turn:
+
+| Stage | Where | Current estimate |
+|---|---|---|
+| `transcribe` | `transcribe.functions.ts` (Whisper) | 800–1500 ms |
+| `context_assembly` | `memory-engine` + `context-engine` + `context-summary` | 200–600 ms |
+| `prompt_build` | `systemPrompt()` construction | <5 ms |
+| `llm_ttfb` | first byte of gateway response | 900–1800 ms |
+| `llm_total` | full JSON received | 1500–3000 ms |
+| `json_parse` | tool_call arguments parsing | <5 ms |
+| `action_gen` | mapping to VoiceAction[] | <5 ms |
+| `tts_ttfb` | first audio byte from ElevenLabs | 400–900 ms |
+| `audio_play_start` | until `audio.play()` resolves | 100–400 ms |
+
+Log shape:
 ```
-+ GRANT SELECT/INSERT/UPDATE/DELETE aan `authenticated`, ALL aan `service_role`, RLS-policies per `auth.uid()`.
-
-## Stap 2 — Conversation Engine herkent continuatie
-
-In `conversation-engine.ts` voor de classifier-call:
-1. Laad actieve experience-state (niet vervallen).
-2. Als die bestaat én de utterance lijkt op aanvullende info (korte zin, bevat leeftijd/getal, "meisje/jongen", "budget", "houdt van …", "interesse", of de Engine herkent `asked_field`-keyword), sla Gemini over en bouw zelf een `assistant_chat`-actie met `experience=gift_event` en gemergede `experience_data`.
-3. Anders: normale classify; als het resultaat een nieuwe `gift_event` is, vervang state; bij iets totaal anders, expire de oude state.
-
-Het mergen gebeurt server-side in een nieuw klein bestand `src/lib/assistant/experiences/continuation.ts` met pure helpers (`mergeGiftData`, `looksLikeContinuation`, `extractFieldsFromUtterance`) zodat het testbaar blijft.
-
-## Stap 3 — Adaptieve vragen in gift-event
-
-`runGiftEvent` krijgt een nieuwe pre-stap:
-1. Bepaal `missingFields` uit `age`, `interests`, `budget` met een prioriteit (age → interests → budget). `who` en `iso_datetime` blijven verplicht voor het reminder-voorstel maar worden niet meer "gevraagd" — slimme defaults blijven.
-2. Als er minstens één essentieel veld mist én er nog géén clarificatie is gesteld voor dit veld (kijk in state.asked_field), retourneer een nieuwe outcome-mode:
-   ```text
-   { kind: "clarify", askField, question, spokenSummary }
-   ```
-   Bijvoorbeeld `askField="age"` → `question="Hoe oud wordt ze?"`, `spokenSummary="Leuk! Hoe oud wordt ze? Dan kan ik je een paar passende cadeau-ideeën geven."`
-3. Schrijf state weg met `asked_field=age` en gemergede data.
-4. Als alle gewenste velden ingevuld zijn (of we hebben al één keer doorgevraagd) → genereer ideeën zoals nu en wis de state.
-
-In de pipeline (`pipeline.ts`) krijgt de clarify-tak een eigen pad:
-- Geen reminder-proposal, geen DB-actie.
-- `experience_card` wordt een lichte variant `kind: "gift_event_clarify"` met de vraag.
-- `result.status = "completed"`, `assistant_reply = question`, `spoken_summary = spokenSummary`.
-
-`ExperienceCard` UI krijgt een tweede render-tak voor `gift_event_clarify` (alleen tekst — geen ideeën, geen knoppen).
-
-## Stap 4 — Persoonlijkere cadeau-ideeën
-
-`generateIdeas`:
-- Krijgt `persona` mee en (indien aanwezig) `memoryHits` voor latere uitbreiding.
-- Prompt wordt aangevuld met persona-stijl ("rustig", "gestructureerd") en eventuele eerdere notitie-keys (privacy: alleen sleutel/categorie, nooit ruwe waarden uit memoryHits).
-- Default-ideeën vertakken op leeftijdsbanden (0–3, 4–7, 8–11, 12+) i.p.v. één algemene 6–8-default.
-- Bij gemengde of onbekende interesses: gebruik een licht-veiligere prompt ("vermijd lawaaiig speelgoed als ouder rust waardeert").
-
-## Stap 5 — Natuurlijker gesproken samenvatting
-
-`buildSpokenSummary` wordt herschreven:
-- Random uit ~4 openers ("Leuk", "Wat lief", "Mooi", "Goed dat je het noemt") — deterministisch op `user_id`+`turn_id` zodat dezelfde turn altijd dezelfde regel geeft.
-- Combineert ideeën als zinsdeel, niet als opsomming met `, of`: "Ik dacht aan een knutselset, iets om mee te bouwen, of een mooi prentenboek."
-- Vervolgzin verwijst naar geleverde context als die er is ("voor een meisje van acht"): "Zal ik je vrijdag om negen uur herinneren om iets voor haar uit te kiezen?"
-- Bij clarify: korte rustige vraag, geen "Ik denk met je mee"-prefix.
-- Cijfers worden uitgeschreven in TTS-vriendelijk Nederlands (09:00 → "negen uur", 8 → "acht").
-
-## Stap 6 — EngineTrace uitbreiding
-
-In `types.ts` wordt `experience` uitgebreid (privacy-veilig — alleen enums/tellingen):
-```ts
-experience?: {
-  kind: "gift_event";
-  had_existing_event: boolean;
-  had_existing_reminder: boolean;
-  ideas_count: number;
-  mode: "ideas" | "clarify";
-  missing_fields: Array<"age" | "interests" | "budget">;
-  asked_field: "age" | "interests" | "budget" | null;
-  continuation_used: boolean;
-  state_age_ms: number | null;
-  ms: number;
-};
+[perf] turn=… t=1234 transcribe=980 ctx=310 prompt=2 llm_ttfb=1120 llm_total=2100 tts_ttfb=520 play=180 total=3810
 ```
+Run 5 real turns, paste numbers back — those become the baseline the rest optimizes against.
 
-Nieuwe `OpportunityReason`-enum-waarde `needs_clarification` voor de Initiative Engine zodat de Decision Engine geen DB-actie doorlaat zolang de clarify-tak loopt.
+## 2. Two response modes
 
-Het debug-paneel (`engine-trace-panel.tsx`) toont deze extra chips.
+Add `BrainOptions.mode: "everyday" | "deep"` (rename existing `voice|text|test` → keep `test`, map old `voice` to `everyday`).
 
-## Niet-doelen
-- Geen wijzigingen aan andere Experiences (er is er maar één).
-- Geen wijzigingen aan auth, agenda, reminders-schema.
-- Geen voicechange — alleen samenvatting-tekst.
-- Geen multi-experience state (één actieve per user volstaat).
+- **Everyday** (default for orb): flash model, no reasoning, no quality, no history-summary, streamed reply, 4s hard cap. Target < 3.5s total.
+- **Deep**: pro model + reasoning + quality. Triggered explicitly ("denk hier eens goed over na", "help me plannen", `?mode=deep`) or when Brain intent = `planning`/`brainstorm` and user opts in. Target < 8s, spinner allowed.
 
-## Technische details
-- Continuation-window: 15 minuten sliding (`updated_at + 15m`). Bij commit/cancel van een reminder-voorstel uit dezelfde experience, wis state direct.
-- Max één clarify-ronde per Experience — daarna doorgaan met defaults, anders blijven we vragen stellen.
-- Pipeline-tak voor clarify schrijft géén `voice_actions`-rij; alleen `voice_intents` audit-log met `engine_trace.experience.mode = "clarify"`.
-- State-tabel is auth-only (geen `anon` grant); reads/writes uitsluitend via `requireSupabaseAuth`-server-functions (geen edge cron).
-- Random-opener wordt seeded met een hash van `user_id|turn_id` (geen `Math.random` aan server-zijde voor reproduceerbare debug-runs).
+Router: keyword + intent-heuristic in `processVoiceInput` picks mode when caller passes `auto`.
 
-## Bestanden
-- migratie: `supabase/migrations/<ts>_voice_experience_state.sql`
-- nieuw: `src/lib/assistant/experiences/continuation.ts`
-- nieuw: `src/lib/assistant/experiences/spoken-summary.ts` (uit gift-event gehaald, herschreven)
-- update: `src/lib/assistant/experiences/gift-event.ts` (clarify-modus, persona-prompt, lees/schrijf state)
-- update: `src/lib/assistant/conversation-engine.ts` (continuation-detectie)
-- update: `src/lib/assistant/pipeline.ts` (clarify-tak, trace)
-- update: `src/lib/assistant/types.ts` (trace + reason)
-- update: `src/lib/assistant/initiative-engine.ts` (`needs_clarification` reason → score 0)
-- update: `src/components/experience-card.tsx` (`gift_event_clarify` variant)
-- update: `src/components/debug/engine-trace-panel.tsx` (nieuwe chips)
-- update: `src/integrations/supabase/types.ts` (gegenereerd na migratie)
+## 3. Context Manager (relevance, not dump)
+
+New file `src/lib/assistant/context-manager.ts`:
+- Input: user utterance + full memory + context snapshot.
+- Output: ≤ 400-token slice with only records whose tags/category/temporal-window match the utterance (cheap keyword + category scoring, no LLM).
+- Replaces the full `buildContextSummary` blob in the voice path. Deep mode may still use the fuller summary.
+
+Expected prompt reduction: 60–80 %.
+
+## 4. Split the mega-prompt
+
+Break `systemPrompt()` into three cached blocks concatenated per turn:
+1. `PERSONALITY_PROMPT` — static, ~40 lines (identity, rules, tone). Never changes per user.
+2. `PERSONA_BLOCK` — user's persona fragment.
+3. `CONTEXT_BLOCK` — output of Context Manager only.
+4. `ACTIONS_SCHEMA_HINT` — trimmed intent/suggested_actions rules (moved out of the giant prose block; the tool schema already enforces structure, so prose can shrink ~50 %).
+
+Drop the 6 verbose in-prompt examples down to 2. The tool schema does the heavy lifting.
+
+## 5. Stream the reply to TTS
+
+Currently the pipeline waits for the full tool-call JSON, then calls ElevenLabs, then plays. First spoken word ≈ llm_total + tts_ttfb ≈ 2.5–4s.
+
+- Fire a **parallel** non-tool streaming call for `reply` only (`stream: true`, plain text, low temp) at the same instant as the tool-call request.
+- As soon as the first sentence arrives (≈ 400–800 ms), push it to ElevenLabs streaming endpoint (`/stream`) and start playback.
+- Tool-call response arrives in parallel and drives suggested_actions / UI card.
+- If streaming reply and tool reply diverge, tool reply wins for the card; spoken text is what user already heard.
+
+This is the single biggest first-word-latency win (~1.5s off).
+
+## 6. Cleanup
+
+- Remove `runReasoning` and `runQualityCheck` from the everyday path entirely (already flagged off, but delete dead branches in the hot path).
+- Cache `PERSONALITY_PROMPT` + tool schema JSON as module constants (already are; verify no per-turn rebuild).
+- Persona `promptFragment` capped at 300 chars.
+
+## Deliverables
+
+1. `[perf]` instrumentation shipped first (one commit). User runs 5 turns, reports numbers.
+2. Then in one follow-up: context-manager, prompt split, mode routing, streaming TTS.
+3. Baseline vs post-optimization numbers in the reply.
+
+## Technical notes
+
+- Streaming reply uses `stream: true` on the gateway; parse SSE `data:` chunks; flush to ElevenLabs `/v1/text-to-speech/{id}/stream` per sentence boundary (`.`, `!`, `?`, newline).
+- `AbortController` shared between streaming-reply call and tool-call call so a user re-tap cancels both.
+- Keep the tool-call as source of truth for `intent` / `suggested_actions`; the streaming call only produces spoken text.
+- Everyday-mode timeout drops from 6s → 4s for the tool-call; streaming reply has its own 3s first-token deadline before falling back to tool-call reply.

@@ -224,14 +224,26 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     });
 
     // 0. Persona laden uit user_profiles (RLS-actief via supabase-client van auth-middleware)
+    const t_persona = performance.now();
     const persona = await loadUserPersona(supabase, userId);
+    const persona_ms = Math.round(performance.now() - t_persona);
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
     //    Brain-laag krijgt de conversation history en (later) contextsamenvatting.
+    const t_brain = performance.now();
     const { actions: classified, meta } = await processVoiceInput(text, persona, {
       history: data.history,
     });
+    const brain_ms = Math.round(performance.now() - t_brain);
+    console.log("[perf server]", {
+      turn: legacyTurnId.slice(0, 8),
+      persona_ms,
+      brain_ms,
+      text_len: text.length,
+      history_len: data.history.length,
+    });
     const primary = classified[0];
+
 
 
     // 1a. Sprint 2 — Intelligence Framework narrow routing.

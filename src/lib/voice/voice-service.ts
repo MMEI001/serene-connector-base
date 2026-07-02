@@ -10,6 +10,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import * as perf from "@/lib/voice/perf";
 
 export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
@@ -215,6 +216,8 @@ export async function speak(
   const intent = options.intent ?? "general";
   const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
+  const isMainReply = !options.isAck && !options.preloadOnly && route !== "prewarm_ack";
+  if (isMainReply) perf.mark("speak_start");
 
   console.log("[Voice 3] speak() entry", {
     route,
@@ -369,6 +372,7 @@ export async function speak(
   }
 
   const blob = await res.blob();
+  if (isMainReply) perf.mark("tts_first_byte");
   console.log("[Voice 5] TTS blob received", { size: blob.size, type: blob.type });
   audioBlobCache.set(cacheKey, blob);
 
@@ -426,6 +430,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
 
     audio.onplaying = () => {
       console.log("[Voice 6b] audio.onplaying");
+      const routeName = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
+      if (routeName !== "prewarm_ack") {
+        perf.mark("audio_play_start");
+        perf.emit({ route: routeName });
+      }
       options.onStart?.();
     };
     audio.onended = () => finish("ended");
