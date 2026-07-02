@@ -11,6 +11,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import * as perf from "@/lib/voice/perf";
+import { shouldSkipAckAudio } from "@/lib/voice/is-mobile-audio";
 
 export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
