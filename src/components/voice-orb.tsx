@@ -614,19 +614,20 @@ export function VoiceOrb({ onCompleted }: Props) {
 
 
   const handleTap = useCallback(() => {
-    if (state === "confirming") return; // alleen via knoppen
     if (state === "error" && pending) {
       retryPending();
       return;
     }
-    if (state === "idle" || state === "done" || state === "error") {
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-      setConfirmation("");
-      setQueryResult(null);
-      startListening();
-    } else if (state === "listening") {
+    if (state === "listening") {
       stopListening();
+      return;
     }
+    // Toegestaan vanuit idle/done/error/confirming/speaking — gebruiker mag altijd
+    // terugpraten, ook als er een bevestigingskaart of query-resultaat open staat.
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    setConfirmation("");
+    setQueryResult(null);
+    startListening();
   }, [state, pending, retryPending, startListening, stopListening]);
 
   const hint =
