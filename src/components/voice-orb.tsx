@@ -313,10 +313,15 @@ export function VoiceOrb({ onCompleted }: Props) {
       // Continue conversation: na een voltooide actie automatisch opnieuw luisteren
       // zodra de assistent klaar is met spreken (tenzij er een query-kaart open blijft).
       const shouldAutoListen = continuousModeRef.current && !result.query_result;
+      const hasQuery = Boolean(result.query_result);
       void speakAndAnimate(spoken, {
         intent: result.intent,
         route,
-        onEnd: shouldAutoListen ? () => { shouldAutoListenRef.current = true; } : undefined,
+        // scheduleReset pas ná audio.onended (of onerror) — nooit tijdens speaking.
+        onEnd: () => {
+          if (shouldAutoListen) shouldAutoListenRef.current = true;
+          if (!hasQuery) scheduleReset();
+        },
       });
       dispatch({ type: "DISPATCHED" });
       vibrate(20);
@@ -325,8 +330,6 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (result.query_result) {
         // Query-resultaat blijft staan tot gebruiker 'm sluit of nieuwe opname start.
         setQueryResult(result.query_result);
-      } else {
-        scheduleReset();
       }
 
     },
