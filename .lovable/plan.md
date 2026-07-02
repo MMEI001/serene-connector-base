@@ -1,43 +1,45 @@
 ## Doel
-`browserSpeakFallback` gebruikt op iOS/mobile automatisch de beste beschikbare vrouwelijke Nederlandse stem in plaats van de systeem-default.
+HoofdRust laten redeneren vanuit menselijke behoefte, niet vanuit intents/acties. Acties (reminder, agenda, boodschappenlijst) worden een bijproduct van "hoe help ik deze persoon", nooit het startpunt.
 
-## Wijzigingen — alleen in `src/lib/voice/voice-service.ts`
+## Waar de wijziging landt
+Alles gebeurt in de Brain-laag — geen wijzigingen aan handlers, DB, UI of suggestion-schema. Concreet: `src/lib/voice/process-voice-input.ts` (systemPrompt + reasoning-prompt).
 
-### 1. Voice selector helper
-Nieuwe functie `pickPreferredVoice(): SpeechSynthesisVoice | null` die `speechSynthesis.getVoices()` doorloopt en scoort. Prioriteit (hoog → laag):
+## Aanpassingen
 
-1. `nl-NL` / `nl-BE` + vrouwelijk (naam matcht Ellen, Xander uitsluiten, prefer Claire, Ellen, Fenna, Lotte, Saskia, of `name`-heuristiek "female"/vrouwelijke namen). Bonus als naam bevat "Siri".
-2. Elke `nl-*` stem (ongeacht geslacht).
-3. `en-*` + vrouwelijk (Samantha, Karen, Moira, Serena, Susan, "female").
-4. `null` → laat browser default.
+### 1. Reasoning Brain herformuleren (`REASONING_PROMPT`)
+Vervang de huidige 10-vragenlijst door de 7-stappen-behoefte-analyse uit de opdracht, in exact deze volgorde:
+1. Wat is de echte behoefte achter deze vraag?
+2. Welke context weet ik al over deze persoon?
+3. Wat zou een uitstekende persoonlijke assistent nu doen?
+4. Hoe kan ik de mentale belasting verminderen?
+5. Kan ik iets voorbereiden zodat de gebruiker minder hoeft na te denken?
+6. Is een vervolgvraag nodig?
+7. Pas nu: is een reminder / taak / agenda / boodschappenlijst nuttig — en zo ja welke?
 
-Vrouwelijk-detectie via een kleine known-female-names lijst (Samantha, Karen, Moira, Serena, Susan, Victoria, Tessa, Fiona, Allison, Ava, Zoe, Ellen, Claire, Fenna, Lotte, Saskia, Xander uitsluiten, Daniel/Alex/Fred uitsluiten) plus check op substring "female".
+Regel expliciet vastleggen: stap 7 mag nooit "ja" zijn als stap 1–5 dat niet ondersteunen. Acties zijn hulpmiddel, geen doel.
 
-### 2. Async voices ready
-iOS Safari geeft bij eerste `getVoices()` vaak een lege lijst. Helper `ensureVoicesLoaded(): Promise<SpeechSynthesisVoice[]>`:
-- Als `getVoices()` >0 → direct.
-- Anders `voiceschanged` event afwachten met 500 ms timeout, dan opnieuw `getVoices()`.
+Reasoning blijft interne stap, ongewijzigde plek in de pipeline. In `mode: "voice"` blijft ze standaard uit (latency-budget), maar wordt automatisch aangezet voor `mode: "text"` en `mode: "test"`. Overweeg in een volgende iteratie voor voice-mode een "reasoning-lite" (1 zin, max 800ms) — dit staat als vervolg genoteerd, niet nu.
 
-### 3. `browserSpeakFallback` async-vriendelijk maken
-- Sync: `SpeechSynthesisUtterance` blijft SYNCHROON aangemaakt (behoud iOS gesture-context).
-- Direct daarna `ensureVoicesLoaded().then(voices => { utter.voice = pickPreferredVoice(voices) ?? null; console.log("Selected iOS Voice:", { name, lang }); })` en dan `speak(utter)` aanroepen ná voice-toewijzing. Op iOS is deze micro-vertraging aanvaardbaar; de utterance is al in de gesture-context aangemaakt dus `.speak()` blijft toegestaan.
-- Als voices al beschikbaar zijn (desktop pad wordt hier niet geraakt), synchroon direct spelen.
+### 2. Hoofd-systemPrompt herschrijven (`systemPrompt`)
+- KERNFILOSOFIE bovenaan herschrijven: "Denk nooit eerst in intents. Denk eerst: wat probeert deze persoon te bereiken? Dan: hoe help ik? Dan pas: is een actie nuttig?"
+- Expliciet benoemen: HoofdRust gedraagt zich als een persoonlijke assistent die de gebruiker al jaren kent — niet als chatbot, agenda-app of opdracht-uitvoerder.
+- INTENT-KEUZE-sectie verschuiven naar het einde onder een neutrale kop ("Hoe je je antwoord uiteindelijk labelt") en herformuleren als afgeleide van de behoefte, niet als startpunt.
+- Actie-regels aanscherpen: bied maximaal één vervolgstap aan, en alleen wanneer stap 5/7 van de redenering dat rechtvaardigt. Bij twijfel: geen actie, wel een warm inhoudelijk antwoord.
+- Twee canonieke VOORBEELDEN vervangen door de twee uit de opdracht (borrelhapjes zaterdag → eerst inspiratie, dán aanbod boodschappenlijst; "wat eten we vanavond" → concreet voorstel dat de beslissing wegneemt + aanbod lijstje).
+- Reply-toon: warm, beslissend, ontlastend — nooit een vragende terugkaats-vraag als de gebruiker duidelijk om ontlasting vraagt.
 
-### 4. Cache
-Module-level `cachedPreferredVoice: SpeechSynthesisVoice | null` — na eerste selectie hergebruiken zodat volgende turns geen extra log/scan doen. Alleen bij eerste keer loggen:
-```
-console.log("%c[Selected iOS Voice]", "color:#3b82f6;font-weight:bold",
-            { name: voice.name, lang: voice.lang });
-```
-Als geen voice gekozen kan worden: log `Selected iOS Voice: system default`.
+### 3. Reply-lengte en voice-snelheid
+Voice-mode blijft snel: 2–4 zinnen, één vervolgstap. Geen extra AI-calls, geen nieuwe modellen. De verandering zit puur in prompts.
 
-## Niet aanraken
-- Desktop ElevenLabs-pad ongewijzigd.
-- Geen wijzigingen buiten `voice-service.ts`.
-- Ack-skip logic blijft zoals hij is.
+### 4. Verificatie via `/test-mode`
+Testset (bevestigen dat gedrag klopt):
+- "Heb je leuke borrelhapjes voor zaterdag?" → inspiratie eerst, dan één aanbod voor boodschappenlijst.
+- "Ik weet niet wat we vanavond moeten eten." → concreet voorstel dat de beslissing wegneemt + aanbod lijstje.
+- "Ik voel me overprikkeld." → warme reply, géén actie.
+- "Zet morgen 9 uur tandarts." → directe agenda-actie blijft werken (behoefte = agenda vastleggen).
+- "Wat staat er morgen op mijn agenda?" → query-antwoord, geen actie voorgesteld.
 
-## Verificatie op iPhone
-1. Eerste turn: console toont `[Selected iOS Voice] { name: "...", lang: "nl-NL" }`.
-2. Hoorbaar verschil met vorige systeem-default (natuurlijker/vrouwelijk NL).
-3. Volgende turns: geen nieuwe voice-selectie log (cached).
-4. Bij ontbreken NL-stem: fallback naar EN-vrouwelijk, log toont juiste taalcode.
+## Buiten scope
+- Geen wijzigingen aan `dispatch-voice-action`, handlers, suggestion-card UI, of DB-schema.
+- Geen nieuw actie-type; boodschappenlijst blijft `note` met bullet-tekst.
+- Geen model-upgrade; latency-profiel blijft gelijk.
