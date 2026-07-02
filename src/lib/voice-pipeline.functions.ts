@@ -395,9 +395,18 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     //     bestaande needs_confirmation / commitVoiceBundle-flow.
     let assistantReply: string | null = null;
     let actions: VoiceAction[] = classified;
+    // Reply zit ALTIJD op primary.payload.reply (Brain garandeert dat), ongeacht
+    // of het intent assistant_chat, note, reminder of event is. Zonder deze
+    // hoisting krijgt de UI/TTS voor direct-uitgevoerde acties geen
+    // assistant_reply mee en valt de gesproken uitleg weg.
+    {
+      const anyReplyRaw = primary?.payload?.reply;
+      if (typeof anyReplyRaw === "string" && anyReplyRaw.trim()) {
+        assistantReply = anyReplyRaw.trim();
+      }
+    }
     if (primary?.intent === "assistant_chat") {
-      const replyRaw = primary.payload.reply;
-      assistantReply = typeof replyRaw === "string" && replyRaw.trim() ? replyRaw.trim() : "Ik denk met je mee.";
+      if (!assistantReply) assistantReply = "Ik denk met je mee.";
       const suggestedRaw = primary.payload.suggested_actions;
       const suggested: VoiceAction[] = Array.isArray(suggestedRaw)
         ? suggestedRaw
