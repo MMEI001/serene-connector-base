@@ -1,38 +1,43 @@
 ## Doel
-iPhone/mobile gebruikers krijgen altijd hoorbare feedback door de hoofdreply via browser `speechSynthesis` af te spelen. ElevenLabs blijft actief op desktop.
+`browserSpeakFallback` gebruikt op iOS/mobile automatisch de beste beschikbare vrouwelijke Nederlandse stem in plaats van de systeem-default.
 
-## Wijzigingen
+## Wijzigingen — alleen in `src/lib/voice/voice-service.ts`
 
-### `src/lib/voice/voice-service.ts` — `speak()`
-Direct na het laden van voice-prefs, vóór cache-check en fetch, een mobile-guard toevoegen:
+### 1. Voice selector helper
+Nieuwe functie `pickPreferredVoice(): SpeechSynthesisVoice | null` die `speechSynthesis.getVoices()` doorloopt en scoort. Prioriteit (hoog → laag):
 
+1. `nl-NL` / `nl-BE` + vrouwelijk (naam matcht Ellen, Xander uitsluiten, prefer Claire, Ellen, Fenna, Lotte, Saskia, of `name`-heuristiek "female"/vrouwelijke namen). Bonus als naam bevat "Siri".
+2. Elke `nl-*` stem (ongeacht geslacht).
+3. `en-*` + vrouwelijk (Samantha, Karen, Moira, Serena, Susan, "female").
+4. `null` → laat browser default.
+
+Vrouwelijk-detectie via een kleine known-female-names lijst (Samantha, Karen, Moira, Serena, Susan, Victoria, Tessa, Fiona, Allison, Ava, Zoe, Ellen, Claire, Fenna, Lotte, Saskia, Xander uitsluiten, Daniel/Alex/Fred uitsluiten) plus check op substring "female".
+
+### 2. Async voices ready
+iOS Safari geeft bij eerste `getVoices()` vaak een lege lijst. Helper `ensureVoicesLoaded(): Promise<SpeechSynthesisVoice[]>`:
+- Als `getVoices()` >0 → direct.
+- Anders `voiceschanged` event afwachten met 500 ms timeout, dan opnieuw `getVoices()`.
+
+### 3. `browserSpeakFallback` async-vriendelijk maken
+- Sync: `SpeechSynthesisUtterance` blijft SYNCHROON aangemaakt (behoud iOS gesture-context).
+- Direct daarna `ensureVoicesLoaded().then(voices => { utter.voice = pickPreferredVoice(voices) ?? null; console.log("Selected iOS Voice:", { name, lang }); })` en dan `speak(utter)` aanroepen ná voice-toewijzing. Op iOS is deze micro-vertraging aanvaardbaar; de utterance is al in de gesture-context aangemaakt dus `.speak()` blijft toegestaan.
+- Als voices al beschikbaar zijn (desktop pad wordt hier niet geraakt), synchroon direct spelen.
+
+### 4. Cache
+Module-level `cachedPreferredVoice: SpeechSynthesisVoice | null` — na eerste selectie hergebruiken zodat volgende turns geen extra log/scan doen. Alleen bij eerste keer loggen:
 ```
-const skipReason = shouldSkipAckAudio(); // hergebruikt iOS/mobile detectie
-if (skipReason && !options.preloadOnly && !options.isAck) {
-  console.log("%c[iOS FALLBACK]", "color:#3b82f6;font-weight:bold",
-              `using speechSynthesis (${skipReason})`);
-  const latency = Math.round(performance.now() - t0);
-  browserSpeakFallback(cleanText, intent, route, latency);
-  options.onStart?.();
-  // browserSpeakFallback is fire-and-forget; onEnd wordt via utterance.onend afgevuurd
-  return;
-}
+console.log("%c[Selected iOS Voice]", "color:#3b82f6;font-weight:bold",
+            { name: voice.name, lang: voice.lang });
 ```
+Als geen voice gekozen kan worden: log `Selected iOS Voice: system default`.
 
-`browserSpeakFallback` uitbreiden zodat het `options.onStart` / `options.onEnd` correct koppelt aan `utterance.onstart` / `utterance.onend` (nu ontbreekt dat). Dit zorgt dat de orb-state (Spreekt → Luistert) correct terugvalt en de continuous-mode werkt.
-
-Ack-branch (`options.isAck`) blijft ongewijzigd — die wordt op mobile al geskipt via de bestaande `playAcknowledgement` guard.
-
-### Naming
-Detectie-helper hernoemen we niet; `shouldSkipAckAudio` dekt nu twee use-cases. We voegen alleen een korte JSDoc-noot toe dat de helper ook de "iOS TTS fallback" trigger is.
-
-### Niet aanraken
-- Geen wijzigingen in `voice-orb.tsx`, pipeline, of edge function.
-- Desktop-gedrag blijft 100% ongewijzigd (ElevenLabs + ack).
-- Trace-logging (`emitTrace` met `provider: browser`) blijft werken via `browserSpeakFallback`.
+## Niet aanraken
+- Desktop ElevenLabs-pad ongewijzigd.
+- Geen wijzigingen buiten `voice-service.ts`.
+- Ack-skip logic blijft zoals hij is.
 
 ## Verificatie op iPhone
-1. Tik orb, spreek opdracht.
-2. Console: `[iOS FALLBACK] using speechSynthesis (ios)` gevolgd door hoorbare browser-stem.
-3. Orb keert na uitspreken terug naar luister-state (dankzij `onEnd` hook).
-4. Desktop test: geen `[iOS FALLBACK]` log, ElevenLabs speelt normaal.
+1. Eerste turn: console toont `[Selected iOS Voice] { name: "...", lang: "nl-NL" }`.
+2. Hoorbaar verschil met vorige systeem-default (natuurlijker/vrouwelijk NL).
+3. Volgende turns: geen nieuwe voice-selectie log (cached).
+4. Bij ontbreken NL-stem: fallback naar EN-vrouwelijk, log toont juiste taalcode.
