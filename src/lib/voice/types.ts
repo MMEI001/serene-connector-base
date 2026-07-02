@@ -87,6 +87,11 @@ export type ActionResult = {
    *  boven assistant_reply/confirmation bij experience-kaarten. */
   spoken_summary?: string;
 
+  // ---- web-gestuurde productenlijst (Firecrawl-flow) ----
+  /** Uniforme productkaarten uit actuele webresultaten. Alleen aanwezig
+   *  wanneer de Brain besloot live info te gebruiken. */
+  products?: import("@/components/product-card").ProductCardData[];
+
   // ---- bewerkbare voorstel-velden (alleen bij needs_confirmation met 1 actie) ----
   editable?: {
     intent: "reminder" | "event" | "note";
