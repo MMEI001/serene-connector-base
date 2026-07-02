@@ -216,6 +216,8 @@ export async function speak(
   const intent = options.intent ?? "general";
   const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
+  const isMainReply = !options.isAck && !options.preloadOnly && route !== "prewarm_ack";
+  if (isMainReply) perf.mark("speak_start");
 
   console.log("[Voice 3] speak() entry", {
     route,
