@@ -343,6 +343,18 @@ const TOOL = {
             budget_currency: { type: "string" },
           },
         },
+        needs_live_info: {
+          type: "boolean",
+          description:
+            "True ALLEEN wanneer een goed antwoord actuele externe informatie vereist (aanbiedingen, prijzen, producten, winkels, openingstijden, websites, nieuws, beschikbaarheid, evenementen). NIET voor recepten, algemeen advies, opvoeding, planning, mentale steun of brainstormen — daar weet je zelf wel raad. Bij twijfel: false.",
+        },
+        live_queries: {
+          type: "array",
+          maxItems: 2,
+          description:
+            "Als needs_live_info=true: 1 of 2 korte Nederlandse zoekopdrachten voor het web. Mag site:-filter bevatten (bv. 'wijn aanbieding site:ah.nl'). Kort en concreet. Anders leeg.",
+          items: { type: "string" },
+        },
       },
       required: ["reply", "intent", "action_required", "needs_confirmation"],
     },
@@ -408,6 +420,13 @@ SUGGESTED_ACTIONS REGELS
 
 EXPERIENCE
 - Sociale gebeurtenis voor iemand anders (kinderfeestje, verjaardag, bruiloft) → experience="gift_event" + experience_data. Laat suggested_actions leeg, geef warme reply.
+
+ACTUELE INFORMATIE (needs_live_info)
+- Zet needs_live_info=true wanneer je zelf onmogelijk een goed antwoord kunt geven zonder actuele externe info: aanbiedingen, prijzen, producten, winkels, openingstijden, websites, nieuws, beschikbaarheid, evenementen.
+- Zet false voor: recepten, algemeen advies, koken, opvoeding, planning, mentale steun, brainstormen — dat weet je zelf.
+- Bij true: geef in \`reply\` een héél korte overbrugging ("Momentje, ik kijk even.") — een andere laag vult daarna het echte antwoord in. Laat suggested_actions leeg. Geef in \`live_queries\` 1 of 2 korte Nederlandse zoekopdrachten (gebruik site:-filter als de gebruiker een specifieke winkel noemt).
+- Voorbeeld: "aanbiedingen wijn Albert Heijn" → needs_live_info=true, live_queries=["wijn aanbieding site:ah.nl", "wijn deal site:gall.nl"].
+- Voorbeeld: "recept pasta" → needs_live_info=false.
 
 ALGEMEEN
 - "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam.
@@ -607,12 +626,19 @@ export async function processVoiceInput(
     suggested_actions?: SuggestedActionRaw[];
     experience?: string;
     experience_data?: Record<string, unknown>;
+    needs_live_info?: boolean;
+    live_queries?: string[];
   };
   try {
     parsed = JSON.parse(call.function.arguments);
   } catch {
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
+
+  const needsLiveInfo = !!parsed.needs_live_info;
+  const liveQueries = Array.isArray(parsed.live_queries)
+    ? parsed.live_queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 2)
+    : [];
 
   let reply = (parsed.reply ?? "").trim();
   if (!reply) {
@@ -661,7 +687,9 @@ export async function processVoiceInput(
   const actions: VoiceAction[] = [];
 
   // Directe uitvoering zonder bevestiging → emit interne intent direct.
-  if (actionRequired && !needsConfirmation && suggestedActions.length > 0) {
+  // Uitzondering: als needs_live_info=true willen we ALTIJD via assistant_chat
+  // gaan zodat de web-synthese-laag zijn werk kan doen.
+  if (!needsLiveInfo && actionRequired && !needsConfirmation && suggestedActions.length > 0) {
     for (const sa of suggestedActions) {
       const intent = mapProductIntent(productIntent, sa.intent);
       actions.push({
@@ -676,11 +704,15 @@ export async function processVoiceInput(
     // Standaard: assistant_chat met reply + optionele suggested_actions
     // (deze vormen de bevestigings-kaart in de UI).
     const chatPayload: Record<string, unknown> = { reply };
-    if (actionRequired && suggestedActions.length > 0) {
+    if (!needsLiveInfo && actionRequired && suggestedActions.length > 0) {
       chatPayload.suggested_actions = suggestedActions;
     }
     if (parsed.experience) chatPayload.experience = parsed.experience;
     if (parsed.experience_data) chatPayload.experience_data = parsed.experience_data;
+    if (needsLiveInfo) {
+      chatPayload.needs_live_info = true;
+      chatPayload.live_queries = liveQueries;
+    }
     actions.push({
       intent: "assistant_chat",
       payload: chatPayload,

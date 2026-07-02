@@ -244,14 +244,72 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     });
     const primary = classified[0];
 
+    // 1a. WEB-INFORMATIE — Firecrawl als onzichtbaar hulpmiddel.
+    //     De Brain heeft besloten dat actuele externe info nodig is; wij halen
+    //     die op en laten een tweede model-call een natuurlijk antwoord +
+    //     uniforme product-cards genereren. Geen aparte intent voor de UI.
+    if (
+      primary?.intent === "assistant_chat" &&
+      primary.payload.needs_live_info === true
+    ) {
+      const queriesRaw = primary.payload.live_queries;
+      const queries = Array.isArray(queriesRaw)
+        ? queriesRaw.filter((q): q is string => typeof q === "string" && q.trim().length > 0)
+        : [];
+      const t_web = performance.now();
+      const { webSearch } = await import("@/lib/tools/web-search.server");
+      const { synthesizeWithWeb } = await import("@/lib/tools/web-synth.server");
+      const hits = queries.length > 0 ? await webSearch(queries) : [];
+      const web_ms = Math.round(performance.now() - t_web);
+
+      let reply: string;
+      let products: PipelineResult["products"] = undefined;
+      if (hits.length === 0) {
+        reply =
+          "Ik kan actuele informatie hierover nu niet ophalen, maar ik denk graag met je mee — vertel eens wat je zoekt.";
+      } else {
+        const t_synth = performance.now();
+        const synth = await synthesizeWithWeb(text, hits);
+        const synth_ms = Math.round(performance.now() - t_synth);
+        console.log("[perf web]", { queries, hits: hits.length, web_ms, synth_ms });
+        reply =
+          synth.reply ||
+          "Ik vond een paar opties voor je. Wil je er één op je boodschappenlijst?";
+        products = synth.products;
+      }
+
+      supabase
+        .from("voice_intents")
+        .insert({
+          user_id: userId,
+          transcription_id: data.transcription_id,
+          model: meta.model,
+          intent: "assistant_chat",
+          confidence: primary.confidence,
+          payload: {
+            actions: classified,
+            persona_signature: persona.signature,
+            web: { queries, hits_count: hits.length, products_count: products?.length ?? 0 },
+          } as never,
+          prompt_tokens: meta.prompt_tokens,
+          completion_tokens: meta.completion_tokens,
+          total_tokens: meta.total_tokens,
+        })
+        .then(({ error }) => {
+          if (error) console.error("[pipeline:web] log", error);
+        });
+
+      return {
+        intent: "assistant_chat",
+        status: "completed",
+        confirmation: reply,
+        assistant_reply: reply,
+        products,
+        engine_trace: buildLegacyTrace(),
+      };
+    }
 
 
-    // 1a. Sprint 2 — Intelligence Framework narrow routing.
-    //     assistant_chat zonder DB-impacterende suggested_actions mag door de
-    //     nieuwe runAssistantTurn(). Bij fout val terug op legacy-pad.
-    //     Sprint 5 — als er een lopende Experience-state is, routeren we
-    //     ook continuation-zinnen (bv. "het is een meisje van acht") door
-    //     het framework, ongeacht hoe de classifier 'm labelde.
     try {
       const mode = await resolveAssistantMode(supabase, userId);
       const suggestedRaw = primary?.payload.suggested_actions;

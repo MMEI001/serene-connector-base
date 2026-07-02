@@ -32,6 +32,7 @@ import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
 import { EngineTracePanel } from "@/components/debug/engine-trace-panel";
 import { ExperienceCard, type ExperienceCardData } from "@/components/experience-card";
+import { ProductCard, type ProductCardData } from "@/components/product-card";
 
 const MAX_RECORDING_SECONDS = 60;
 const DONE_HOLD_MS = 1600;
@@ -83,6 +84,7 @@ export function VoiceOrb({ onCompleted }: Props) {
   const [queryResult, setQueryResult] = useState<QueryResult | null>(null);
   const [lastTrace, setLastTrace] = useState<EngineTrace | null>(null);
   const [experienceCard, setExperienceCard] = useState<ExperienceCardData | null>(null);
+  const [products, setProducts] = useState<ProductCardData[]>([]);
   // (revive wordt nu via `confirming` afgehandeld — één en dezelfde editable card)
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState("");
@@ -211,6 +213,8 @@ export function VoiceOrb({ onCompleted }: Props) {
       setConfirmation("");
       setQueryResult(null);
       setExperienceCard(null);
+      // products blijven staan totdat de gebruiker een nieuwe opname start —
+      // handig zodat je nog kunt tikken op een productkaart nadat de assistent uitgesproken is.
       dispatch({ type: "RESET" });
     }, DONE_HOLD_MS);
   }, []);
@@ -226,6 +230,9 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
+      if (Array.isArray(result.products) && result.products.length > 0) {
+        setProducts(result.products);
+      }
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
@@ -798,6 +805,21 @@ export function VoiceOrb({ onCompleted }: Props) {
             dispatch({ type: "RESET" });
           }}
         />
+      )}
+
+      {products.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-3 w-full">
+          {products.map((p) => (
+            <ProductCard key={p.url} data={p} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setProducts([])}
+            className="text-xs text-muted-foreground/70 underline underline-offset-2"
+          >
+            Sluiten
+          </button>
+        </div>
       )}
 
       {showDebug && lastVoiceLog && (
