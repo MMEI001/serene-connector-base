@@ -495,10 +495,9 @@ export function VoiceOrb({ onCompleted }: Props) {
     }
     // Reset guard direct — voorkomt dubbele triggers.
     shouldAutoListenRef.current = false;
-    // Alleen doorluisteren als we in een neutrale state zitten.
-    if (state !== "done" && state !== "idle") return;
-    if (confirming) return;
-    if (queryResult) return;
+    // Blokkeer niet op zichtbare cards (confirming/query/experience) — de gebruiker
+    // moet altijd terug kunnen praten. Alleen skippen als we alweer iets aan het doen zijn.
+    if (state === "listening" || state === "processing") return;
     // Kleine delay geeft iOS Safari tijd om de audio-tail vrij te geven
     // voordat we opnieuw getUserMedia openen.
     const t = setTimeout(() => {
@@ -508,7 +507,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       startListening();
     }, 350);
     return () => clearTimeout(t);
-  }, [isSpeaking, state, confirming, queryResult, startListening]);
+  }, [isSpeaking, state, startListening]);
 
   const stopListening = useCallback(() => {
     if (recorderRef.current?.state === "recording") {
