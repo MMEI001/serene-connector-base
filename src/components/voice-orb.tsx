@@ -807,6 +807,21 @@ export function VoiceOrb({ onCompleted }: Props) {
         />
       )}
 
+      {products.length > 0 && (
+        <div className="mt-4 flex flex-col items-center gap-3 w-full">
+          {products.map((p) => (
+            <ProductCard key={p.url} data={p} />
+          ))}
+          <button
+            type="button"
+            onClick={() => setProducts([])}
+            className="text-xs text-muted-foreground/70 underline underline-offset-2"
+          >
+            Sluiten
+          </button>
+        </div>
+      )}
+
       {showDebug && lastVoiceLog && (
         <div className="mt-4 mb-2 inline-flex flex-wrap items-center justify-center gap-1.5 rounded-full bg-black/5 dark:bg-white/10 px-3 py-1 text-[10px] font-mono text-muted-foreground backdrop-blur-md">
           <span className="font-semibold text-foreground/80">Voice Trace:</span>
