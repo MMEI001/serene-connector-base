@@ -1,37 +1,35 @@
 /**
- * Centrale Voice Service — garandeert dat de volledige app uitsluitend één
- * en dezelfde stem gebruikt over alle onderdelen heen.
+ * VoicePlaybackService — minimale, betrouwbare TTS-playback.
  *
- * Beheert:
- * - Voorkeuren (voice_enabled, voice_provider, voice_id) vanuit user_profiles
- * - Audioweergave (pauzeert automatisch lopende audio bij nieuwe zinnen)
- * - Cache voor snelle acknowledgements (< 5ms afspeeltijd met exacte stem)
- * - Trace logging (provider, voice_id, model, latency per turn)
+ * Doel (bewust simpel): één audio tegelijk, één duidelijke levenscyclus.
+ * Geen acknowledgement, geen dubbele engines, geen generation-tokens,
+ * geen autoplay-trucs, geen speechSynthesis fallback (behalve als het
+ * expliciet nodig is na een echte TTS failure).
+ *
+ * State machine (via caller/orb):
+ *   idle → listening → processing → speaking → idle/listening
+ * De "speaking" state eindigt PAS bij audio.onended of audio.onerror.
+ *
+ * Legacy exports (playAcknowledgement / stopAcknowledgement /
+ * prewarmVoiceCache / subscribeVoiceTrace) zijn no-ops zodat bestaande
+ * imports blijven werken zonder gedrag toe te voegen.
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import * as perf from "@/lib/voice/perf";
-import { shouldSkipAckAudio } from "@/lib/voice/is-mobile-audio";
 
 export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
 export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
-
-const ACK_PHRASES = [
-  "Momentje…",
-  "Even kijken…",
-  "Ik denk met je mee.",
-  "Ik kijk even.",
-];
 
 export type VoiceSpeakOptions = {
   intent?: string;
   route?: string;
   force?: boolean;
   voiceId?: string;
-  isAck?: boolean;
-  preloadOnly?: boolean;
   onStart?: () => void;
   onEnd?: () => void;
+  /** Legacy — genegeerd, maar toegestaan zodat callsites niet breken. */
+  isAck?: boolean;
+  preloadOnly?: boolean;
 };
 
 export type VoiceTraceLog = {
@@ -47,23 +45,13 @@ export type VoiceTraceLog = {
   timestamp: string;
 };
 
+// -------------------------------------------------------------------
+// Voorkeuren-cache (voice_enabled + voice_id per user)
+// -------------------------------------------------------------------
+
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
 let cachedProvider: string | null = null;
-
-let currentAudio: HTMLAudioElement | null = null;
-let currentAudioRoute: string | null = null;
-const audioBlobCache = new Map<string, Blob>();
-
-// Monotoon token systeem: elke non-preload speak() bumpt de generatie.
-// Een oudere (bv. acknowledgement) speak die nog in-flight is annuleert
-// zichzelf zodra een nieuwere main-reply speak start. Dit voorkomt dat de
-// ack het hoofdantwoord overschrijft door een async race.
-let speakGeneration = 0;
-let ackAbortController: AbortController | null = null;
-
-let lastTraceLog: VoiceTraceLog | null = null;
-const traceListeners = new Set<(trace: VoiceTraceLog) => void>();
 
 let authListenerAttached = false;
 function ensureAuthListener() {
@@ -108,52 +96,47 @@ export async function loadVoicePrefs(): Promise<{
   if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
     return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
   }
-
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData.session?.user;
   if (!user) {
     return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
   }
-
   const { data, error } = await supabase
     .from("user_profiles")
     .select("voice_enabled, voice_provider, voice_id")
     .eq("user_id", user.id)
     .maybeSingle();
-
   if (error || !data) {
     return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
   }
-
   const row = data as {
     voice_enabled?: boolean | null;
     voice_provider?: string | null;
     voice_id?: string | null;
   };
-
   const enabled = Boolean(row.voice_enabled);
   const provider = row.voice_provider || "elevenlabs";
   const voiceId = row.voice_id || DEFAULT_VOICE_ID;
-
   cachedEnabled = enabled;
   cachedVoiceId = voiceId;
   cachedProvider = provider;
-
   return { enabled, voiceId, provider };
 }
 
+// -------------------------------------------------------------------
+// Trace listeners (voor debug-badge in orb)
+// -------------------------------------------------------------------
+
+let lastTraceLog: VoiceTraceLog | null = null;
+const traceListeners = new Set<(trace: VoiceTraceLog) => void>();
+
 function emitTrace(log: VoiceTraceLog) {
   lastTraceLog = log;
-  console.log(
-    "%c[VoiceService Turn]",
-    "background: #3B82F6; color: white; font-weight: bold; padding: 2px 6px; border-radius: 4px;",
-    log,
-  );
   traceListeners.forEach((fn) => {
     try {
       fn(log);
     } catch {
-      // ignore listener error
+      // ignore
     }
   });
 }
@@ -170,343 +153,82 @@ export function subscribeVoiceTrace(fn: (trace: VoiceTraceLog) => void): () => v
   };
 }
 
-export function stopVoice(route?: string) {
+// -------------------------------------------------------------------
+// Playback — één audio tegelijk
+// -------------------------------------------------------------------
+
+let currentAudio: HTMLAudioElement | null = null;
+let currentUrl: string | null = null;
+
+export function stopVoice(_route?: string) {
   if (!currentAudio) return;
-  if (route && currentAudioRoute !== route) return;
   try {
-    currentAudio.onerror = null;
     currentAudio.onended = null;
-    currentAudio.onpause = null;
+    currentAudio.onerror = null;
+    currentAudio.onplaying = null;
     currentAudio.pause();
-    const src = currentAudio.src;
-    if (src && src.startsWith("blob:")) URL.revokeObjectURL(src);
   } catch {
     // ignore
   }
+  if (currentUrl && currentUrl.startsWith("blob:")) {
+    try {
+      URL.revokeObjectURL(currentUrl);
+    } catch {
+      // ignore
+    }
+  }
   currentAudio = null;
-  currentAudioRoute = null;
+  currentUrl = null;
 }
-
-// Bekende vrouwelijke stem-namen per iOS/Android/desktop. Uitgebreid met
-// veelgebruikte NL/EN systeemstemmen zodat we heuristisch kunnen scoren.
-const FEMALE_NAME_HINTS = [
-  "claire", "ellen", "fenna", "lotte", "saskia", "anna", "lisa", "eva",
-  "samantha", "karen", "moira", "serena", "susan", "victoria", "tessa",
-  "fiona", "allison", "ava", "zoe", "kate", "nicky", "veena", "female",
-  "vrouw",
-];
-const MALE_NAME_HINTS = [
-  "xander", "daniel", "alex", "fred", "arthur", "male", "man",
-];
-
-function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
-  const n = v.name.toLowerCase();
-  if (MALE_NAME_HINTS.some((h) => n.includes(h))) return false;
-  return FEMALE_NAME_HINTS.some((h) => n.includes(h));
-}
-
-function scoreVoice(v: SpeechSynthesisVoice): number {
-  const lang = v.lang?.toLowerCase() ?? "";
-  const name = v.name.toLowerCase();
-  let score = 0;
-  if (lang.startsWith("nl")) score += 100;
-  else if (lang.startsWith("en")) score += 30;
-  if (isFemaleVoice(v)) score += 50;
-  if (name.includes("siri")) score += 20;
-  if (name.includes("enhanced") || name.includes("premium")) score += 10;
-  if (v.localService) score += 5;
-  return score;
-}
-
-function pickPreferredVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
-  if (!voices.length) return null;
-  const candidates = voices
-    .map((v) => ({ v, s: scoreVoice(v) }))
-    .filter(({ s }) => s > 0)
-    .sort((a, b) => b.s - a.s);
-  return candidates[0]?.v ?? null;
-}
-
-function ensureVoicesLoaded(): Promise<SpeechSynthesisVoice[]> {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-      resolve([]);
-      return;
-    }
-    const initial = window.speechSynthesis.getVoices();
-    if (initial.length > 0) {
-      resolve(initial);
-      return;
-    }
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      window.speechSynthesis.onvoiceschanged = null;
-      resolve(window.speechSynthesis.getVoices());
-    };
-    window.speechSynthesis.onvoiceschanged = finish;
-    setTimeout(finish, 500);
-  });
-}
-
-let cachedPreferredVoice: SpeechSynthesisVoice | null = null;
-let voiceSelectionLogged = false;
-
-function browserSpeakFallback(
-  text: string,
-  intent: string,
-  route: string,
-  latencyMs: number,
-  hooks?: { onStart?: () => void; onEnd?: () => void },
-) {
-  emitTrace({
-    provider: "browser",
-    voice_id: cachedPreferredVoice?.name ?? "system_default",
-    model: "speech_synthesis",
-    route,
-    latency_ms: latencyMs,
-    intent,
-    text_preview: text.slice(0, 40),
-    source: "browser",
-    timestamp: new Date().toISOString(),
-  });
-
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    hooks?.onEnd?.();
-    return;
-  }
-  try {
-    window.speechSynthesis.cancel();
-    // Utterance SYNCHROON aanmaken → blijft in de user-gesture context van iOS.
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.lang = "nl-NL";
-    let started = false;
-    utter.onstart = () => {
-      started = true;
-      if (route !== "prewarm_ack") {
-        perf.mark("audio_play_start");
-        perf.emit({ route });
-      }
-      hooks?.onStart?.();
-    };
-    utter.onend = () => hooks?.onEnd?.();
-    utter.onerror = () => {
-      if (!started) hooks?.onStart?.();
-      hooks?.onEnd?.();
-    };
-
-    const speakNow = () => {
-      if (cachedPreferredVoice) {
-        utter.voice = cachedPreferredVoice;
-        utter.lang = cachedPreferredVoice.lang || utter.lang;
-      }
-      window.speechSynthesis.speak(utter);
-    };
-
-    if (cachedPreferredVoice) {
-      speakNow();
-    } else {
-      ensureVoicesLoaded().then((voices) => {
-        const picked = pickPreferredVoice(voices);
-        if (picked) {
-          cachedPreferredVoice = picked;
-          if (!voiceSelectionLogged) {
-            voiceSelectionLogged = true;
-            console.log(
-              "%c[Selected iOS Voice]",
-              "color:#3b82f6;font-weight:bold",
-              { name: picked.name, lang: picked.lang },
-            );
-          }
-        } else if (!voiceSelectionLogged) {
-          voiceSelectionLogged = true;
-          console.log(
-            "%c[Selected iOS Voice]",
-            "color:#3b82f6;font-weight:bold",
-            "system default",
-          );
-        }
-        speakNow();
-      });
-    }
-  } catch {
-    hooks?.onEnd?.();
-  }
-}
-
-
 
 /**
- * Centrale speak functie. Gebruikt overal exact dezelfde ElevenLabs voice_id.
- * Bij fouten in ElevenLabs wordt stil gefaald met een trace-log, of vallen we
- * alleen terug op browser TTS als de gebruiker expliciet 'browser' als provider koos.
+ * Centrale speak: fetch TTS blob, speel af, resolve na onended/onerror.
+ * Nooit twee audio-elementen tegelijk.
  */
 export async function speak(
   text: string,
   options: VoiceSpeakOptions = {},
 ): Promise<void> {
-  const t0 = performance.now();
-  const intent = options.intent ?? "general";
-  const route = options.route ?? (options.isAck ? "prewarm_ack" : intent);
   const cleanText = text?.trim() ?? "";
-  const isMainReply = !options.isAck && !options.preloadOnly && route !== "prewarm_ack";
-  if (isMainReply) perf.mark("speak_start");
+  const intent = options.intent ?? "general";
+  const route = options.route ?? intent;
 
-  // Elke non-preload speak krijgt een uniek generatie-token. Een oudere ack
-  // die nog in-flight is aborteert zichzelf zodra een nieuwer token bestaat.
-  let myGeneration = speakGeneration;
-  if (!options.preloadOnly) {
-    speakGeneration += 1;
-    myGeneration = speakGeneration;
-  }
-  const isStale = () => !options.preloadOnly && myGeneration !== speakGeneration;
+  console.log("[VOICE NEW] speak start", { route, intent });
+  console.log("[VOICE NEW] text length", cleanText.length);
 
-  if (isMainReply) {
-    console.log("%c[MAIN TTS START]", "color:#10b981;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 60) });
-  } else if (options.isAck) {
-    console.log("%c[ACK START]", "color:#f59e0b;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 40) });
-  }
-
-  console.log("[Voice 3] speak() entry", {
-    route,
-    intent,
-    length: cleanText.length,
-    generation: myGeneration,
-  });
-  console.log("[Voice 3.0] Final text →", cleanText);
-
-  if (!cleanText) {
-    console.warn("[Voice 3!] speak aborted: empty text");
-    return;
-  }
+  if (!cleanText) return;
+  if (options.preloadOnly) return; // legacy — no-op
 
   const prefs = await loadVoicePrefs();
   const enabled = options.force ? true : prefs.enabled;
+  if (!enabled) {
+    console.log("[VOICE NEW] disabled in profile — skip");
+    return;
+  }
   const voiceId = options.voiceId ?? prefs.voiceId;
-  const provider = prefs.provider;
 
-  console.log("[Voice 3a] prefs", { enabled, voiceId, provider, force: !!options.force });
-
-  if (!enabled && !options.force) {
-    console.warn("[Voice 3!] speak aborted: voice disabled in user profile");
-    return;
-  }
-
-  // iOS/mobile fallback: ElevenLabs audio speelt onbetrouwbaar af op mobile
-  // Safari/Chrome. Tijdelijk gebruiken we daar altijd browser speechSynthesis
-  // voor de hoofdreply, zodat de gebruiker altijd hoorbare feedback krijgt.
-  const mobileReason = shouldSkipAckAudio();
-  if (mobileReason && !options.preloadOnly && !options.isAck && provider !== "browser") {
-    console.log(
-      "%c[iOS FALLBACK]",
-      "color:#3b82f6;font-weight:bold",
-      `using speechSynthesis (${mobileReason})`,
-    );
-    const latency = Math.round(performance.now() - t0);
-    // Cancel eventueel lopende audio en in-flight ack fetch.
-    if (ackAbortController) {
-      ackAbortController.abort();
-      ackAbortController = null;
-    }
-    stopVoice();
-    browserSpeakFallback(cleanText, intent, route, latency, {
-      onStart: options.onStart,
-      onEnd: options.onEnd,
-    });
-    return;
-  }
-
-
-  // Main reply cancelt eventuele in-flight ack fetch expliciet — anders
-  // kan de ack later alsnog binnenkomen en het hoofdantwoord overschrijven.
-  if (isMainReply && ackAbortController) {
-    console.log("%c[ACK CANCEL]", "color:#f59e0b", "main reply gestart, ack fetch aborten");
-    ackAbortController.abort();
-    ackAbortController = null;
-  }
-
-  // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
-  if (!options.preloadOnly) {
-    stopVoice();
-  }
-
-  // Ack krijgt een eigen AbortController zodat main reply hem kan onderbreken.
-  const abortController = options.isAck ? new AbortController() : null;
-  if (options.isAck) {
-    ackAbortController = abortController;
-  }
-
-  const cacheKey = `${voiceId}:${cleanText}`;
-
-  // 1. Check lokale cache (supersnel voor acks en vaste reacties)
-  if (audioBlobCache.has(cacheKey)) {
-    const blob = audioBlobCache.get(cacheKey)!;
-    if (options.preloadOnly) return;
-    if (isStale()) {
-      console.log("%c[ACK ABORT]", "color:#f59e0b", "stale voor cache-play", { gen: myGeneration, current: speakGeneration });
-      return;
-    }
-
-    const latency = Math.round(performance.now() - t0);
-    emitTrace({
-      provider: "elevenlabs",
-      voice_id: voiceId,
-      model: DEFAULT_MODEL_ID,
-      route,
-      latency_ms: latency,
-      intent,
-      text_preview: cleanText.slice(0, 40),
-      source: "cache",
-      timestamp: new Date().toISOString(),
-    });
-
-    await playBlob(blob, options, myGeneration);
-    return;
-  }
-
-
-  // 2. Als gebruiker expliciet browser TTS in profiel koos
-  if (provider === "browser") {
-    if (options.preloadOnly) return;
-    const latency = Math.round(performance.now() - t0);
-    browserSpeakFallback(cleanText, intent, route, latency);
-    return;
-  }
-
-  // 3. Echte ElevenLabs call via edge function
   const SUPABASE_URL =
-    import.meta.env.VITE_SUPABASE_URL || (typeof process !== "undefined" ? process.env.SUPABASE_URL : "");
+    import.meta.env.VITE_SUPABASE_URL ||
+    (typeof process !== "undefined" ? process.env.SUPABASE_URL : "");
   const ANON =
     import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
     import.meta.env.VITE_SUPABASE_ANON_KEY ||
     (typeof process !== "undefined" ? process.env.SUPABASE_PUBLISHABLE_KEY : "");
-
   if (!SUPABASE_URL || !ANON) {
-    const latency = Math.round(performance.now() - t0);
-    emitTrace({
-      provider: "elevenlabs",
-      voice_id: voiceId,
-      model: DEFAULT_MODEL_ID,
-      route,
-      latency_ms: latency,
-      intent,
-      text_preview: cleanText.slice(0, 40),
-      source: "error",
-      status: "config_error",
-      timestamp: new Date().toISOString(),
-    });
+    console.error("[VOICE NEW] supabase config missing");
     return;
   }
 
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token ?? ANON;
 
+  // Stop wat er nog draait vóór we een nieuwe fetch starten — één audio tegelijk.
+  stopVoice();
+
+  const t0 = performance.now();
+  console.log("[VOICE NEW] tts request", { voiceId });
   let res: Response;
   try {
-    const requestBody = { text: cleanText, voice_id: voiceId };
-    console.log("[Voice 4] TTS fetch →", `${SUPABASE_URL}/functions/v1/text-to-speech`, { voiceId });
-    console.log("[Voice 4.body] ElevenLabs request body", requestBody);
     res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
       method: "POST",
       headers: {
@@ -514,263 +236,134 @@ export async function speak(
         apikey: ANON,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify(requestBody),
-      signal: abortController?.signal,
+      body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
     });
-    console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
   } catch (err) {
-    console.error("[Voice 4!] TTS fetch failed", err);
-    const latency = Math.round(performance.now() - t0);
+    console.error("[VOICE NEW] tts fetch failed", err);
     emitTrace({
       provider: "elevenlabs",
       voice_id: voiceId,
       model: DEFAULT_MODEL_ID,
       route,
-      latency_ms: latency,
+      latency_ms: Math.round(performance.now() - t0),
       intent,
       text_preview: cleanText.slice(0, 40),
       source: "error",
       status: "network_error",
       timestamp: new Date().toISOString(),
     });
-    // Voor de hoofd-reply MOET de gebruiker altijd iets horen — val terug
-    // op browser TTS zodat de uitleg niet verloren gaat.
-    if (isMainReply && !options.preloadOnly) {
-      console.warn("[Voice 4→browser] fallback naar browser TTS na network error");
-      browserSpeakFallback(cleanText, intent, route, latency);
-    }
     return;
   }
+  console.log("[VOICE NEW] tts response status", res.status);
 
   const contentType = res.headers.get("content-type") || "";
-  const actualVoiceId = res.headers.get("x-voice-id") || voiceId;
-  const actualModel = res.headers.get("x-voice-model") || DEFAULT_MODEL_ID;
   if (!res.ok || contentType.includes("application/json")) {
-    let status = `http_${res.status}`;
-    if (contentType.includes("application/json")) {
-      const errorBody = await res.clone().json().catch(() => null) as {
-        error?: string;
-        upstream_status?: number;
-      } | null;
-      if (errorBody?.upstream_status) {
-        status = `upstream_${errorBody.upstream_status}_via_http_${res.status}`;
-      } else if (errorBody?.error) {
-        status = `${errorBody.error}_via_http_${res.status}`;
-      }
-    }
-    const latency = Math.round(performance.now() - t0);
+    console.error("[VOICE NEW] tts non-audio response", res.status, contentType);
     emitTrace({
       provider: "elevenlabs",
-      voice_id: actualVoiceId,
-      model: actualModel,
+      voice_id: voiceId,
+      model: DEFAULT_MODEL_ID,
       route,
-      latency_ms: latency,
+      latency_ms: Math.round(performance.now() - t0),
       intent,
       text_preview: cleanText.slice(0, 40),
       source: "error",
-      status,
+      status: `http_${res.status}`,
       timestamp: new Date().toISOString(),
     });
-    // 429/5xx: fallback naar browser-TTS voor de hoofd-reply zodat de
-    // gebruiker altijd de uitleg hoort, ook bij ElevenLabs rate-limits.
-    if (isMainReply && !options.preloadOnly) {
-      console.warn("[Voice 4→browser] fallback naar browser TTS na", status);
-      browserSpeakFallback(cleanText, intent, route, latency);
-    }
     return;
   }
 
   const blob = await res.blob();
-  if (isMainReply) perf.mark("tts_first_byte");
-  console.log("[Voice 5] TTS blob received", { size: blob.size, type: blob.type });
-  audioBlobCache.set(cacheKey, blob);
+  console.log("[VOICE NEW] blob size", blob.size);
 
-  if (options.preloadOnly) return;
-  if (isStale()) {
-    console.log("%c[ACK ABORT]", "color:#f59e0b", "stale na netwerk", { gen: myGeneration, current: speakGeneration });
-    return;
-  }
-
-  const latency = Math.round(performance.now() - t0);
   emitTrace({
     provider: "elevenlabs",
-    voice_id: actualVoiceId,
-    model: actualModel,
+    voice_id: res.headers.get("x-voice-id") || voiceId,
+    model: res.headers.get("x-voice-model") || DEFAULT_MODEL_ID,
     route,
-    latency_ms: latency,
+    latency_ms: Math.round(performance.now() - t0),
     intent,
     text_preview: cleanText.slice(0, 40),
     source: "network",
     timestamp: new Date().toISOString(),
   });
 
-  await playBlob(blob, options, myGeneration);
+  await playBlob(blob, options);
 }
 
-async function playBlob(blob: Blob, options: VoiceSpeakOptions, generation?: number): Promise<void> {
-  // Als er sinds deze speak() een nieuwere is gestart, niet meer afspelen.
-  if (generation !== undefined && generation !== speakGeneration && !options.preloadOnly) {
-    console.log("%c[PLAY ABORT]", "color:#ef4444", "stale generation", { generation, current: speakGeneration });
-    return;
-  }
-  const isMain = !options.isAck && options.route !== "prewarm_ack";
-  if (isMain) console.log("%c[MAIN AUDIO PLAY]", "color:#10b981;font-weight:bold", { size: blob.size });
-  console.log("[Voice 6] playBlob start", { size: blob.size, route: options.route });
-  // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
-  // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
-  stopVoice();
-  const url = URL.createObjectURL(blob);
+function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
   return new Promise((resolve) => {
+    const url = URL.createObjectURL(blob);
     const audio = new Audio();
-    // iOS Safari-vereisten: playsInline voorkomt fullscreen-playback en
-    // preload='auto' zorgt dat de volledige blob geladen is voordat we
-    // .play() aanroepen — dit voorkomt dat playback halverwege stopt.
     audio.preload = "auto";
-    // @ts-expect-error — playsInline bestaat op HTMLAudioElement in iOS.
+    // iOS Safari: inline playback in plaats van fullscreen.
+    // @ts-expect-error playsInline bestaat op HTMLAudioElement in iOS Safari
     audio.playsInline = true;
     audio.setAttribute("playsinline", "true");
     audio.src = url;
 
     currentAudio = audio;
-    currentAudioRoute = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
+    currentUrl = url;
 
     let settled = false;
-    const finish = (reason: string) => {
+    const finish = (reason: "ended" | "error" | "rejected") => {
       if (settled) return;
       settled = true;
-      console.log("[Voice 6c] playBlob finish", { reason, route: currentAudioRoute });
-      if (isMain) {
-        console.log("%c[MAIN AUDIO END]", "color:#10b981;font-weight:bold", { reason });
-      } else if (options.isAck) {
-        console.log("%c[ACK END]", "color:#f59e0b;font-weight:bold", { reason });
-      }
-      setTimeout(() => URL.revokeObjectURL(url), 250);
+      if (reason === "ended") console.log("[VOICE NEW] audio ended");
+      else console.log("[VOICE NEW] audio error", { reason });
       if (currentAudio === audio) {
         currentAudio = null;
-        currentAudioRoute = null;
+        currentUrl = null;
       }
-      options.onEnd?.();
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        // ignore
+      }
+      try {
+        options.onEnd?.();
+      } catch {
+        // ignore
+      }
       resolve();
     };
 
     audio.onplaying = () => {
-      console.log("[Voice 6b] audio.onplaying");
-      const routeName = options.route ?? (options.isAck ? "prewarm_ack" : options.intent ?? "general");
-      if (routeName !== "prewarm_ack") {
-        perf.mark("audio_play_start");
-        perf.emit({ route: routeName });
+      console.log("[VOICE NEW] audio playing");
+      try {
+        options.onStart?.();
+      } catch {
+        // ignore
       }
-      options.onStart?.();
     };
     audio.onended = () => finish("ended");
-    audio.onerror = (e) => {
-      console.error("[Voice 6!] audio.onerror", {
-        error: audio.error,
-        code: audio.error?.code,
-        message: audio.error?.message,
-        event: e,
-      });
-      finish("error");
-    };
-    audio.onpause = () => {
-      if (!audio.ended && !settled) {
-        console.warn("[Voice 6?] audio.onpause (unexpected, before end)", {
-          currentTime: audio.currentTime,
-          duration: audio.duration,
-        });
-      }
-    };
+    audio.onerror = () => finish("error");
 
-    const start = () => {
-      console.log("[Voice 6a] audio.play() call", { readyState: audio.readyState });
-      const p = audio.play();
-      if (p && typeof p.then === "function") {
-        p.then(() => console.log("[Voice 6a✓] audio.play() resolved"))
-         .catch((err) => {
-           console.error("[Voice 6a!] audio.play() rejected", { name: err?.name, message: err?.message });
-           finish("play_rejected");
-         });
-      }
-    };
-    if (audio.readyState >= 3 /* HAVE_FUTURE_DATA */) {
-      start();
-    } else {
-      const onReady = () => {
-        audio.removeEventListener("canplaythrough", onReady);
-        audio.removeEventListener("loadeddata", onReady);
-        start();
-      };
-      audio.addEventListener("canplaythrough", onReady, { once: true });
-      audio.addEventListener("loadeddata", onReady, { once: true });
-      setTimeout(() => {
-        if (!settled && audio.paused) {
-          console.warn("[Voice 6?] readyState timeout, forcing start", { readyState: audio.readyState });
-          start();
-        }
-      }, 800);
-      audio.load();
+    console.log("[VOICE NEW] audio play called");
+    const p = audio.play();
+    if (p && typeof p.then === "function") {
+      p.catch((err) => {
+        console.error("[VOICE NEW] audio error", { name: err?.name, message: err?.message });
+        finish("rejected");
+      });
     }
   });
 }
 
-/**
- * Prewarm cache voor instant acknowledgements en veelvoorkomende zinnen
- * met de exacte actieve voice_id.
- */
+// -------------------------------------------------------------------
+// Legacy no-ops — behouden zodat bestaande imports blijven werken.
+// Bewust géén acknowledgement of prewarm.
+// -------------------------------------------------------------------
+
 export async function prewarmVoiceCache(): Promise<void> {
-  const skipReason = shouldSkipAckAudio();
-  if (skipReason) {
-    console.log(
-      "%c[ACK SKIP]",
-      "color:#f59e0b;font-weight:bold",
-      `prewarm skipped — ${skipReason}`,
-    );
-    return;
-  }
-  const prefs = await loadVoicePrefs();
-  if (!prefs.enabled || prefs.provider === "browser") return;
-
-  ACK_PHRASES.forEach((phrase) => {
-    speak(phrase, {
-      intent: "acknowledgement",
-      route: "prewarm_ack",
-      voiceId: prefs.voiceId,
-      force: true,
-      preloadOnly: true,
-    }).catch(() => {});
-  });
+  // no-op
 }
 
-/**
- * Speelt direct een snelle erkenning af. Bypasst vaste MP3's.
- * Garandeert 100% spraaksamenhang.
- *
- * Op iOS/mobile tijdelijk uitgeschakeld: losse ack-audio blokkeert daar
- * de main reply. We spelen dan alleen de hoofdreply.
- */
 export function playAcknowledgement(): () => void {
-  const skipReason = shouldSkipAckAudio();
-  if (skipReason) {
-    console.log(
-      "%c[ACK SKIP]",
-      "color:#f59e0b;font-weight:bold",
-      `${skipReason} — main reply only`,
-    );
-    return () => {};
-  }
-  const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
-  void speak(phrase, { intent: "acknowledgement", route: "prewarm_ack", isAck: true });
-  return stopAcknowledgement;
+  return () => {};
 }
 
-export const stopAcknowledgement = () => {
-  if (ackAbortController) {
-    console.log("%c[ACK CANCEL]", "color:#f59e0b", "stopAcknowledgement()");
-    ackAbortController.abort();
-    ackAbortController = null;
-  }
-  // Bump generatie zodat een pending ack-play (bv. na cache-hit die nog in
-  // playBlob wacht) zichzelf herkent als stale en niet gaat afspelen.
-  speakGeneration += 1;
-  stopVoice("prewarm_ack");
-};
+export function stopAcknowledgement(): void {
+  // no-op
+}
