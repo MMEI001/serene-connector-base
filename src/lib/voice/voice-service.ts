@@ -54,6 +54,13 @@ let currentAudio: HTMLAudioElement | null = null;
 let currentAudioRoute: string | null = null;
 const audioBlobCache = new Map<string, Blob>();
 
+// Monotoon token systeem: elke non-preload speak() bumpt de generatie.
+// Een oudere (bv. acknowledgement) speak die nog in-flight is annuleert
+// zichzelf zodra een nieuwere main-reply speak start. Dit voorkomt dat de
+// ack het hoofdantwoord overschrijft door een async race.
+let speakGeneration = 0;
+let ackAbortController: AbortController | null = null;
+
 let lastTraceLog: VoiceTraceLog | null = null;
 const traceListeners = new Set<(trace: VoiceTraceLog) => void>();
 
