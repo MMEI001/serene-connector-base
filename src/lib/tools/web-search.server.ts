@@ -100,8 +100,7 @@ async function runOne(client: Firecrawl, query: string, limit: number): Promise<
     // SDK v4: search returnt { web?: RawDoc[] } (zonder scrape) of vergelijkbaar.
     const res = (await client.search(query, {
       limit,
-      lang: "nl",
-      country: "nl",
+      location: "nl",
     })) as unknown as { web?: RawDoc[]; data?: RawDoc[] };
     const docs = res?.web ?? res?.data ?? [];
     const hits: WebHit[] = [];
