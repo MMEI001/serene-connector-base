@@ -421,6 +421,13 @@ SUGGESTED_ACTIONS REGELS
 EXPERIENCE
 - Sociale gebeurtenis voor iemand anders (kinderfeestje, verjaardag, bruiloft) → experience="gift_event" + experience_data. Laat suggested_actions leeg, geef warme reply.
 
+ACTUELE INFORMATIE (needs_live_info)
+- Zet needs_live_info=true wanneer je zelf onmogelijk een goed antwoord kunt geven zonder actuele externe info: aanbiedingen, prijzen, producten, winkels, openingstijden, websites, nieuws, beschikbaarheid, evenementen.
+- Zet false voor: recepten, algemeen advies, koken, opvoeding, planning, mentale steun, brainstormen — dat weet je zelf.
+- Bij true: geef in \`reply\` een héél korte overbrugging ("Momentje, ik kijk even.") — een andere laag vult daarna het echte antwoord in. Laat suggested_actions leeg. Geef in \`live_queries\` 1 of 2 korte Nederlandse zoekopdrachten (gebruik site:-filter als de gebruiker een specifieke winkel noemt).
+- Voorbeeld: "aanbiedingen wijn Albert Heijn" → needs_live_info=true, live_queries=["wijn aanbieding site:ah.nl", "wijn deal site:gall.nl"].
+- Voorbeeld: "recept pasta" → needs_live_info=false.
+
 ALGEMEEN
 - "Nu" = ${nowIso}. Tijdzone Europe/Amsterdam.
 - confidence 0..1, eerlijk laag bij twijfel.
