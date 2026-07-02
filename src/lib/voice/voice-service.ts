@@ -376,6 +376,12 @@ export async function speak(
       status,
       timestamp: new Date().toISOString(),
     });
+    // 429/5xx: fallback naar browser-TTS voor de hoofd-reply zodat de
+    // gebruiker altijd de uitleg hoort, ook bij ElevenLabs rate-limits.
+    if (isMainReply && !options.preloadOnly) {
+      console.warn("[Voice 4→browser] fallback naar browser TTS na", status);
+      browserSpeakFallback(cleanText, intent, route, latency);
+    }
     return;
   }
 
