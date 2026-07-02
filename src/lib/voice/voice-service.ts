@@ -226,10 +226,26 @@ export async function speak(
   const isMainReply = !options.isAck && !options.preloadOnly && route !== "prewarm_ack";
   if (isMainReply) perf.mark("speak_start");
 
+  // Elke non-preload speak krijgt een uniek generatie-token. Een oudere ack
+  // die nog in-flight is aborteert zichzelf zodra een nieuwer token bestaat.
+  let myGeneration = speakGeneration;
+  if (!options.preloadOnly) {
+    speakGeneration += 1;
+    myGeneration = speakGeneration;
+  }
+  const isStale = () => !options.preloadOnly && myGeneration !== speakGeneration;
+
+  if (isMainReply) {
+    console.log("%c[MAIN TTS START]", "color:#10b981;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 60) });
+  } else if (options.isAck) {
+    console.log("%c[ACK START]", "color:#f59e0b;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 40) });
+  }
+
   console.log("[Voice 3] speak() entry", {
     route,
     intent,
     length: cleanText.length,
+    generation: myGeneration,
   });
   console.log("[Voice 3.0] Final text →", cleanText);
 
