@@ -266,9 +266,23 @@ export async function speak(
     return;
   }
 
+  // Main reply cancelt eventuele in-flight ack fetch expliciet — anders
+  // kan de ack later alsnog binnenkomen en het hoofdantwoord overschrijven.
+  if (isMainReply && ackAbortController) {
+    console.log("%c[ACK CANCEL]", "color:#f59e0b", "main reply gestart, ack fetch aborten");
+    ackAbortController.abort();
+    ackAbortController = null;
+  }
+
   // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
   if (!options.preloadOnly) {
     stopVoice();
+  }
+
+  // Ack krijgt een eigen AbortController zodat main reply hem kan onderbreken.
+  const abortController = options.isAck ? new AbortController() : null;
+  if (options.isAck) {
+    ackAbortController = abortController;
   }
 
   const cacheKey = `${voiceId}:${cleanText}`;
@@ -277,6 +291,10 @@ export async function speak(
   if (audioBlobCache.has(cacheKey)) {
     const blob = audioBlobCache.get(cacheKey)!;
     if (options.preloadOnly) return;
+    if (isStale()) {
+      console.log("%c[ACK ABORT]", "color:#f59e0b", "stale voor cache-play", { gen: myGeneration, current: speakGeneration });
+      return;
+    }
 
     const latency = Math.round(performance.now() - t0);
     emitTrace({
@@ -291,9 +309,10 @@ export async function speak(
       timestamp: new Date().toISOString(),
     });
 
-    await playBlob(blob, options);
+    await playBlob(blob, options, myGeneration);
     return;
   }
+
 
   // 2. Als gebruiker expliciet browser TTS in profiel koos
   if (provider === "browser") {
