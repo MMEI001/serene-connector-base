@@ -223,8 +223,8 @@ export async function speak(
     route,
     intent,
     length: cleanText.length,
-    preview: cleanText.slice(0, 60),
   });
+  console.log("[Voice 3.0] Final text →", cleanText);
 
   if (!cleanText) {
     console.warn("[Voice 3!] speak aborted: empty text");
