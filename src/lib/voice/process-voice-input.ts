@@ -343,6 +343,18 @@ const TOOL = {
             budget_currency: { type: "string" },
           },
         },
+        needs_live_info: {
+          type: "boolean",
+          description:
+            "True ALLEEN wanneer een goed antwoord actuele externe informatie vereist (aanbiedingen, prijzen, producten, winkels, openingstijden, websites, nieuws, beschikbaarheid, evenementen). NIET voor recepten, algemeen advies, opvoeding, planning, mentale steun of brainstormen — daar weet je zelf wel raad. Bij twijfel: false.",
+        },
+        live_queries: {
+          type: "array",
+          maxItems: 2,
+          description:
+            "Als needs_live_info=true: 1 of 2 korte Nederlandse zoekopdrachten voor het web. Mag site:-filter bevatten (bv. 'wijn aanbieding site:ah.nl'). Kort en concreet. Anders leeg.",
+          items: { type: "string" },
+        },
       },
       required: ["reply", "intent", "action_required", "needs_confirmation"],
     },
