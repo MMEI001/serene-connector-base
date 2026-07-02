@@ -26,6 +26,7 @@ import {
   subscribeVoiceTrace,
   type VoiceTraceLog,
 } from "@/lib/voice/voice-service";
+import * as perf from "@/lib/voice/perf";
 import { useAuth } from "@/hooks/use-auth";
 import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
