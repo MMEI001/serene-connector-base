@@ -487,6 +487,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions, generation?: num
       if (settled) return;
       settled = true;
       console.log("[Voice 6c] playBlob finish", { reason, route: currentAudioRoute });
+      if (isMain) {
+        console.log("%c[MAIN AUDIO END]", "color:#10b981;font-weight:bold", { reason });
+      } else if (options.isAck) {
+        console.log("%c[ACK END]", "color:#f59e0b;font-weight:bold", { reason });
+      }
       setTimeout(() => URL.revokeObjectURL(url), 250);
       if (currentAudio === audio) {
         currentAudio = null;
