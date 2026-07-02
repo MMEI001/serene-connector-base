@@ -590,4 +590,14 @@ export function playAcknowledgement(): () => void {
   return stopAcknowledgement;
 }
 
-export const stopAcknowledgement = () => stopVoice("prewarm_ack");
+export const stopAcknowledgement = () => {
+  if (ackAbortController) {
+    console.log("%c[ACK CANCEL]", "color:#f59e0b", "stopAcknowledgement()");
+    ackAbortController.abort();
+    ackAbortController = null;
+  }
+  // Bump generatie zodat een pending ack-play (bv. na cache-hit die nog in
+  // playBlob wacht) zichzelf herkent als stale en niet gaat afspelen.
+  speakGeneration += 1;
+  stopVoice("prewarm_ack");
+};
