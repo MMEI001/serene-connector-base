@@ -32,6 +32,7 @@ import type { PipelineResult, QueryResult } from "@/lib/voice/types";
 import type { EngineTrace } from "@/lib/assistant/types";
 import { EngineTracePanel } from "@/components/debug/engine-trace-panel";
 import { ExperienceCard, type ExperienceCardData } from "@/components/experience-card";
+import { ProductCard, type ProductCardData } from "@/components/product-card";
 
 const MAX_RECORDING_SECONDS = 60;
 const DONE_HOLD_MS = 1600;
