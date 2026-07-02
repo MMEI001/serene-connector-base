@@ -264,7 +264,13 @@ export function VoiceOrb({ onCompleted }: Props) {
         void speakAndAnimate(spokenConfirm, {
           intent: spokenIntent,
           route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
+          onEnd: () => {
+            // Continuous conversation: blijf luisteren, ook als de bevestigingskaart
+            // op het scherm staat. Gebruiker kan dan gewoon "ja" / "nee" / iets nieuws zeggen.
+            if (continuousModeRef.current) shouldAutoListenRef.current = true;
+          },
         });
+        if (result.assistant_reply?.trim()) pushHistory("assistant", result.assistant_reply.trim());
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
