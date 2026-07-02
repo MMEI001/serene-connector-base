@@ -206,7 +206,7 @@ function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
 }
 
 function scoreVoice(v: SpeechSynthesisVoice): number {
-  const lang = v.language?.toLowerCase() ?? v.lang?.toLowerCase() ?? "";
+  const lang = v.lang?.toLowerCase() ?? "";
   const name = v.name.toLowerCase();
   let score = 0;
   if (lang.startsWith("nl")) score += 100;
