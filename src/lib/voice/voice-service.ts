@@ -372,6 +372,7 @@ export async function speak(
   }
 
   const blob = await res.blob();
+  if (isMainReply) perf.mark("tts_first_byte");
   console.log("[Voice 5] TTS blob received", { size: blob.size, type: blob.type });
   audioBlobCache.set(cacheKey, blob);
 
