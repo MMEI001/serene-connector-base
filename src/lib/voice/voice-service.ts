@@ -54,6 +54,13 @@ let currentAudio: HTMLAudioElement | null = null;
 let currentAudioRoute: string | null = null;
 const audioBlobCache = new Map<string, Blob>();
 
+// Monotoon token systeem: elke non-preload speak() bumpt de generatie.
+// Een oudere (bv. acknowledgement) speak die nog in-flight is annuleert
+// zichzelf zodra een nieuwere main-reply speak start. Dit voorkomt dat de
+// ack het hoofdantwoord overschrijft door een async race.
+let speakGeneration = 0;
+let ackAbortController: AbortController | null = null;
+
 let lastTraceLog: VoiceTraceLog | null = null;
 const traceListeners = new Set<(trace: VoiceTraceLog) => void>();
 
@@ -219,10 +226,26 @@ export async function speak(
   const isMainReply = !options.isAck && !options.preloadOnly && route !== "prewarm_ack";
   if (isMainReply) perf.mark("speak_start");
 
+  // Elke non-preload speak krijgt een uniek generatie-token. Een oudere ack
+  // die nog in-flight is aborteert zichzelf zodra een nieuwer token bestaat.
+  let myGeneration = speakGeneration;
+  if (!options.preloadOnly) {
+    speakGeneration += 1;
+    myGeneration = speakGeneration;
+  }
+  const isStale = () => !options.preloadOnly && myGeneration !== speakGeneration;
+
+  if (isMainReply) {
+    console.log("%c[MAIN TTS START]", "color:#10b981;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 60) });
+  } else if (options.isAck) {
+    console.log("%c[ACK START]", "color:#f59e0b;font-weight:bold", { gen: myGeneration, preview: cleanText.slice(0, 40) });
+  }
+
   console.log("[Voice 3] speak() entry", {
     route,
     intent,
     length: cleanText.length,
+    generation: myGeneration,
   });
   console.log("[Voice 3.0] Final text →", cleanText);
 
@@ -243,9 +266,23 @@ export async function speak(
     return;
   }
 
+  // Main reply cancelt eventuele in-flight ack fetch expliciet — anders
+  // kan de ack later alsnog binnenkomen en het hoofdantwoord overschrijven.
+  if (isMainReply && ackAbortController) {
+    console.log("%c[ACK CANCEL]", "color:#f59e0b", "main reply gestart, ack fetch aborten");
+    ackAbortController.abort();
+    ackAbortController = null;
+  }
+
   // Stoppen van eventuele eerdere audio (bv. acknowledgement clip)
   if (!options.preloadOnly) {
     stopVoice();
+  }
+
+  // Ack krijgt een eigen AbortController zodat main reply hem kan onderbreken.
+  const abortController = options.isAck ? new AbortController() : null;
+  if (options.isAck) {
+    ackAbortController = abortController;
   }
 
   const cacheKey = `${voiceId}:${cleanText}`;
@@ -254,6 +291,10 @@ export async function speak(
   if (audioBlobCache.has(cacheKey)) {
     const blob = audioBlobCache.get(cacheKey)!;
     if (options.preloadOnly) return;
+    if (isStale()) {
+      console.log("%c[ACK ABORT]", "color:#f59e0b", "stale voor cache-play", { gen: myGeneration, current: speakGeneration });
+      return;
+    }
 
     const latency = Math.round(performance.now() - t0);
     emitTrace({
@@ -268,9 +309,10 @@ export async function speak(
       timestamp: new Date().toISOString(),
     });
 
-    await playBlob(blob, options);
+    await playBlob(blob, options, myGeneration);
     return;
   }
+
 
   // 2. Als gebruiker expliciet browser TTS in profiel koos
   if (provider === "browser") {
@@ -321,6 +363,7 @@ export async function speak(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(requestBody),
+      signal: abortController?.signal,
     });
     console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
   } catch (err) {
@@ -391,6 +434,10 @@ export async function speak(
   audioBlobCache.set(cacheKey, blob);
 
   if (options.preloadOnly) return;
+  if (isStale()) {
+    console.log("%c[ACK ABORT]", "color:#f59e0b", "stale na netwerk", { gen: myGeneration, current: speakGeneration });
+    return;
+  }
 
   const latency = Math.round(performance.now() - t0);
   emitTrace({
@@ -405,10 +452,17 @@ export async function speak(
     timestamp: new Date().toISOString(),
   });
 
-  await playBlob(blob, options);
+  await playBlob(blob, options, myGeneration);
 }
 
-async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+async function playBlob(blob: Blob, options: VoiceSpeakOptions, generation?: number): Promise<void> {
+  // Als er sinds deze speak() een nieuwere is gestart, niet meer afspelen.
+  if (generation !== undefined && generation !== speakGeneration && !options.preloadOnly) {
+    console.log("%c[PLAY ABORT]", "color:#ef4444", "stale generation", { generation, current: speakGeneration });
+    return;
+  }
+  const isMain = !options.isAck && options.route !== "prewarm_ack";
+  if (isMain) console.log("%c[MAIN AUDIO PLAY]", "color:#10b981;font-weight:bold", { size: blob.size });
   console.log("[Voice 6] playBlob start", { size: blob.size, route: options.route });
   // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
   // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
@@ -433,6 +487,11 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
       if (settled) return;
       settled = true;
       console.log("[Voice 6c] playBlob finish", { reason, route: currentAudioRoute });
+      if (isMain) {
+        console.log("%c[MAIN AUDIO END]", "color:#10b981;font-weight:bold", { reason });
+      } else if (options.isAck) {
+        console.log("%c[ACK END]", "color:#f59e0b;font-weight:bold", { reason });
+      }
       setTimeout(() => URL.revokeObjectURL(url), 250);
       if (currentAudio === audio) {
         currentAudio = null;
@@ -531,4 +590,14 @@ export function playAcknowledgement(): () => void {
   return stopAcknowledgement;
 }
 
-export const stopAcknowledgement = () => stopVoice("prewarm_ack");
+export const stopAcknowledgement = () => {
+  if (ackAbortController) {
+    console.log("%c[ACK CANCEL]", "color:#f59e0b", "stopAcknowledgement()");
+    ackAbortController.abort();
+    ackAbortController = null;
+  }
+  // Bump generatie zodat een pending ack-play (bv. na cache-hit die nog in
+  // playBlob wacht) zichzelf herkent als stale en niet gaat afspelen.
+  speakGeneration += 1;
+  stopVoice("prewarm_ack");
+};
