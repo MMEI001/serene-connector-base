@@ -17,7 +17,10 @@
 
 import { supabase } from "@/integrations/supabase/client";
 
-export const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+// Tijdelijk: Sarah als default totdat Charlotte bewezen werkt op dit ElevenLabs-account.
+// Charlotte ("XB0fDUnXU5powFXDhCwa") is niet gegarandeerd beschikbaar op elk account
+// en gaf non-audio responses terug — we forceren hem niet meer hard.
+export const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah (bekende publieke stem)
 export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
 
 export type VoiceSpeakOptions = {
