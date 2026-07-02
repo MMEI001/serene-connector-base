@@ -157,33 +157,49 @@ export function subscribeVoiceTrace(fn: (trace: VoiceTraceLog) => void): () => v
 // Playback — één audio tegelijk
 // -------------------------------------------------------------------
 
-let currentAudio: HTMLAudioElement | null = null;
-let currentUrl: string | null = null;
+// Eén gedeelde HTMLAudioElement — identiek aan /audio-diagnostics. Op iOS
+// mag je géén nieuw <audio> per call maken buiten de user-gesture context.
+let sharedAudio: HTMLAudioElement | null = null;
+let currentBlobUrl: string | null = null;
+
+function getSharedAudio(): HTMLAudioElement {
+  if (sharedAudio) return sharedAudio;
+  const el = new Audio();
+  el.preload = "auto";
+  // @ts-expect-error iOS Safari
+  el.playsInline = true;
+  el.setAttribute("playsinline", "true");
+  sharedAudio = el;
+  return el;
+}
 
 export function stopVoice(_route?: string) {
-  if (!currentAudio) return;
+  const el = sharedAudio;
+  if (!el) return;
   try {
-    currentAudio.onended = null;
-    currentAudio.onerror = null;
-    currentAudio.onplaying = null;
-    currentAudio.pause();
+    el.onended = null;
+    el.onerror = null;
+    el.onplaying = null;
+    el.onpause = null;
+    el.pause();
   } catch {
     // ignore
   }
-  if (currentUrl && currentUrl.startsWith("blob:")) {
+  if (currentBlobUrl && currentBlobUrl.startsWith("blob:")) {
     try {
-      URL.revokeObjectURL(currentUrl);
+      URL.revokeObjectURL(currentBlobUrl);
     } catch {
       // ignore
     }
   }
-  currentAudio = null;
-  currentUrl = null;
+  currentBlobUrl = null;
 }
 
 /**
- * Centrale speak: fetch TTS blob, speel af, resolve na onended/onerror.
- * Nooit twee audio-elementen tegelijk.
+ * Centrale speak: 1-op-1 dezelfde flow als /audio-diagnostics test 3.
+ * - Één gedeelde HTMLAudioElement (nooit new Audio() per call).
+ * - fetch → blob → objectURL → play.
+ * - Resolve pas na audio.onended / onerror / play-rejection.
  */
 export async function speak(
   text: string,
@@ -197,7 +213,7 @@ export async function speak(
   console.log("[VOICE NEW] text length", cleanText.length);
 
   if (!cleanText) return;
-  if (options.preloadOnly) return; // legacy — no-op
+  if (options.preloadOnly) return;
 
   const prefs = await loadVoicePrefs();
   const enabled = options.force ? true : prefs.enabled;
@@ -222,7 +238,7 @@ export async function speak(
   const { data: sessionData } = await supabase.auth.getSession();
   const token = sessionData.session?.access_token ?? ANON;
 
-  // Stop wat er nog draait vóór we een nieuwe fetch starten — één audio tegelijk.
+  // Stop wat er nog draait vóór we een nieuwe fetch starten.
   stopVoice();
 
   const t0 = performance.now();
@@ -295,16 +311,24 @@ export async function speak(
 function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(blob);
-    const audio = new Audio();
-    audio.preload = "auto";
-    // iOS Safari: inline playback in plaats van fullscreen.
-    // @ts-expect-error playsInline bestaat op HTMLAudioElement in iOS Safari
-    audio.playsInline = true;
-    audio.setAttribute("playsinline", "true");
-    audio.src = url;
+    const el = getSharedAudio();
 
-    currentAudio = audio;
-    currentUrl = url;
+    // Reset listeners van vorige call.
+    el.onended = null;
+    el.onerror = null;
+    el.onplaying = null;
+    el.onpause = null;
+
+    // Vrijgeven van oude blob-URL indien nog aanwezig.
+    if (currentBlobUrl && currentBlobUrl.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(currentBlobUrl);
+      } catch {
+        // ignore
+      }
+    }
+    currentBlobUrl = url;
+    el.src = url;
 
     let settled = false;
     const finish = (reason: "ended" | "error" | "rejected") => {
@@ -312,14 +336,13 @@ function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
       settled = true;
       if (reason === "ended") console.log("[VOICE NEW] audio ended");
       else console.log("[VOICE NEW] audio error", { reason });
-      if (currentAudio === audio) {
-        currentAudio = null;
-        currentUrl = null;
-      }
-      try {
-        URL.revokeObjectURL(url);
-      } catch {
-        // ignore
+      if (currentBlobUrl === url) {
+        try {
+          URL.revokeObjectURL(url);
+        } catch {
+          // ignore
+        }
+        currentBlobUrl = null;
       }
       try {
         options.onEnd?.();
@@ -329,7 +352,7 @@ function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
       resolve();
     };
 
-    audio.onplaying = () => {
+    el.onplaying = () => {
       console.log("[VOICE NEW] audio playing");
       try {
         options.onStart?.();
@@ -337,14 +360,17 @@ function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
         // ignore
       }
     };
-    audio.onended = () => finish("ended");
-    audio.onerror = () => finish("error");
+    el.onended = () => finish("ended");
+    el.onerror = () => finish("error");
 
     console.log("[VOICE NEW] audio play called");
-    const p = audio.play();
+    const p = el.play();
     if (p && typeof p.then === "function") {
       p.catch((err) => {
-        console.error("[VOICE NEW] audio error", { name: err?.name, message: err?.message });
+        console.error("[VOICE NEW] audio play rejected", {
+          name: err?.name,
+          message: err?.message,
+        });
         finish("rejected");
       });
     }
@@ -353,7 +379,6 @@ function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
 
 // -------------------------------------------------------------------
 // Legacy no-ops — behouden zodat bestaande imports blijven werken.
-// Bewust géén acknowledgement of prewarm.
 // -------------------------------------------------------------------
 
 export async function prewarmVoiceCache(): Promise<void> {
@@ -367,3 +392,4 @@ export function playAcknowledgement(): () => void {
 export function stopAcknowledgement(): void {
   // no-op
 }
+
