@@ -15,6 +15,7 @@ import { Route as ProfielRouteImport } from './routes/profiel'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AudioDiagnosticsRouteImport } from './routes/audio-diagnostics'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RemindersIndexRouteImport } from './routes/reminders.index'
 import { Route as NotitiesIndexRouteImport } from './routes/notities.index'
@@ -63,6 +64,11 @@ const JournalRoute = JournalRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AudioDiagnosticsRoute = AudioDiagnosticsRouteImport.update({
+  id: '/audio-diagnostics',
+  path: '/audio-diagnostics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -163,6 +169,7 @@ const ApiPublicHooksSyncIcsRoute = ApiPublicHooksSyncIcsRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/audio-diagnostics': typeof AudioDiagnosticsRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -190,6 +197,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/audio-diagnostics': typeof AudioDiagnosticsRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -215,6 +223,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/audio-diagnostics': typeof AudioDiagnosticsRoute
   '/auth': typeof AuthRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/audio-diagnostics'
     | '/auth'
     | '/journal'
     | '/onboarding'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/audio-diagnostics'
     | '/auth'
     | '/journal'
     | '/onboarding'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/audio-diagnostics'
     | '/auth'
     | '/journal'
     | '/onboarding'
@@ -323,6 +335,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AudioDiagnosticsRoute: typeof AudioDiagnosticsRoute
   AuthRoute: typeof AuthRoute
   JournalRoute: typeof JournalRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -386,6 +399,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/audio-diagnostics': {
+      id: '/audio-diagnostics'
+      path: '/audio-diagnostics'
+      fullPath: '/audio-diagnostics'
+      preLoaderRoute: typeof AudioDiagnosticsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -566,6 +586,7 @@ const RemindersIdRouteWithChildren = RemindersIdRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AudioDiagnosticsRoute: AudioDiagnosticsRoute,
   AuthRoute: AuthRoute,
   JournalRoute: JournalRoute,
   OnboardingRoute: OnboardingRoute,
