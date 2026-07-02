@@ -187,6 +187,72 @@ export function stopVoice(route?: string) {
   currentAudioRoute = null;
 }
 
+// Bekende vrouwelijke stem-namen per iOS/Android/desktop. Uitgebreid met
+// veelgebruikte NL/EN systeemstemmen zodat we heuristisch kunnen scoren.
+const FEMALE_NAME_HINTS = [
+  "claire", "ellen", "fenna", "lotte", "saskia", "anna", "lisa", "eva",
+  "samantha", "karen", "moira", "serena", "susan", "victoria", "tessa",
+  "fiona", "allison", "ava", "zoe", "kate", "nicky", "veena", "female",
+  "vrouw",
+];
+const MALE_NAME_HINTS = [
+  "xander", "daniel", "alex", "fred", "arthur", "male", "man",
+];
+
+function isFemaleVoice(v: SpeechSynthesisVoice): boolean {
+  const n = v.name.toLowerCase();
+  if (MALE_NAME_HINTS.some((h) => n.includes(h))) return false;
+  return FEMALE_NAME_HINTS.some((h) => n.includes(h));
+}
+
+function scoreVoice(v: SpeechSynthesisVoice): number {
+  const lang = v.lang?.toLowerCase() ?? "";
+  const name = v.name.toLowerCase();
+  let score = 0;
+  if (lang.startsWith("nl")) score += 100;
+  else if (lang.startsWith("en")) score += 30;
+  if (isFemaleVoice(v)) score += 50;
+  if (name.includes("siri")) score += 20;
+  if (name.includes("enhanced") || name.includes("premium")) score += 10;
+  if (v.localService) score += 5;
+  return score;
+}
+
+function pickPreferredVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  if (!voices.length) return null;
+  const candidates = voices
+    .map((v) => ({ v, s: scoreVoice(v) }))
+    .filter(({ s }) => s > 0)
+    .sort((a, b) => b.s - a.s);
+  return candidates[0]?.v ?? null;
+}
+
+function ensureVoicesLoaded(): Promise<SpeechSynthesisVoice[]> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+      resolve([]);
+      return;
+    }
+    const initial = window.speechSynthesis.getVoices();
+    if (initial.length > 0) {
+      resolve(initial);
+      return;
+    }
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      window.speechSynthesis.onvoiceschanged = null;
+      resolve(window.speechSynthesis.getVoices());
+    };
+    window.speechSynthesis.onvoiceschanged = finish;
+    setTimeout(finish, 500);
+  });
+}
+
+let cachedPreferredVoice: SpeechSynthesisVoice | null = null;
+let voiceSelectionLogged = false;
+
 function browserSpeakFallback(
   text: string,
   intent: string,
@@ -196,7 +262,7 @@ function browserSpeakFallback(
 ) {
   emitTrace({
     provider: "browser",
-    voice_id: "system_default",
+    voice_id: cachedPreferredVoice?.name ?? "system_default",
     model: "speech_synthesis",
     route,
     latency_ms: latencyMs,
@@ -212,6 +278,7 @@ function browserSpeakFallback(
   }
   try {
     window.speechSynthesis.cancel();
+    // Utterance SYNCHROON aanmaken → blijft in de user-gesture context van iOS.
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "nl-NL";
     let started = false;
@@ -228,11 +295,46 @@ function browserSpeakFallback(
       if (!started) hooks?.onStart?.();
       hooks?.onEnd?.();
     };
-    window.speechSynthesis.speak(utter);
+
+    const speakNow = () => {
+      if (cachedPreferredVoice) {
+        utter.voice = cachedPreferredVoice;
+        utter.lang = cachedPreferredVoice.lang || utter.lang;
+      }
+      window.speechSynthesis.speak(utter);
+    };
+
+    if (cachedPreferredVoice) {
+      speakNow();
+    } else {
+      ensureVoicesLoaded().then((voices) => {
+        const picked = pickPreferredVoice(voices);
+        if (picked) {
+          cachedPreferredVoice = picked;
+          if (!voiceSelectionLogged) {
+            voiceSelectionLogged = true;
+            console.log(
+              "%c[Selected iOS Voice]",
+              "color:#3b82f6;font-weight:bold",
+              { name: picked.name, lang: picked.lang },
+            );
+          }
+        } else if (!voiceSelectionLogged) {
+          voiceSelectionLogged = true;
+          console.log(
+            "%c[Selected iOS Voice]",
+            "color:#3b82f6;font-weight:bold",
+            "system default",
+          );
+        }
+        speakNow();
+      });
+    }
   } catch {
     hooks?.onEnd?.();
   }
 }
+
 
 
 /**
