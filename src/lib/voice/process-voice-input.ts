@@ -687,7 +687,9 @@ export async function processVoiceInput(
   const actions: VoiceAction[] = [];
 
   // Directe uitvoering zonder bevestiging → emit interne intent direct.
-  if (actionRequired && !needsConfirmation && suggestedActions.length > 0) {
+  // Uitzondering: als needs_live_info=true willen we ALTIJD via assistant_chat
+  // gaan zodat de web-synthese-laag zijn werk kan doen.
+  if (!needsLiveInfo && actionRequired && !needsConfirmation && suggestedActions.length > 0) {
     for (const sa of suggestedActions) {
       const intent = mapProductIntent(productIntent, sa.intent);
       actions.push({
@@ -702,11 +704,15 @@ export async function processVoiceInput(
     // Standaard: assistant_chat met reply + optionele suggested_actions
     // (deze vormen de bevestigings-kaart in de UI).
     const chatPayload: Record<string, unknown> = { reply };
-    if (actionRequired && suggestedActions.length > 0) {
+    if (!needsLiveInfo && actionRequired && suggestedActions.length > 0) {
       chatPayload.suggested_actions = suggestedActions;
     }
     if (parsed.experience) chatPayload.experience = parsed.experience;
     if (parsed.experience_data) chatPayload.experience_data = parsed.experience_data;
+    if (needsLiveInfo) {
+      chatPayload.needs_live_info = true;
+      chatPayload.live_queries = liveQueries;
+    }
     actions.push({
       intent: "assistant_chat",
       payload: chatPayload,
