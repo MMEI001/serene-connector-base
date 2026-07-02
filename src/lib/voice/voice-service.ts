@@ -223,8 +223,8 @@ export async function speak(
     route,
     intent,
     length: cleanText.length,
-    preview: cleanText.slice(0, 60),
   });
+  console.log("[Voice 3.0] Final text →", cleanText);
 
   if (!cleanText) {
     console.warn("[Voice 3!] speak aborted: empty text");
@@ -310,7 +310,9 @@ export async function speak(
 
   let res: Response;
   try {
+    const requestBody = { text: cleanText, voice_id: voiceId };
     console.log("[Voice 4] TTS fetch →", `${SUPABASE_URL}/functions/v1/text-to-speech`, { voiceId });
+    console.log("[Voice 4.body] ElevenLabs request body", requestBody);
     res = await fetch(`${SUPABASE_URL}/functions/v1/text-to-speech`, {
       method: "POST",
       headers: {
@@ -318,7 +320,7 @@ export async function speak(
         apikey: ANON,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
+      body: JSON.stringify(requestBody),
     });
     console.log("[Voice 4a] TTS response", { status: res.status, contentType: res.headers.get("content-type") });
   } catch (err) {
@@ -336,6 +338,12 @@ export async function speak(
       status: "network_error",
       timestamp: new Date().toISOString(),
     });
+    // Voor de hoofd-reply MOET de gebruiker altijd iets horen — val terug
+    // op browser TTS zodat de uitleg niet verloren gaat.
+    if (isMainReply && !options.preloadOnly) {
+      console.warn("[Voice 4→browser] fallback naar browser TTS na network error");
+      browserSpeakFallback(cleanText, intent, route, latency);
+    }
     return;
   }
 
@@ -368,6 +376,12 @@ export async function speak(
       status,
       timestamp: new Date().toISOString(),
     });
+    // 429/5xx: fallback naar browser-TTS voor de hoofd-reply zodat de
+    // gebruiker altijd de uitleg hoort, ook bij ElevenLabs rate-limits.
+    if (isMainReply && !options.preloadOnly) {
+      console.warn("[Voice 4→browser] fallback naar browser TTS na", status);
+      browserSpeakFallback(cleanText, intent, route, latency);
+    }
     return;
   }
 
