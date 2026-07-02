@@ -39,6 +39,7 @@ export function orbReducer(state: OrbState, event: OrbEvent): OrbState {
     case "confirming":
       if (event.type === "CONFIRM") return "processing";
       if (event.type === "CANCEL") return "idle";
+      if (event.type === "TAP") return "listening";
       if (event.type === "FAIL") return "error";
       if (event.type === "RESET") return "idle";
       return state;

@@ -264,7 +264,13 @@ export function VoiceOrb({ onCompleted }: Props) {
         void speakAndAnimate(spokenConfirm, {
           intent: spokenIntent,
           route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
+          onEnd: () => {
+            // Continuous conversation: blijf luisteren, ook als de bevestigingskaart
+            // op het scherm staat. Gebruiker kan dan gewoon "ja" / "nee" / iets nieuws zeggen.
+            if (continuousModeRef.current) shouldAutoListenRef.current = true;
+          },
         });
+        if (result.assistant_reply?.trim()) pushHistory("assistant", result.assistant_reply.trim());
         setConfirming({
           action_id: result.action_id,
           intent: result.intent,
@@ -311,8 +317,9 @@ export function VoiceOrb({ onCompleted }: Props) {
       console.log("[Orb 1a2] Spoken summary (server):", result.spoken_summary);
       console.log("[Orb 1b] Spoken text (final, completed):", spoken);
       // Continue conversation: na een voltooide actie automatisch opnieuw luisteren
-      // zodra de assistent klaar is met spreken (tenzij er een query-kaart open blijft).
-      const shouldAutoListen = continuousModeRef.current && !result.query_result;
+      // zodra de assistent klaar is met spreken. Cards blijven zichtbaar maar
+      // blokkeren de microfoon niet.
+      const shouldAutoListen = continuousModeRef.current;
       const hasQuery = Boolean(result.query_result);
       void speakAndAnimate(spoken, {
         intent: result.intent,
@@ -489,10 +496,9 @@ export function VoiceOrb({ onCompleted }: Props) {
     }
     // Reset guard direct — voorkomt dubbele triggers.
     shouldAutoListenRef.current = false;
-    // Alleen doorluisteren als we in een neutrale state zitten.
-    if (state !== "done" && state !== "idle") return;
-    if (confirming) return;
-    if (queryResult) return;
+    // Blokkeer niet op zichtbare cards (confirming/query/experience) — de gebruiker
+    // moet altijd terug kunnen praten. Alleen skippen als we alweer iets aan het doen zijn.
+    if (state === "listening" || state === "processing") return;
     // Kleine delay geeft iOS Safari tijd om de audio-tail vrij te geven
     // voordat we opnieuw getUserMedia openen.
     const t = setTimeout(() => {
@@ -502,7 +508,7 @@ export function VoiceOrb({ onCompleted }: Props) {
       startListening();
     }, 350);
     return () => clearTimeout(t);
-  }, [isSpeaking, state, confirming, queryResult, startListening]);
+  }, [isSpeaking, state, startListening]);
 
   const stopListening = useCallback(() => {
     if (recorderRef.current?.state === "recording") {
@@ -608,19 +614,20 @@ export function VoiceOrb({ onCompleted }: Props) {
 
 
   const handleTap = useCallback(() => {
-    if (state === "confirming") return; // alleen via knoppen
     if (state === "error" && pending) {
       retryPending();
       return;
     }
-    if (state === "idle" || state === "done" || state === "error") {
-      if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
-      setConfirmation("");
-      setQueryResult(null);
-      startListening();
-    } else if (state === "listening") {
+    if (state === "listening") {
       stopListening();
+      return;
     }
+    // Toegestaan vanuit idle/done/error/confirming/speaking — gebruiker mag altijd
+    // terugpraten, ook als er een bevestigingskaart of query-resultaat open staat.
+    if (resetTimerRef.current) clearTimeout(resetTimerRef.current);
+    setConfirmation("");
+    setQueryResult(null);
+    startListening();
   }, [state, pending, retryPending, startListening, stopListening]);
 
   const hint =
