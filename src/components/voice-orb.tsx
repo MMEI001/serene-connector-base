@@ -230,6 +230,9 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
+      if (Array.isArray(result.products) && result.products.length > 0) {
+        setProducts(result.products);
+      }
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
