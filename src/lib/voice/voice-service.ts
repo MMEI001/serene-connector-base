@@ -567,6 +567,15 @@ async function playBlob(blob: Blob, options: VoiceSpeakOptions, generation?: num
  * met de exacte actieve voice_id.
  */
 export async function prewarmVoiceCache(): Promise<void> {
+  const skipReason = shouldSkipAckAudio();
+  if (skipReason) {
+    console.log(
+      "%c[ACK SKIP]",
+      "color:#f59e0b;font-weight:bold",
+      `prewarm skipped — ${skipReason}`,
+    );
+    return;
+  }
   const prefs = await loadVoicePrefs();
   if (!prefs.enabled || prefs.provider === "browser") return;
 
@@ -584,8 +593,20 @@ export async function prewarmVoiceCache(): Promise<void> {
 /**
  * Speelt direct een snelle erkenning af. Bypasst vaste MP3's.
  * Garandeert 100% spraaksamenhang.
+ *
+ * Op iOS/mobile tijdelijk uitgeschakeld: losse ack-audio blokkeert daar
+ * de main reply. We spelen dan alleen de hoofdreply.
  */
 export function playAcknowledgement(): () => void {
+  const skipReason = shouldSkipAckAudio();
+  if (skipReason) {
+    console.log(
+      "%c[ACK SKIP]",
+      "color:#f59e0b;font-weight:bold",
+      `${skipReason} — main reply only`,
+    );
+    return () => {};
+  }
   const phrase = ACK_PHRASES[Math.floor(Math.random() * ACK_PHRASES.length)];
   void speak(phrase, { intent: "acknowledgement", route: "prewarm_ack", isAck: true });
   return stopAcknowledgement;
