@@ -1,45 +1,80 @@
-## Doel
-HoofdRust laten redeneren vanuit menselijke behoefte, niet vanuit intents/acties. Acties (reminder, agenda, boodschappenlijst) worden een bijproduct van "hoe help ik deze persoon", nooit het startpunt.
+# Firecrawl als Brain-tool voor HoofdRust
 
-## Waar de wijziging landt
-Alles gebeurt in de Brain-laag — geen wijzigingen aan handlers, DB, UI of suggestion-schema. Concreet: `src/lib/voice/process-voice-input.ts` (systemPrompt + reasoning-prompt).
+## Filosofie
 
-## Aanpassingen
+Firecrawl wordt **geen** aparte intent en **geen** aparte UI-flow. Het is een onzichtbaar hulpmiddel dat de Brain zelf gebruikt wanneer het antwoord actuele informatie vereist. De gebruiker praat gewoon met HoofdRust; het voelt alsof HoofdRust het antwoord zelf weet.
 
-### 1. Reasoning Brain herformuleren (`REASONING_PROMPT`)
-Vervang de huidige 10-vragenlijst door de 7-stappen-behoefte-analyse uit de opdracht, in exact deze volgorde:
-1. Wat is de echte behoefte achter deze vraag?
-2. Welke context weet ik al over deze persoon?
-3. Wat zou een uitstekende persoonlijke assistent nu doen?
-4. Hoe kan ik de mentale belasting verminderen?
-5. Kan ik iets voorbereiden zodat de gebruiker minder hoeft na te denken?
-6. Is een vervolgvraag nodig?
-7. Pas nu: is een reminder / taak / agenda / boodschappenlijst nuttig — en zo ja welke?
+## Aanpak
 
-Regel expliciet vastleggen: stap 7 mag nooit "ja" zijn als stap 1–5 dat niet ondersteunen. Acties zijn hulpmiddel, geen doel.
+### 1. Firecrawl aansluiten
+- Firecrawl-connector linken via `standard_connectors--connect` → geeft `FIRECRAWL_API_KEY` in de server-env.
+- Nieuwe server-only helper `src/lib/tools/web-search.server.ts` met twee interne functies:
+  - `webSearch(query, { limit, site?, country: "nl", lang: "nl" })` → `search` + korte scrape (markdown, `onlyMainContent`).
+  - `webScrape(url, { formats: ["markdown", "json"] })` → voor detail-verrijking (prijs, afbeelding).
+- Time-out (8s), max 5 hits, geen retries in-loop. Alle output genormaliseerd naar `WebHit { title, url, snippet, price?, image?, store? }`.
+- `store` afgeleid uit hostname (ah.nl → "Albert Heijn", gall.nl → "Gall & Gall", jumbo.com → "Jumbo", enz.).
 
-Reasoning blijft interne stap, ongewijzigde plek in de pipeline. In `mode: "voice"` blijft ze standaard uit (latency-budget), maar wordt automatisch aangezet voor `mode: "text"` en `mode: "test"`. Overweeg in een volgende iteratie voor voice-mode een "reasoning-lite" (1 zin, max 800ms) — dit staat als vervolg genoteerd, niet nu.
+### 2. Brain krijgt "needs_live_info"-beslissing
+- In `process-voice-input.ts` breidt de bestaande JSON-schema-response uit met twee optionele velden:
+  - `needs_live_info: boolean`
+  - `live_queries: string[]` (max 2, kort, Nederlands, mag `site:` bevatten)
+- System-prompt krijgt duidelijke categorielijst:
+  - **Wel**: aanbiedingen, prijzen, producten, winkels, openingstijden, websites, nieuws, beschikbaarheid, evenementen, actuele feiten.
+  - **Niet**: recepten, algemeen advies, koken, opvoeding, planning, mentale steun, brainstormen.
+- Geen aparte intent; Brain blijft `assistant_chat` teruggeven.
 
-### 2. Hoofd-systemPrompt herschrijven (`systemPrompt`)
-- KERNFILOSOFIE bovenaan herschrijven: "Denk nooit eerst in intents. Denk eerst: wat probeert deze persoon te bereiken? Dan: hoe help ik? Dan pas: is een actie nuttig?"
-- Expliciet benoemen: HoofdRust gedraagt zich als een persoonlijke assistent die de gebruiker al jaren kent — niet als chatbot, agenda-app of opdracht-uitvoerder.
-- INTENT-KEUZE-sectie verschuiven naar het einde onder een neutrale kop ("Hoe je je antwoord uiteindelijk labelt") en herformuleren als afgeleide van de behoefte, niet als startpunt.
-- Actie-regels aanscherpen: bied maximaal één vervolgstap aan, en alleen wanneer stap 5/7 van de redenering dat rechtvaardigt. Bij twijfel: geen actie, wel een warm inhoudelijk antwoord.
-- Twee canonieke VOORBEELDEN vervangen door de twee uit de opdracht (borrelhapjes zaterdag → eerst inspiratie, dán aanbod boodschappenlijst; "wat eten we vanavond" → concreet voorstel dat de beslissing wegneemt + aanbod lijstje).
-- Reply-toon: warm, beslissend, ontlastend — nooit een vragende terugkaats-vraag als de gebruiker duidelijk om ontlasting vraagt.
+### 3. Twee-fasen-flow in de pipeline
+In `src/lib/assistant/pipeline.ts` na de Conversation-engine:
 
-### 3. Reply-lengte en voice-snelheid
-Voice-mode blijft snel: 2–4 zinnen, één vervolgstap. Geen extra AI-calls, geen nieuwe modellen. De verandering zit puur in prompts.
+```
+Conversation (turn 1)
+  ↓ needs_live_info?
+  ├─ nee → normale flow
+  └─ ja  → webSearch(live_queries) parallel
+          → resultaten samenvoegen (dedupe op host+titel)
+          → tweede Brain-call (synthese) met resultaten als extra system-message
+          → Brain schrijft natuurlijk antwoord + kiest max 5 producten
+          → antwoord + products[] doorzetten naar UI
+```
 
-### 4. Verificatie via `/test-mode`
-Testset (bevestigen dat gedrag klopt):
-- "Heb je leuke borrelhapjes voor zaterdag?" → inspiratie eerst, dan één aanbod voor boodschappenlijst.
-- "Ik weet niet wat we vanavond moeten eten." → concreet voorstel dat de beslissing wegneemt + aanbod lijstje.
-- "Ik voel me overprikkeld." → warme reply, géén actie.
-- "Zet morgen 9 uur tandarts." → directe agenda-actie blijft werken (behoefte = agenda vastleggen).
-- "Wat staat er morgen op mijn agenda?" → query-antwoord, geen actie voorgesteld.
+De tweede call gebruikt hetzelfde model met een strikte prompt:
+- Alleen prijs/aanbieding noemen als het letterlijk in de bron staat.
+- Mag bronnen combineren ("AH heeft X, bij Gall & Gall Y").
+- Max 5 producten, gerangschikt op relevantie.
 
-## Buiten scope
-- Geen wijzigingen aan `dispatch-voice-action`, handlers, suggestion-card UI, of DB-schema.
-- Geen nieuw actie-type; boodschappenlijst blijft `note` met bullet-tekst.
-- Geen model-upgrade; latency-profiel blijft gelijk.
+Toegevoegd aan `AssistantResult`: `products?: ProductCardData[]`.
+
+### 4. Uniforme ProductCard
+Nieuwe component `src/components/product-card.tsx`:
+- Afbeelding (of neutrale placeholder als geen bron-image).
+- Naam, winkel-badge, optionele prijs.
+- Klikbare titel/afbeelding (target=_blank, rel=noopener).
+- Knop **"Toevoegen aan boodschappenlijst"** → maakt via bestaande note-flow een note aan met titel = product-naam, body = winkel + prijs + url.
+
+`voice-orb.tsx` toont `products` net als `experience_card` — een lijst kaartjes onder de reply.
+
+### 5. History-verrijking
+Gevonden producten + gekozen items komen in `historyRef` als korte assistant-samenvatting, zodat vervolgvragen ("zet de eerste op mijn lijst", "de goedkoopste graag") context hebben.
+
+## Uit scope (nu niet)
+- Geen prijsvergelijkings-crawls over veel winkels tegelijk (blijft bij wat Firecrawl-search teruggeeft).
+- Geen persistente product-cache.
+- Nog geen automatische valuta-conversie.
+
+## Bestanden (nieuw/aangepast)
+
+Nieuw:
+- `src/lib/tools/web-search.server.ts` — Firecrawl-wrapper + normalisatie.
+- `src/components/product-card.tsx` — uniforme kaart met add-to-list.
+- `src/lib/assistant/tool-runner.ts` — voert `live_queries` parallel uit, dedupe, budget.
+
+Aangepast:
+- `src/lib/voice/process-voice-input.ts` — schema-uitbreiding + prompt-instructie.
+- `src/lib/assistant/pipeline.ts` — tweede Brain-call na tool-run, doorzet `products`.
+- `src/lib/assistant/types.ts` — `AssistantResult.products`.
+- `src/components/voice-orb.tsx` — render `products` onder reply.
+
+## Wat ik nu ga doen
+1. Firecrawl-connector linken (jouw bevestiging → `standard_connectors--connect`).
+2. Bovenstaande code bouwen in één keer.
+3. Kort testen tegen `/audio-diagnostics` of directe pipeline-invoke: "aanbiedingen wijn Albert Heijn" moet echte AH-hits geven; "recept voor pasta" mag géén webcall triggeren (log check op `needs_live_info=false`).
