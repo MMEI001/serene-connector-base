@@ -90,12 +90,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Een rustige, warme plek voor je dagelijkse notities en stemming.",
       },
-      { property: "og:title", content: "HoofdRust" },
+      { property: "og:title", content: "HoofdRust — Rustig dagboek & stemming" },
       {
         property: "og:description",
         content: "Een rustige, warme plek voor je dagelijkse notities.",
       },
       { property: "og:type", content: "website" },
+      { name: "twitter:title", content: "HoofdRust — Rustig dagboek & stemming" },
+      { name: "description", content: "HoofdRust is a personal productivity app for managing reminders, \"let go\" items, and AI suggestions." },
+      { property: "og:description", content: "HoofdRust is a personal productivity app for managing reminders, \"let go\" items, and AI suggestions." },
+      { name: "twitter:description", content: "HoofdRust is a personal productivity app for managing reminders, \"let go\" items, and AI suggestions." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/132aa037-1dd5-4aae-84b6-328c1f2079d5/id-preview-65635f2a--aa2817e3-a301-4a75-9e08-9af6a4d4d4e1.lovable.app-1782990021075.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/132aa037-1dd5-4aae-84b6-328c1f2079d5/id-preview-65635f2a--aa2817e3-a301-4a75-9e08-9af6a4d4d4e1.lovable.app-1782990021075.png" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
