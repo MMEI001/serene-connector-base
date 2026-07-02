@@ -434,6 +434,10 @@ export async function speak(
   audioBlobCache.set(cacheKey, blob);
 
   if (options.preloadOnly) return;
+  if (isStale()) {
+    console.log("%c[ACK ABORT]", "color:#f59e0b", "stale na netwerk", { gen: myGeneration, current: speakGeneration });
+    return;
+  }
 
   const latency = Math.round(performance.now() - t0);
   emitTrace({
@@ -448,10 +452,17 @@ export async function speak(
     timestamp: new Date().toISOString(),
   });
 
-  await playBlob(blob, options);
+  await playBlob(blob, options, myGeneration);
 }
 
-async function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
+async function playBlob(blob: Blob, options: VoiceSpeakOptions, generation?: number): Promise<void> {
+  // Als er sinds deze speak() een nieuwere is gestart, niet meer afspelen.
+  if (generation !== undefined && generation !== speakGeneration && !options.preloadOnly) {
+    console.log("%c[PLAY ABORT]", "color:#ef4444", "stale generation", { generation, current: speakGeneration });
+    return;
+  }
+  const isMain = !options.isAck && options.route !== "prewarm_ack";
+  if (isMain) console.log("%c[MAIN AUDIO PLAY]", "color:#10b981;font-weight:bold", { size: blob.size });
   console.log("[Voice 6] playBlob start", { size: blob.size, route: options.route });
   // Stop eventuele oudere audio VOOR we een nieuwe URL/element aanmaken,
   // zodat we nooit twee <audio> elementen tegelijk hebben op iOS Safari.
