@@ -500,6 +500,8 @@ export async function processVoiceInput(
     ? setTimeout(() => controller.abort(), VOICE_BRAIN_TIMEOUT_MS)
     : null;
 
+  const t_llm = performance.now();
+  const promptChars = messages.reduce((n, m) => n + (m.content?.length ?? 0), 0);
   let res: Response;
   try {
     res = await fetch(GATEWAY_URL, {
@@ -529,6 +531,7 @@ export async function processVoiceInput(
     );
   }
   if (timeoutHandle) clearTimeout(timeoutHandle);
+  const llm_headers_ms = Math.round(performance.now() - t_llm);
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -541,7 +544,21 @@ export async function processVoiceInput(
     usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
   };
 
+  const t_body = performance.now();
   const json = (await res.json().catch(() => null)) as GatewayResp | null;
+  const llm_body_ms = Math.round(performance.now() - t_body);
+  const llm_total_ms = Math.round(performance.now() - t_llm);
+  console.log("[perf brain]", {
+    model: MODEL,
+    mode,
+    prompt_chars: promptChars,
+    prompt_tokens: json?.usage?.prompt_tokens,
+    completion_tokens: json?.usage?.completion_tokens,
+    llm_headers_ms,
+    llm_body_ms,
+    llm_total_ms,
+  });
+
   const call = json?.choices?.[0]?.message?.tool_calls?.[0];
   if (!call?.function?.arguments) {
     console.warn("[brain] geen tool_call in response");
