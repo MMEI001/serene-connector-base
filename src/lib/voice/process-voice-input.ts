@@ -626,12 +626,19 @@ export async function processVoiceInput(
     suggested_actions?: SuggestedActionRaw[];
     experience?: string;
     experience_data?: Record<string, unknown>;
+    needs_live_info?: boolean;
+    live_queries?: string[];
   };
   try {
     parsed = JSON.parse(call.function.arguments);
   } catch {
     return chatFallback("Ik hoorde je, maar mijn antwoord kwam raar terug. Probeer het nog eens.");
   }
+
+  const needsLiveInfo = !!parsed.needs_live_info;
+  const liveQueries = Array.isArray(parsed.live_queries)
+    ? parsed.live_queries.filter((q): q is string => typeof q === "string" && q.trim().length > 0).slice(0, 2)
+    : [];
 
   let reply = (parsed.reply ?? "").trim();
   if (!reply) {
