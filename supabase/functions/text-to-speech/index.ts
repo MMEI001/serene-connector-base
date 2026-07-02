@@ -1,5 +1,6 @@
 // Supabase Edge Function: text-to-speech
 // Converts text to speech via ElevenLabs and returns audio/mpeg.
+// Includes voice_id diagnostics and safe fallback to a known-working voice.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -7,17 +8,25 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Expose-Headers": "x-voice-id, x-voice-model, x-voice-provider",
+  "Access-Control-Expose-Headers":
+    "x-voice-id, x-voice-model, x-voice-provider, x-voice-fallback, x-voice-requested",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const DEFAULT_VOICE_ID = "XB0fDUnXU5powFXDhCwa"; // Charlotte
+// Sarah — algemeen beschikbare ElevenLabs standaardstem. Werkt op elk account.
+const FALLBACK_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah
+// Charlotte — gewenste stem, maar niet gegarandeerd beschikbaar op elk account.
+const CHARLOTTE_VOICE_ID = "XB0fDUnXU5powFXDhCwa";
+const DEFAULT_VOICE_ID = FALLBACK_VOICE_ID;
+
 const ALLOWED_VOICE_IDS = new Set([
-  "XB0fDUnXU5powFXDhCwa",
-  "Xb7hH8MSUJpSbSDYk0k2",
-  "pFZP5JQG7iQjIQuC4Bku",
-  "nPczCjzI2devNBz1zQrb",
-  "onwK4e9ZLuTAKqWW03F9",
+  CHARLOTTE_VOICE_ID,
+  FALLBACK_VOICE_ID,
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice
+  "pFZP5JQG7iQjIQuC4Bku", // Lily
+  "nPczCjzI2devNBz1zQrb", // Brian
+  "onwK4e9ZLuTAKqWW03F9", // Daniel
+  "JBFqnCBsd6RMkjVDRZzb", // George
 ]);
 const MODEL_ID = "eleven_multilingual_v2";
 const MAX_CHARS = 1000;
@@ -29,13 +38,60 @@ function json(body: unknown, status: number) {
   });
 }
 
+async function synthesize(
+  apiKey: string,
+  voiceId: string,
+  text: string,
+): Promise<
+  | { ok: true; audio: ArrayBuffer; contentType: string; status: number }
+  | { ok: false; status: number; contentType: string; detail: string }
+> {
+  const url =
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "Content-Type": "application/json",
+      Accept: "audio/mpeg",
+    },
+    body: JSON.stringify({
+      text,
+      model_id: MODEL_ID,
+      voice_settings: {
+        stability: 0.6,
+        similarity_boost: 0.75,
+        style: 0.3,
+        use_speaker_boost: true,
+      },
+    }),
+  });
+
+  const contentType = resp.headers.get("content-type") || "";
+  if (!resp.ok || !contentType.includes("audio")) {
+    const detail = await resp.text().catch(() => "");
+    console.error(
+      "[TTS] ElevenLabs non-audio",
+      { voiceId, status: resp.status, contentType, detailPreview: detail.slice(0, 400) },
+    );
+    return { ok: false, status: resp.status, contentType, detail };
+  }
+  const audio = await resp.arrayBuffer();
+  console.log("[TTS] ElevenLabs audio ok", {
+    voiceId,
+    status: resp.status,
+    contentType,
+    bytes: audio.byteLength,
+  });
+  return { ok: true, audio, contentType, status: resp.status };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    // --- Auth check ---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return json({ error: "Unauthorized" }, 401);
@@ -73,53 +129,58 @@ Deno.serve(async (req) => {
       return json({ error: "Tekst is te lang" }, 400);
     }
 
-    const voiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
+    const primaryVoiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
       ? requestedVoiceId
       : DEFAULT_VOICE_ID;
-    console.log("[TTS] voice_id", voiceId);
-
-    const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
-
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: {
-        "xi-api-key": apiKey,
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-      },
-      body: JSON.stringify({
-        text,
-        model_id: MODEL_ID,
-        voice_settings: {
-          stability: 0.6,
-          similarity_boost: 0.75,
-          style: 0.3,
-          use_speaker_boost: true,
-        },
-      }),
+    console.log("[TTS] request", {
+      requestedVoiceId,
+      primaryVoiceId,
+      fallbackVoiceId: FALLBACK_VOICE_ID,
+      textLen: text.length,
     });
 
-    if (!resp.ok) {
-      const detail = await resp.text();
-      console.error("ElevenLabs error", resp.status, detail);
-      const fallbackable = resp.status === 401 || resp.status === 402 ||
-        resp.status === 429 || resp.status >= 500;
+    let usedVoiceId = primaryVoiceId;
+    let result = await synthesize(apiKey, primaryVoiceId, text);
+    let didFallback = false;
+
+    if (!result.ok && primaryVoiceId !== FALLBACK_VOICE_ID) {
+      console.warn(
+        "[TTS] primary voice failed, retrying with fallback",
+        { primaryVoiceId, fallbackVoiceId: FALLBACK_VOICE_ID, primaryStatus: result.status },
+      );
+      const fallback = await synthesize(apiKey, FALLBACK_VOICE_ID, text);
+      if (fallback.ok) {
+        result = fallback;
+        usedVoiceId = FALLBACK_VOICE_ID;
+        didFallback = true;
+      }
+    }
+
+    if (!result.ok) {
       return json(
-        { error: "tts_unavailable", fallback: fallbackable, upstream_status: resp.status },
-        fallbackable ? 200 : resp.status,
+        {
+          error: "tts_unavailable",
+          fallback: true,
+          upstream_status: result.status,
+          upstream_content_type: result.contentType,
+          upstream_detail: result.detail.slice(0, 500),
+          requested_voice_id: requestedVoiceId,
+          primary_voice_id: primaryVoiceId,
+        },
+        200,
       );
     }
-    console.log("[TTS] ElevenLabs status", resp.status);
 
-    const audio = await resp.arrayBuffer();
-    return new Response(audio, {
+    return new Response(result.audio, {
       status: 200,
       headers: {
         ...corsHeaders,
         "Content-Type": "audio/mpeg",
         "Cache-Control": "no-store",
         "x-voice-provider": "elevenlabs",
-        "x-voice-id": voiceId,
+        "x-voice-id": usedVoiceId,
+        "x-voice-requested": requestedVoiceId || primaryVoiceId,
+        "x-voice-fallback": didFallback ? "true" : "false",
         "x-voice-model": MODEL_ID,
       },
     });
