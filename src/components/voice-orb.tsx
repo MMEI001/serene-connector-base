@@ -407,6 +407,29 @@ export function VoiceOrb({ onCompleted }: Props) {
       if (existingPendingId) deletePendingAudio(existingPendingId).catch(() => {});
       setPending(null);
 
+      // "Think while speaking": als de pipeline langer duurt dan ~700 ms,
+      // spreek dan direct een korte natuurlijke overbrugger uit zodat er
+      // binnen ~1.5 s al iets te horen is. Wanneer het echte antwoord binnen
+      // is, wachten we netjes tot de filler klaar is en spreken dan verder.
+      const FILLER_DELAY_MS = 700;
+      const FILLERS = [
+        "Momentje, ik denk even mee.",
+        "Even kijken.",
+        "Ja, ik zoek het meteen voor je op.",
+        "Goed, één seconde.",
+      ];
+      let fillerPromise: Promise<void> | null = null;
+      const fillerTimer = setTimeout(() => {
+        const filler = FILLERS[Math.floor(Math.random() * FILLERS.length)];
+        setIsSpeaking(true);
+        fillerPromise = speakText(filler, {
+          intent: "filler",
+          route: "filler",
+        }).finally(() => {
+          setIsSpeaking(false);
+        });
+      }, FILLER_DELAY_MS);
+
       try {
         pushHistory("user", trans.text);
         perf.mark("pipeline_start");
@@ -418,9 +441,18 @@ export function VoiceOrb({ onCompleted }: Props) {
           },
         });
         perf.mark("pipeline_end");
+        clearTimeout(fillerTimer);
+        // Nooit een lopende filler afkappen — dat voelt hakkelend.
+        if (fillerPromise) {
+          try { await fillerPromise; } catch { /* ignore */ }
+        }
         if (result?.confirmation) pushHistory("assistant", result.confirmation);
         handleResult(result);
       } catch (err) {
+        clearTimeout(fillerTimer);
+        if (fillerPromise) {
+          try { await fillerPromise; } catch { /* ignore */ }
+        }
         const msg = err instanceof Error ? err.message : "Er ging iets mis.";
         setConfirmation("");
         dispatch({ type: "FAIL", message: msg });
