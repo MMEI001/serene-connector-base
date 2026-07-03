@@ -132,12 +132,27 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       setIsSpeaking(true);
       stopAcknowledgement();
+      // Zorg dat onEnd exact één keer wordt aangeroepen — ook als de TTS
+      // helemaal geen audio afspeelt (stem uit, netwerkfout, non-audio response).
+      // Anders blijft de UI hangen (geen scheduleReset, geen auto-listen).
+      let endCalled = false;
+      const userOnEnd = opts?.onEnd;
+      const wrappedEnd = () => {
+        if (endCalled) return;
+        endCalled = true;
+        try {
+          userOnEnd?.();
+        } catch (e) {
+          console.warn("[Orb 2!] onEnd threw", e);
+        }
+      };
       try {
-        await speakText(text, { route: "assistant_reply", ...opts });
+        await speakText(text, { route: "assistant_reply", ...opts, onEnd: wrappedEnd });
         console.log("[Orb 2b] speakAndAnimate finished");
       } catch (err) {
         console.error("[Orb 2!] speakAndAnimate threw", err);
       } finally {
+        wrappedEnd();
         setIsSpeaking(false);
       }
     },
