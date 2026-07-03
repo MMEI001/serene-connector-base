@@ -163,5 +163,82 @@ export async function webSearch(
     }
     if (merged.length >= 10) break;
   }
+
+  // Verrijk ontbrekende afbeeldingen via OpenGraph van de bronpagina.
+  await enrichImages(merged, 3500);
   return merged;
 }
+
+/** Haal een pagina op (kort) en trek og:image / twitter:image. */
+async function fetchOgImage(pageUrl: string, timeoutMs: number): Promise<string | null> {
+  try {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), timeoutMs);
+    const res = await fetch(pageUrl, {
+      signal: ctl.signal,
+      redirect: "follow",
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; HoofdRustBot/1.0; +https://hoofdrust.app)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+    }).catch(() => null);
+    clearTimeout(t);
+    if (!res || !res.ok) return null;
+    const ct = res.headers.get("content-type") ?? "";
+    if (!ct.includes("html")) return null;
+    const reader = res.body?.getReader();
+    if (!reader) return null;
+    const decoder = new TextDecoder();
+    let html = "";
+    let bytes = 0;
+    const MAX = 120_000;
+    while (bytes < MAX) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      html += decoder.decode(value, { stream: true });
+      if (html.includes("</head>")) break;
+    }
+    try {
+      await reader.cancel();
+    } catch {
+      // ignore
+    }
+
+    const patterns = [
+      /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i,
+      /<meta[^>]+name=["']twitter:image(?::src)?["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["']/i,
+      /<link[^>]+rel=["']image_src["'][^>]+href=["']([^"']+)["']/i,
+    ];
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m?.[1]) return absolutize(m[1], pageUrl);
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function absolutize(src: string, base: string): string | null {
+  try {
+    return new URL(src, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+async function enrichImages(hits: WebHit[], timeoutMs: number): Promise<void> {
+  const targets = hits.filter((h) => !h.image);
+  if (targets.length === 0) return;
+  const budget = new Promise<void>((r) => setTimeout(r, timeoutMs + 500));
+  const jobs = targets.map(async (h) => {
+    const img = await fetchOgImage(h.url, timeoutMs);
+    if (img) h.image = img;
+  });
+  await Promise.race([Promise.all(jobs), budget]);
+}
+
