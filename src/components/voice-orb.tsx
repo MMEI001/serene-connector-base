@@ -275,6 +275,7 @@ export function VoiceOrb({ onCompleted }: Props) {
           intent: spokenIntent,
           route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
           onEnd: () => {
+            if (pendingProducts) setProducts(pendingProducts);
             // Continuous conversation: blijf luisteren, ook als de bevestigingskaart
             // op het scherm staat. Gebruiker kan dan gewoon "ja" / "nee" / iets nieuws zeggen.
             if (continuousModeRef.current) shouldAutoListenRef.current = true;
