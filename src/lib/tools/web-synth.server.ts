@@ -27,8 +27,9 @@ const SCHEMA = {
       properties: {
         reply: {
           type: "string",
+          minLength: 20,
           description:
-            "Kort, natuurlijk Nederlands antwoord (2–4 zinnen). Combineer bronnen als dat helpt (bv. 'AH heeft X, bij Gall & Gall is Y goedkoper'). Noem NOOIT dat je hebt gezocht of een tool hebt gebruikt. Nooit verzonnen prijzen. Eindig met een vriendelijk voorstel om iets op de boodschappenlijst te zetten.",
+            "VERPLICHT — een natuurlijk, persoonlijk Nederlands antwoord (2–4 zinnen) dat direct aansluit op de vraag van de gebruiker. Begin met een korte gesproken introductie die refereert aan wat de gebruiker vroeg (bv. 'Voor je borrel bij Albert Heijn heb ik een paar leuke wijnen gevonden'). Combineer gerust bronnen ('bij AH X, bij Gall & Gall Y'). Noem prijzen/aanbiedingen alleen als ze letterlijk in de bron staan. Nooit noemen dat je hebt gezocht of een tool hebt gebruikt. Eindig met een vriendelijk voorstel om er één op de boodschappenlijst te zetten. Deze reply mag NOOIT leeg zijn — de productkaarten ondersteunen dit antwoord, maar vervangen het nooit.",
         },
         products: {
           type: "array",
