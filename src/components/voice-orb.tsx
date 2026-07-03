@@ -230,9 +230,12 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
-      if (Array.isArray(result.products) && result.products.length > 0) {
-        setProducts(result.products);
-      }
+      // Producten pas tonen NADAT de assistent gesproken heeft — cards zijn
+      // visuele ondersteuning, nooit een vervanging van de gesproken reply.
+      const pendingProducts =
+        Array.isArray(result.products) && result.products.length > 0
+          ? result.products
+          : null;
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
