@@ -337,6 +337,8 @@ export function VoiceOrb({ onCompleted }: Props) {
         route,
         // scheduleReset pas ná audio.onended (of onerror) — nooit tijdens speaking.
         onEnd: () => {
+          // Producten pas tonen nadat de assistent klaar is met spreken.
+          if (pendingProducts) setProducts(pendingProducts);
           if (shouldAutoListen) shouldAutoListenRef.current = true;
           if (!hasQuery) scheduleReset();
         },
