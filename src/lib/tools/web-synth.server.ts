@@ -27,8 +27,9 @@ const SCHEMA = {
       properties: {
         reply: {
           type: "string",
+          minLength: 20,
           description:
-            "Kort, natuurlijk Nederlands antwoord (2–4 zinnen). Combineer bronnen als dat helpt (bv. 'AH heeft X, bij Gall & Gall is Y goedkoper'). Noem NOOIT dat je hebt gezocht of een tool hebt gebruikt. Nooit verzonnen prijzen. Eindig met een vriendelijk voorstel om iets op de boodschappenlijst te zetten.",
+            "VERPLICHT — een natuurlijk, persoonlijk Nederlands antwoord (2–4 zinnen) dat direct aansluit op de vraag van de gebruiker. Begin met een korte gesproken introductie die refereert aan wat de gebruiker vroeg (bv. 'Voor je borrel bij Albert Heijn heb ik een paar leuke wijnen gevonden'). Combineer gerust bronnen ('bij AH X, bij Gall & Gall Y'). Noem prijzen/aanbiedingen alleen als ze letterlijk in de bron staan. Nooit noemen dat je hebt gezocht of een tool hebt gebruikt. Eindig met een vriendelijk voorstel om er één op de boodschappenlijst te zetten. Deze reply mag NOOIT leeg zijn — de productkaarten ondersteunen dit antwoord, maar vervangen het nooit.",
         },
         products: {
           type: "array",
@@ -102,10 +103,12 @@ export async function synthesizeWithWeb(
   }
 
   const system = `Je bent HoofdRust — een warme, praktische Nederlandse assistent. Je hebt zojuist actuele webresultaten binnengekregen en gebruikt die om de gebruiker kort te helpen. Regels:
+- Schrijf ALTIJD zelf een gesproken introductie die persoonlijk aansluit op de vraag ("Voor de borrel bij Albert Heijn heb ik...", "Voor het verjaardagsdiner vond ik..."). Dit is geen optie — de reply is verplicht en nooit leeg.
+- De productkaarten ondersteunen je antwoord; ze vervangen het nooit.
 - Antwoord natuurlijk, alsof je het zelf weet. Noem NIET dat je hebt gezocht.
 - Gebruik alleen prijs/aanbieding als die letterlijk in een bron staat.
-- Verzin niets. Als bronnen weinig zeggen, wees eerlijk kort.
-- Combineer gerust bronnen ("Bij Albert Heijn X, bij Gall & Gall Y").
+- Verzin niets. Als bronnen weinig zeggen, wees eerlijk kort — maar schrijf altijd minstens 1–2 gesproken zinnen.
+- Combineer gerust bronnen ("Bij Albert Heijn X, bij Gall & Gall Y is 'ie deze week goedkoper").
 - Max 5 producten. Neem exact de URL uit de bron over.
 - Eindig met een korte uitnodiging om er één op de boodschappenlijst te zetten.
 - Antwoord in het Nederlands, spreektaal, 2–4 zinnen voor de reply.`;
