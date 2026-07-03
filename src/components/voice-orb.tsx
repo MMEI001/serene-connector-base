@@ -132,12 +132,27 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       setIsSpeaking(true);
       stopAcknowledgement();
+      // Zorg dat onEnd exact één keer wordt aangeroepen — ook als de TTS
+      // helemaal geen audio afspeelt (stem uit, netwerkfout, non-audio response).
+      // Anders blijft de UI hangen (geen scheduleReset, geen auto-listen).
+      let endCalled = false;
+      const userOnEnd = opts?.onEnd;
+      const wrappedEnd = () => {
+        if (endCalled) return;
+        endCalled = true;
+        try {
+          userOnEnd?.();
+        } catch (e) {
+          console.warn("[Orb 2!] onEnd threw", e);
+        }
+      };
       try {
-        await speakText(text, { route: "assistant_reply", ...opts });
+        await speakText(text, { route: "assistant_reply", ...opts, onEnd: wrappedEnd });
         console.log("[Orb 2b] speakAndAnimate finished");
       } catch (err) {
         console.error("[Orb 2!] speakAndAnimate threw", err);
       } finally {
+        wrappedEnd();
         setIsSpeaking(false);
       }
     },
@@ -230,9 +245,12 @@ export function VoiceOrb({ onCompleted }: Props) {
       });
       if (result.engine_trace) setLastTrace(result.engine_trace);
       setExperienceCard(result.experience_card ?? null);
-      if (Array.isArray(result.products) && result.products.length > 0) {
-        setProducts(result.products);
-      }
+      // Producten pas tonen NADAT de assistent gesproken heeft — cards zijn
+      // visuele ondersteuning, nooit een vervanging van de gesproken reply.
+      const pendingProducts =
+        Array.isArray(result.products) && result.products.length > 0
+          ? result.products
+          : null;
       if (result.status === "skipped") {
         setConfirmation("");
         setConfirming(null);
@@ -272,6 +290,7 @@ export function VoiceOrb({ onCompleted }: Props) {
           intent: spokenIntent,
           route: spokenIntent === "spoken_summary" ? "spoken_summary" : "confirmation",
           onEnd: () => {
+            if (pendingProducts) setProducts(pendingProducts);
             // Continuous conversation: blijf luisteren, ook als de bevestigingskaart
             // op het scherm staat. Gebruiker kan dan gewoon "ja" / "nee" / iets nieuws zeggen.
             if (continuousModeRef.current) shouldAutoListenRef.current = true;
@@ -333,6 +352,8 @@ export function VoiceOrb({ onCompleted }: Props) {
         route,
         // scheduleReset pas ná audio.onended (of onerror) — nooit tijdens speaking.
         onEnd: () => {
+          // Producten pas tonen nadat de assistent klaar is met spreken.
+          if (pendingProducts) setProducts(pendingProducts);
           if (shouldAutoListen) shouldAutoListenRef.current = true;
           if (!hasQuery) scheduleReset();
         },

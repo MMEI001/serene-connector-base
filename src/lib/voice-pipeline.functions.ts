@@ -272,9 +272,11 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
         const synth = await synthesizeWithWeb(text, hits);
         const synth_ms = Math.round(performance.now() - t_synth);
         console.log("[perf web]", { queries, hits: hits.length, web_ms, synth_ms });
+        const synthReply = synth.reply?.trim();
         reply =
-          synth.reply ||
-          "Ik vond een paar opties voor je. Wil je er één op je boodschappenlijst?";
+          synthReply && synthReply.length > 0
+            ? synthReply
+            : "Ik heb een paar opties voor je gevonden. Ik zet ze hieronder klaar — wil je er één op je boodschappenlijst?";
         products = synth.products;
       }
 
