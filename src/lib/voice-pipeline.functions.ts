@@ -7,6 +7,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { processVoiceInput } from "@/lib/voice/process-voice-input";
 import { dispatchVoiceBundle } from "@/lib/voice/dispatch-voice-action";
+import { handleQuery } from "@/lib/voice/handlers/query";
 import { loadUserPersona } from "@/lib/voice/load-persona";
 import type { PipelineResult, VoiceAction, VoiceIntent } from "@/lib/voice/types";
 import { runAssistantTurn } from "@/lib/assistant/pipeline";
@@ -144,6 +145,48 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+function todayIsoAmsterdam(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function addDaysIso(dateIso: string, days: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+function nextDutchWeekdayDate(text: string): string | null {
+  const lower = text.toLowerCase();
+  const hit = Object.entries(NL_WEEKDAYS).find(([name]) => new RegExp(`\\b${name}\\b`, "i").test(lower));
+  if (!hit) return null;
+  const [, target] = hit;
+  const todayIso = todayIsoAmsterdam();
+  const probe = new Date(`${todayIso}T12:00:00`);
+  const current = probe.getDay();
+  let delta = (target - current + 7) % 7;
+  if (delta === 0 && !/\b(vandaag|deze\s+dag)\b/i.test(lower)) delta = 7;
+  return addDaysIso(todayIso, delta);
+}
+
+function detectAgendaQuery(text: string): { scope: "today" | "tomorrow" | "this_week" | "next_week" | "specific_date"; date?: string } | null {
+  const lower = text.toLowerCase();
+  const asksAgenda = /\b(agenda|planning|plan|te doen|staat er|afspraak|afspraken)\b/i.test(lower);
+  const asksQuestion = /\b(wat|wanneer|hoe laat|heb ik|staat|staan|planning)\b/i.test(lower);
+  if (!asksAgenda || !asksQuestion) return null;
+  if (/\bovermorgen\b/i.test(lower)) return { scope: "specific_date", date: addDaysIso(todayIsoAmsterdam(), 2) };
+  if (/\bmorgen\b/i.test(lower)) return { scope: "tomorrow" };
+  if (/\bvolgende week\b/i.test(lower)) return { scope: "next_week" };
+  if (/\b(deze week|week)\b/i.test(lower)) return { scope: "this_week" };
+  const weekdayDate = nextDutchWeekdayDate(lower);
+  if (weekdayDate) return { scope: "specific_date", date: weekdayDate };
+  if (/\bvandaag\b/i.test(lower)) return { scope: "today" };
+  return null;
+}
+
 /** Trek concrete suggesties uit een assistant_reply en formatteer als "Suggesties: …". */
 function extractSuggestionsFromReply(reply: string): string | null {
   if (!reply) return null;
@@ -227,6 +270,12 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
     const t_persona = performance.now();
     const persona = await loadUserPersona(supabase, userId);
     const persona_ms = Math.round(performance.now() - t_persona);
+
+    const directAgendaQuery = detectAgendaQuery(text);
+    if (directAgendaQuery) {
+      const result = await handleQuery({ supabase, userId }, directAgendaQuery, persona);
+      return { ...result, engine_trace: buildLegacyTrace() };
+    }
 
     // 1. GPT-classify → 1..3 actions (persona stuurt toon + intent-bias)
     //    Brain-laag krijgt de conversation history en (later) contextsamenvatting.

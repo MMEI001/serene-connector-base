@@ -24,8 +24,8 @@ export async function snapshot(
   const nextWeek = getNextDaysIso(amsParts.dateIso, 7);
 
   // Parallelle database reads voor kalender & open reminders
-  const todayStartIso = `${today}T00:00:00Z`;
-  const nextWeekEndIso = `${getNextDaysIso(today, 8)}T00:00:00Z`;
+  const todayStartIso = amsterdamDateTimeToIso(today, "00:00:00");
+  const nextWeekEndIso = amsterdamDateTimeToIso(getNextDaysIso(today, 8), "00:00:00");
 
   const [apptsTodayRes, apptsNextRes, remindersRes, icsCalRes] = await Promise.all([
     // Afspraken vandaag (eigen)
@@ -44,7 +44,7 @@ export async function snapshot(
       .gte("date", today)
       .order("date", { ascending: true })
       .order("start_time", { ascending: true, nullsFirst: true })
-      .limit(5),
+      .limit(30),
 
     // Openstaande reminders
     supabase
@@ -103,6 +103,15 @@ export async function snapshot(
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return (a.start_time ?? "").localeCompare(b.start_time ?? "");
   });
+  const upcomingEvents = allUpcoming.slice(0, 12).map((row) => {
+    const st = row.start_time ?? "";
+    return {
+      title: row.title,
+      whenIso: `${row.date}T${st ? st.slice(0, 5) : "00:00"}`,
+      date: row.date,
+      startTime: st ? st.slice(0, 5) : "",
+    };
+  });
   const openRemindersCount = remindersRes.data?.length ?? 0;
 
   // 1. Eerstvolgende afspraak na actueel tijdstip
@@ -148,6 +157,7 @@ export async function snapshot(
   return {
     todayCount: apptsToday.length,
     nextEvent,
+    upcomingEvents,
     freeBlocksToday,
     openRemindersCount,
     relevantMemoriesCount: activeMemories?.length ?? 0,
@@ -290,6 +300,22 @@ function getNextDaysIso(dateIso: string, days: number): string {
   const [y, m, d] = dateIso.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return dt.toISOString().slice(0, 10);
+}
+
+function amsterdamDateTimeToIso(dateIso: string, timeIso: string): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const [hh, mm, ss] = timeIso.split(":").map(Number);
+  const utcGuess = new Date(Date.UTC(y, m - 1, d, hh, mm, ss || 0));
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Amsterdam",
+    timeZoneName: "shortOffset",
+  });
+  const tz = fmt.formatToParts(utcGuess).find((p) => p.type === "timeZoneName")?.value ?? "GMT+1";
+  const match = tz.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const offsetMinutes = match
+    ? Number(match[1]) * 60 + (Number(match[2] ?? 0) * Math.sign(Number(match[1])))
+    : 60;
+  return new Date(Date.UTC(y, m - 1, d, hh, mm, ss || 0) - offsetMinutes * 60_000).toISOString();
 }
 
 function amsPartsForIso(iso: string): { dateIso: string; timeIso: string } {
