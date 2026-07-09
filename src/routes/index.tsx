@@ -196,6 +196,43 @@ function Dashboard() {
           ))}
         </motion.div>
 
+        {askBriefing && briefing && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mt-6 w-full max-w-sm rounded-3xl bg-white/70 px-5 py-4 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] text-center"
+          >
+            <p className="text-sm text-foreground/85">
+              Wil je horen wat er vandaag op je planning staat?
+            </p>
+            <div className="mt-3 flex justify-center gap-2">
+              <Button
+                className="rounded-full px-6"
+                onClick={() => {
+                  setAskBriefing(false);
+                  if (briefing) playBriefing(briefing);
+                }}
+              >
+                Ja, graag
+              </Button>
+              <Button
+                variant="ghost"
+                className="rounded-full px-6"
+                onClick={() => {
+                  setAskBriefing(false);
+                  void speakText("Prima, ik houd het rustig.", {
+                    intent: "daily_briefing_ask",
+                    route: "assistant_reply",
+                  });
+                }}
+              >
+                Nee, dank je
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {briefing && (briefing.nextEvent || briefing.topReminder || briefing.freeBlock) && (
           <motion.div
             initial={{ opacity: 0, y: 6 }}
