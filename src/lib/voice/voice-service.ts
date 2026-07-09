@@ -21,13 +21,16 @@ import { supabase } from "@/integrations/supabase/client";
 // Charlotte ("XB0fDUnXU5powFXDhCwa") is niet gegarandeerd beschikbaar op elk account
 // en gaf non-audio responses terug — we forceren hem niet meer hard.
 export const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah (bekende publieke stem)
-export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+export const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
+export type VoiceQuality = "fast" | "natural";
+export const DEFAULT_VOICE_QUALITY: VoiceQuality = "fast";
 
 export type VoiceSpeakOptions = {
   intent?: string;
   route?: string;
   force?: boolean;
   voiceId?: string;
+  quality?: VoiceQuality;
   onStart?: () => void;
   onEnd?: () => void;
   /** Legacy — genegeerd, maar toegestaan zodat callsites niet breken. */
