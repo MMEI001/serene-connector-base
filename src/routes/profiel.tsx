@@ -177,7 +177,7 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id, ritual_enabled, ritual_time" as "*",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id, voice_quality, ritual_enabled, ritual_time" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -185,6 +185,7 @@ function ProfilePage() {
         const d = data as typeof data & {
           voice_enabled?: boolean | null;
           voice_id?: string | null;
+          voice_quality?: string | null;
           ritual_enabled?: boolean | null;
           ritual_time?: string | null;
         };
