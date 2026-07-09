@@ -17,7 +17,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
+import {
+  speakText,
+  setVoicePreferenceCache,
+  setVoiceIdCache,
+  setVoiceQualityCache,
+  DEFAULT_VOICE_ID,
+  DEFAULT_VOICE_QUALITY,
+  type VoiceQuality,
+} from "@/lib/speak";
 import { notifyRitualChanged, requestRitualPermission, fireRitualNotification } from "@/lib/daily-ritual";
 import {
   Dialog,
@@ -28,14 +36,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const VOICE_OPTIONS = [
-  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
-  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm" },
-  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem" },
-  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend" },
-  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", desc: "neutraal en rustig" },
+type Gender = "v" | "m";
+type Accent = "nl" | "int";
+type VoiceOption = {
+  id: string;
+  name: string;
+  desc: string;
+  gender: Gender;
+  accent: Accent;
+};
+
+// Accent-label is subjectief per voice; "nl" = klinkt het meest natuurlijk NL,
+// "int" = internationaal (kan Vlaams aandoen bij snelle model_flash).
+const VOICE_OPTIONS: VoiceOption[] = [
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", desc: "warm en helder", gender: "v", accent: "nl" },
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen", gender: "v", accent: "int" },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm", gender: "v", accent: "int" },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", desc: "helder en zacht", gender: "v", accent: "nl" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", desc: "warm en rustig", gender: "v", accent: "int" },
+  { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", desc: "levendig en jong", gender: "v", accent: "int" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem", gender: "v", accent: "int" },
+  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", desc: "warm en volwassen", gender: "m", accent: "nl" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend", gender: "m", accent: "int" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", desc: "neutraal en rustig", gender: "m", accent: "int" },
+  { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", desc: "kalm en gedragen", gender: "m", accent: "nl" },
+  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", desc: "casual en helder", gender: "m", accent: "int" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", desc: "zacht en vriendelijk", gender: "m", accent: "int" },
+  { id: "bIHbv24MWmeRgasZH58o", name: "Will", desc: "warm en meelevend", gender: "m", accent: "int" },
+  { id: "cjVigY5qzO86Huf0OWal", name: "Eric", desc: "rustig en zakelijk", gender: "m", accent: "nl" },
 ];
-const SAMPLE_TEXT = "Hallo, ik ben er voor je.";
+const SAMPLE_TEXT = "Hallo, ik ben er voor je. Zullen we samen even naar je dag kijken?";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
