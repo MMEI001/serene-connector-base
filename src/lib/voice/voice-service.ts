@@ -293,9 +293,6 @@ export async function speak(
     return;
   }
 
-  const blob = await res.blob();
-  console.log("[VOICE NEW] blob size", blob.size);
-
   emitTrace({
     provider: "elevenlabs",
     voice_id: res.headers.get("x-voice-id") || voiceId,
@@ -308,7 +305,127 @@ export async function speak(
     timestamp: new Date().toISOString(),
   });
 
-  await playBlob(blob, options);
+  await playStreaming(res, options);
+}
+
+// Progressief afspelen via MediaSource: audio begint zodra de eerste MP3-chunk
+// binnen is, in plaats van te wachten op de volledige blob. Valt terug op de
+// blob-flow als MediaSource niet beschikbaar is (bijv. oudere iOS-versies).
+async function playStreaming(res: Response, options: VoiceSpeakOptions): Promise<void> {
+  const body = res.body;
+  const MSource: typeof MediaSource | undefined =
+    (typeof window !== "undefined" &&
+      // @ts-expect-error iOS 17.1+
+      (window.ManagedMediaSource as typeof MediaSource | undefined)) ||
+    (typeof window !== "undefined" ? window.MediaSource : undefined);
+
+  if (!body || !MSource || !MSource.isTypeSupported?.("audio/mpeg")) {
+    const blob = await res.blob();
+    console.log("[VOICE NEW] blob fallback size", blob.size);
+    return playBlob(blob, options);
+  }
+
+  return new Promise((resolve) => {
+    const el = getSharedAudio();
+    (el as HTMLAudioElement & { disableRemotePlayback?: boolean }).disableRemotePlayback = true;
+    const ms = new MSource();
+    const url = URL.createObjectURL(ms);
+
+    // Reset & vrijgeven vorige blob-url.
+    el.onended = null;
+    el.onerror = null;
+    el.onplaying = null;
+    el.onpause = null;
+    if (currentBlobUrl && currentBlobUrl.startsWith("blob:")) {
+      try { URL.revokeObjectURL(currentBlobUrl); } catch { /* ignore */ }
+    }
+    currentBlobUrl = url;
+    el.src = url;
+
+    let settled = false;
+    const finish = (reason: "ended" | "error" | "rejected") => {
+      if (settled) return;
+      settled = true;
+      console.log("[VOICE NEW] stream", reason);
+      if (currentBlobUrl === url) {
+        try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+        currentBlobUrl = null;
+      }
+      try { options.onEnd?.(); } catch { /* ignore */ }
+      resolve();
+    };
+
+    el.onplaying = () => {
+      console.log("[VOICE NEW] stream playing");
+      try { options.onStart?.(); } catch { /* ignore */ }
+    };
+    el.onended = () => finish("ended");
+    el.onerror = () => finish("error");
+
+    ms.addEventListener("sourceopen", async () => {
+      let sb: SourceBuffer;
+      try {
+        sb = ms.addSourceBuffer("audio/mpeg");
+      } catch (err) {
+        console.error("[VOICE NEW] addSourceBuffer failed", err);
+        finish("error");
+        return;
+      }
+
+      const reader = body.getReader();
+      const queue: Uint8Array[] = [];
+      let done = false;
+      let appending = false;
+
+      const pump = () => {
+        if (appending || queue.length === 0 || sb.updating) return;
+        appending = true;
+        try {
+          const chunk = queue.shift()!;
+          sb.appendBuffer(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer);
+        } catch (err) {
+          console.error("[VOICE NEW] appendBuffer error", err);
+          appending = false;
+        }
+      };
+
+      sb.addEventListener("updateend", () => {
+        appending = false;
+        if (queue.length > 0) {
+          pump();
+        } else if (done) {
+          try { ms.endOfStream(); } catch { /* ignore */ }
+        }
+      });
+
+      // Autoplay direct triggeren; browsers wachten anders op canplay.
+      const p = el.play();
+      if (p && typeof p.then === "function") {
+        p.catch((err) => {
+          console.error("[VOICE NEW] stream play rejected", err?.name, err?.message);
+          finish("rejected");
+        });
+      }
+
+      try {
+        while (true) {
+          const { value, done: rdone } = await reader.read();
+          if (rdone) break;
+          if (value && value.byteLength > 0) {
+            queue.push(value);
+            pump();
+          }
+        }
+        done = true;
+        if (queue.length === 0 && !sb.updating) {
+          try { ms.endOfStream(); } catch { /* ignore */ }
+        }
+      } catch (err) {
+        console.error("[VOICE NEW] stream read error", err);
+        try { ms.endOfStream("network" as EndOfStreamError); } catch { /* ignore */ }
+      }
+    }, { once: true });
+  });
 }
 
 function playBlob(blob: Blob, options: VoiceSpeakOptions): Promise<void> {
