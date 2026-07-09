@@ -291,7 +291,7 @@ export async function speak(
         apikey: ANON,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
+      body: JSON.stringify({ text: cleanText, voice_id: voiceId, model_id: modelId }),
     });
   } catch (err) {
     console.error("[VOICE NEW] tts fetch failed", err);
