@@ -445,13 +445,18 @@ function Dashboard() {
         ) : (
           <div className="space-y-3">
             {appts.map((a) => (
-              <Card key={a.id} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
+              <Card key={`${a.source ?? "own"}-${a.id}`} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-base text-foreground">{a.title}</h3>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {a.start_time ? a.start_time.slice(0, 5) : "Hele dag"}
                   </span>
                 </div>
+                {a.source === "ics" && a.calendar_name && (
+                  <div className="mt-1 text-xs text-muted-foreground/80">
+                    via {a.calendar_name}
+                  </div>
+                )}
               </Card>
             ))}
           </div>
