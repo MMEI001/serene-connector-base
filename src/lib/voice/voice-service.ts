@@ -381,7 +381,8 @@ async function playStreaming(res: Response, options: VoiceSpeakOptions): Promise
         if (appending || queue.length === 0 || sb.updating) return;
         appending = true;
         try {
-          sb.appendBuffer(queue.shift()!);
+          const chunk = queue.shift()!;
+          sb.appendBuffer(chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength) as ArrayBuffer);
         } catch (err) {
           console.error("[VOICE NEW] appendBuffer error", err);
           appending = false;
