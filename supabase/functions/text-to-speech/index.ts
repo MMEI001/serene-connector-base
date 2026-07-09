@@ -167,12 +167,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    return new Response(result.audio, {
+    return new Response(result.body, {
       status: 200,
       headers: {
         ...corsHeaders,
         "Content-Type": "audio/mpeg",
         "Cache-Control": "no-store",
+        "Transfer-Encoding": "chunked",
         "x-voice-provider": "elevenlabs",
         "x-voice-id": usedVoiceId,
         "x-voice-requested": requestedVoiceId || primaryVoiceId,
