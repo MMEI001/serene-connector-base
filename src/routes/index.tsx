@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
+import { analyzeScreenshotForAppointment } from "@/lib/analyze-screenshot.functions";
 import { getDailyBriefing, type DailyBriefing } from "@/lib/daily-briefing.functions";
 import { speakText } from "@/lib/speak";
 
