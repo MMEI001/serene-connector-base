@@ -59,6 +59,7 @@ function Dashboard() {
   const [aiBusy, setAiBusy] = useState(false);
   const [showPills, setShowPills] = useState(false);
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
+  const [askBriefing, setAskBriefing] = useState(false);
   const briefingSpokenRef = useRef(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
   const fetchBriefing = useServerFn(getDailyBriefing);
