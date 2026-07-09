@@ -327,8 +327,7 @@ async function playStreaming(res: Response, options: VoiceSpeakOptions): Promise
 
   return new Promise((resolve) => {
     const el = getSharedAudio();
-    // @ts-expect-error ManagedMediaSource requires this hint on iOS.
-    el.disableRemotePlayback = true;
+    (el as HTMLAudioElement & { disableRemotePlayback?: boolean }).disableRemotePlayback = true;
     const ms = new MSource();
     const url = URL.createObjectURL(ms);
 
