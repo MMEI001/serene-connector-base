@@ -22,14 +22,24 @@ const DEFAULT_VOICE_ID = FALLBACK_VOICE_ID;
 const ALLOWED_VOICE_IDS = new Set([
   CHARLOTTE_VOICE_ID,
   FALLBACK_VOICE_ID,
-  "Xb7hH8MSUJpSbSDYk0k2", // Alice
-  "pFZP5JQG7iQjIQuC4Bku", // Lily
-  "nPczCjzI2devNBz1zQrb", // Brian
-  "onwK4e9ZLuTAKqWW03F9", // Daniel
-  "JBFqnCBsd6RMkjVDRZzb", // George
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice (v)
+  "pFZP5JQG7iQjIQuC4Bku", // Lily (v)
+  "FGY2WhTYpPnrIDTdsKH5", // Laura (v)
+  "XrExE9yKIg1WjnnlVkGX", // Matilda (v)
+  "cgSgspJ2msm6clMCkdW9", // Jessica (v)
+  "nPczCjzI2devNBz1zQrb", // Brian (m)
+  "onwK4e9ZLuTAKqWW03F9", // Daniel (m)
+  "JBFqnCBsd6RMkjVDRZzb", // George (m)
+  "CwhRBWXzGAHq8TQ4Fs17", // Roger (m)
+  "IKne3meq5aSn9XLyUdCD", // Charlie (m)
+  "TX3LPaxmHKxFdv7VOQHJ", // Liam (m)
+  "bIHbv24MWmeRgasZH58o", // Will (m)
+  "cjVigY5qzO86Huf0OWal", // Eric (m)
 ]);
-// Flash v2.5 = laagste latency ElevenLabs model (~75ms). Multilingual, ondersteunt NL.
-const MODEL_ID = "eleven_flash_v2_5";
+// Flash v2.5 = laagste latency; multilingual v2 = beter Nederlands (natuurlijker).
+const FAST_MODEL_ID = "eleven_flash_v2_5";
+const NATURAL_MODEL_ID = "eleven_multilingual_v2";
+const ALLOWED_MODELS = new Set([FAST_MODEL_ID, NATURAL_MODEL_ID]);
 const MAX_CHARS = 1000;
 
 function json(body: unknown, status: number) {
