@@ -21,13 +21,16 @@ import { supabase } from "@/integrations/supabase/client";
 // Charlotte ("XB0fDUnXU5powFXDhCwa") is niet gegarandeerd beschikbaar op elk account
 // en gaf non-audio responses terug — we forceren hem niet meer hard.
 export const DEFAULT_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah (bekende publieke stem)
-export const DEFAULT_MODEL_ID = "eleven_multilingual_v2";
+export const DEFAULT_MODEL_ID = "eleven_flash_v2_5";
+export type VoiceQuality = "fast" | "natural";
+export const DEFAULT_VOICE_QUALITY: VoiceQuality = "fast";
 
 export type VoiceSpeakOptions = {
   intent?: string;
   route?: string;
   force?: boolean;
   voiceId?: string;
+  quality?: VoiceQuality;
   onStart?: () => void;
   onEnd?: () => void;
   /** Legacy — genegeerd, maar toegestaan zodat callsites niet breken. */
@@ -55,6 +58,7 @@ export type VoiceTraceLog = {
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
 let cachedProvider: string | null = null;
+let cachedQuality: VoiceQuality | null = null;
 
 let authListenerAttached = false;
 function ensureAuthListener() {
@@ -80,6 +84,7 @@ export function resetVoicePreferenceCache() {
   cachedEnabled = null;
   cachedVoiceId = null;
   cachedProvider = null;
+  cachedQuality = null;
 }
 
 export function setVoicePreferenceCache(enabled: boolean) {
@@ -90,40 +95,69 @@ export function setVoiceIdCache(voiceId: string) {
   cachedVoiceId = voiceId;
 }
 
+export function setVoiceQualityCache(quality: VoiceQuality) {
+  cachedQuality = quality;
+}
+
 export async function loadVoicePrefs(): Promise<{
   enabled: boolean;
   voiceId: string;
   provider: string;
+  quality: VoiceQuality;
 }> {
   ensureAuthListener();
-  if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
-    return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
+  if (
+    cachedEnabled !== null &&
+    cachedVoiceId !== null &&
+    cachedProvider !== null &&
+    cachedQuality !== null
+  ) {
+    return {
+      enabled: cachedEnabled,
+      voiceId: cachedVoiceId,
+      provider: cachedProvider,
+      quality: cachedQuality,
+    };
   }
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData.session?.user;
   if (!user) {
-    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+    return {
+      enabled: false,
+      voiceId: DEFAULT_VOICE_ID,
+      provider: "elevenlabs",
+      quality: DEFAULT_VOICE_QUALITY,
+    };
   }
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("voice_enabled, voice_provider, voice_id")
+    .select("voice_enabled, voice_provider, voice_id, voice_quality" as "*")
     .eq("user_id", user.id)
     .maybeSingle();
   if (error || !data) {
-    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+    return {
+      enabled: false,
+      voiceId: DEFAULT_VOICE_ID,
+      provider: "elevenlabs",
+      quality: DEFAULT_VOICE_QUALITY,
+    };
   }
   const row = data as {
     voice_enabled?: boolean | null;
     voice_provider?: string | null;
     voice_id?: string | null;
+    voice_quality?: string | null;
   };
   const enabled = Boolean(row.voice_enabled);
   const provider = row.voice_provider || "elevenlabs";
   const voiceId = row.voice_id || DEFAULT_VOICE_ID;
+  const quality: VoiceQuality =
+    row.voice_quality === "natural" ? "natural" : DEFAULT_VOICE_QUALITY;
   cachedEnabled = enabled;
   cachedVoiceId = voiceId;
   cachedProvider = provider;
-  return { enabled, voiceId, provider };
+  cachedQuality = quality;
+  return { enabled, voiceId, provider, quality };
 }
 
 // -------------------------------------------------------------------
@@ -225,6 +259,8 @@ export async function speak(
     return;
   }
   const voiceId = options.voiceId ?? prefs.voiceId;
+  const quality: VoiceQuality = options.quality ?? prefs.quality;
+  const modelId = quality === "natural" ? "eleven_multilingual_v2" : "eleven_flash_v2_5";
 
   const SUPABASE_URL =
     import.meta.env.VITE_SUPABASE_URL ||
@@ -255,7 +291,7 @@ export async function speak(
         apikey: ANON,
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ text: cleanText, voice_id: voiceId }),
+      body: JSON.stringify({ text: cleanText, voice_id: voiceId, model_id: modelId }),
     });
   } catch (err) {
     console.error("[VOICE NEW] tts fetch failed", err);

@@ -9,7 +9,10 @@ export {
   stopVoice as stopCurrentAudio,
   stopVoice,
   DEFAULT_VOICE_ID,
+  DEFAULT_VOICE_QUALITY,
   resetVoicePreferenceCache,
   setVoicePreferenceCache,
   setVoiceIdCache,
+  setVoiceQualityCache,
 } from "@/lib/voice/voice-service";
+export type { VoiceQuality } from "@/lib/voice/voice-service";

@@ -22,14 +22,24 @@ const DEFAULT_VOICE_ID = FALLBACK_VOICE_ID;
 const ALLOWED_VOICE_IDS = new Set([
   CHARLOTTE_VOICE_ID,
   FALLBACK_VOICE_ID,
-  "Xb7hH8MSUJpSbSDYk0k2", // Alice
-  "pFZP5JQG7iQjIQuC4Bku", // Lily
-  "nPczCjzI2devNBz1zQrb", // Brian
-  "onwK4e9ZLuTAKqWW03F9", // Daniel
-  "JBFqnCBsd6RMkjVDRZzb", // George
+  "Xb7hH8MSUJpSbSDYk0k2", // Alice (v)
+  "pFZP5JQG7iQjIQuC4Bku", // Lily (v)
+  "FGY2WhTYpPnrIDTdsKH5", // Laura (v)
+  "XrExE9yKIg1WjnnlVkGX", // Matilda (v)
+  "cgSgspJ2msm6clMCkdW9", // Jessica (v)
+  "nPczCjzI2devNBz1zQrb", // Brian (m)
+  "onwK4e9ZLuTAKqWW03F9", // Daniel (m)
+  "JBFqnCBsd6RMkjVDRZzb", // George (m)
+  "CwhRBWXzGAHq8TQ4Fs17", // Roger (m)
+  "IKne3meq5aSn9XLyUdCD", // Charlie (m)
+  "TX3LPaxmHKxFdv7VOQHJ", // Liam (m)
+  "bIHbv24MWmeRgasZH58o", // Will (m)
+  "cjVigY5qzO86Huf0OWal", // Eric (m)
 ]);
-// Flash v2.5 = laagste latency ElevenLabs model (~75ms). Multilingual, ondersteunt NL.
-const MODEL_ID = "eleven_flash_v2_5";
+// Flash v2.5 = laagste latency; multilingual v2 = beter Nederlands (natuurlijker).
+const FAST_MODEL_ID = "eleven_flash_v2_5";
+const NATURAL_MODEL_ID = "eleven_multilingual_v2";
+const ALLOWED_MODELS = new Set([FAST_MODEL_ID, NATURAL_MODEL_ID]);
 const MAX_CHARS = 1000;
 
 function json(body: unknown, status: number) {
@@ -43,14 +53,16 @@ async function synthesize(
   apiKey: string,
   voiceId: string,
   text: string,
+  modelId: string,
 ): Promise<
   | { ok: true; body: ReadableStream<Uint8Array>; contentType: string; status: number }
   | { ok: false; status: number; contentType: string; detail: string }
 > {
-  // /stream endpoint + optimize_streaming_latency=3 (max latency reductie).
-  // mp3_44100_64 = lichter/sneller dan 128 kbps, kwaliteit prima voor spraak.
+  // Bij "natuurlijk" model latency-optimalisatie iets verlagen om NL-uitspraak
+  // niet te schaden; bij flash mag hij op max.
+  const latency = modelId === FAST_MODEL_ID ? 3 : 2;
   const url =
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_64&optimize_streaming_latency=3`;
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_64&optimize_streaming_latency=${latency}`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -60,7 +72,7 @@ async function synthesize(
     },
     body: JSON.stringify({
       text,
-      model_id: MODEL_ID,
+      model_id: modelId,
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
@@ -118,6 +130,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const text = body?.text;
     const requestedVoiceId = typeof body?.voice_id === "string" ? body.voice_id : "";
+    const requestedModel = typeof body?.model_id === "string" ? body.model_id : "";
     if (!text || typeof text !== "string") {
       return json({ error: "text is verplicht" }, 400);
     }
@@ -128,15 +141,17 @@ Deno.serve(async (req) => {
     const primaryVoiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
       ? requestedVoiceId
       : DEFAULT_VOICE_ID;
+    const modelId = ALLOWED_MODELS.has(requestedModel) ? requestedModel : FAST_MODEL_ID;
     console.log("[TTS] request", {
       requestedVoiceId,
       primaryVoiceId,
+      modelId,
       fallbackVoiceId: FALLBACK_VOICE_ID,
       textLen: text.length,
     });
 
     let usedVoiceId = primaryVoiceId;
-    let result = await synthesize(apiKey, primaryVoiceId, text);
+    let result = await synthesize(apiKey, primaryVoiceId, text, modelId);
     let didFallback = false;
 
     if (!result.ok && primaryVoiceId !== FALLBACK_VOICE_ID) {
@@ -144,7 +159,7 @@ Deno.serve(async (req) => {
         "[TTS] primary voice failed, retrying with fallback",
         { primaryVoiceId, fallbackVoiceId: FALLBACK_VOICE_ID, primaryStatus: result.status },
       );
-      const fallback = await synthesize(apiKey, FALLBACK_VOICE_ID, text);
+      const fallback = await synthesize(apiKey, FALLBACK_VOICE_ID, text, modelId);
       if (fallback.ok) {
         result = fallback;
         usedVoiceId = FALLBACK_VOICE_ID;
@@ -178,7 +193,7 @@ Deno.serve(async (req) => {
         "x-voice-id": usedVoiceId,
         "x-voice-requested": requestedVoiceId || primaryVoiceId,
         "x-voice-fallback": didFallback ? "true" : "false",
-        "x-voice-model": MODEL_ID,
+        "x-voice-model": modelId,
       },
     });
   } catch (err) {

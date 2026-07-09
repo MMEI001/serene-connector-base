@@ -17,7 +17,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { speakText, setVoicePreferenceCache, setVoiceIdCache, DEFAULT_VOICE_ID } from "@/lib/speak";
+import {
+  speakText,
+  setVoicePreferenceCache,
+  setVoiceIdCache,
+  setVoiceQualityCache,
+  DEFAULT_VOICE_ID,
+  DEFAULT_VOICE_QUALITY,
+  type VoiceQuality,
+} from "@/lib/speak";
 import { notifyRitualChanged, requestRitualPermission, fireRitualNotification } from "@/lib/daily-ritual";
 import {
   Dialog,
@@ -28,14 +36,36 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const VOICE_OPTIONS = [
-  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen" },
-  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm" },
-  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem" },
-  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend" },
-  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", desc: "neutraal en rustig" },
+type Gender = "v" | "m";
+type Accent = "nl" | "int";
+type VoiceOption = {
+  id: string;
+  name: string;
+  desc: string;
+  gender: Gender;
+  accent: Accent;
+};
+
+// Accent-label is subjectief per voice; "nl" = klinkt het meest natuurlijk NL,
+// "int" = internationaal (kan Vlaams aandoen bij snelle model_flash).
+const VOICE_OPTIONS: VoiceOption[] = [
+  { id: "EXAVITQu4vr4xnSDxMaL", name: "Sarah", desc: "warm en helder", gender: "v", accent: "nl" },
+  { id: "XB0fDUnXU5powFXDhCwa", name: "Charlotte", desc: "warm en sereen", gender: "v", accent: "int" },
+  { id: "Xb7hH8MSUJpSbSDYk0k2", name: "Alice", desc: "vriendelijk en kalm", gender: "v", accent: "int" },
+  { id: "FGY2WhTYpPnrIDTdsKH5", name: "Laura", desc: "helder en zacht", gender: "v", accent: "nl" },
+  { id: "XrExE9yKIg1WjnnlVkGX", name: "Matilda", desc: "warm en rustig", gender: "v", accent: "int" },
+  { id: "cgSgspJ2msm6clMCkdW9", name: "Jessica", desc: "levendig en jong", gender: "v", accent: "int" },
+  { id: "pFZP5JQG7iQjIQuC4Bku", name: "Lily", desc: "rustig en intiem", gender: "v", accent: "int" },
+  { id: "JBFqnCBsd6RMkjVDRZzb", name: "George", desc: "warm en volwassen", gender: "m", accent: "nl" },
+  { id: "nPczCjzI2devNBz1zQrb", name: "Brian", desc: "diep en geruststellend", gender: "m", accent: "int" },
+  { id: "onwK4e9ZLuTAKqWW03F9", name: "Daniel", desc: "neutraal en rustig", gender: "m", accent: "int" },
+  { id: "CwhRBWXzGAHq8TQ4Fs17", name: "Roger", desc: "kalm en gedragen", gender: "m", accent: "nl" },
+  { id: "IKne3meq5aSn9XLyUdCD", name: "Charlie", desc: "casual en helder", gender: "m", accent: "int" },
+  { id: "TX3LPaxmHKxFdv7VOQHJ", name: "Liam", desc: "zacht en vriendelijk", gender: "m", accent: "int" },
+  { id: "bIHbv24MWmeRgasZH58o", name: "Will", desc: "warm en meelevend", gender: "m", accent: "int" },
+  { id: "cjVigY5qzO86Huf0OWal", name: "Eric", desc: "rustig en zakelijk", gender: "m", accent: "nl" },
 ];
-const SAMPLE_TEXT = "Hallo, ik ben er voor je.";
+const SAMPLE_TEXT = "Hallo, ik ben er voor je. Zullen we samen even naar je dag kijken?";
 
 export const Route = createFileRoute("/profiel")({
   ssr: false,
@@ -111,6 +141,9 @@ function ProfilePage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
   const [voiceId, setVoiceId] = useState<string>(DEFAULT_VOICE_ID);
+  const [voiceQuality, setVoiceQualityState] = useState<VoiceQuality>(DEFAULT_VOICE_QUALITY);
+  const [genderFilter, setGenderFilter] = useState<Gender | "all">("all");
+  const [accentFilter, setAccentFilter] = useState<Accent | "all">("all");
   const [ritualEnabled, setRitualEnabled] = useState(false);
   const [ritualTime, setRitualTime] = useState("19:30");
   const [ritualSaving, setRitualSaving] = useState(false);
@@ -144,7 +177,7 @@ function ProfilePage() {
       const { data } = await supabase
         .from("user_profiles")
         .select(
-          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id, ritual_enabled, ritual_time" as "*",
+          "primary_goal, support_style, main_difficulty, overstimulation_level, hard_moment_of_day, suggestion_count_preference, preferred_help_area, reminder_style, planning_style, voice_enabled, voice_id, voice_quality, ritual_enabled, ritual_time" as "*",
         )
         .eq("user_id", user.id)
         .maybeSingle();
@@ -152,6 +185,7 @@ function ProfilePage() {
         const d = data as typeof data & {
           voice_enabled?: boolean | null;
           voice_id?: string | null;
+          voice_quality?: string | null;
           ritual_enabled?: boolean | null;
           ritual_time?: string | null;
         };
@@ -172,6 +206,14 @@ function ProfilePage() {
         const vid = d.voice_id || DEFAULT_VOICE_ID;
         setVoiceId(vid);
         setVoiceIdCache(vid);
+        const q: VoiceQuality = d.voice_quality === "natural" ? "natural" : "fast";
+        setVoiceQualityState(q);
+        setVoiceQualityCache(q);
+        // Zet initiële filters op basis van huidige stem
+        const currentOpt = VOICE_OPTIONS.find((o) => o.id === vid);
+        if (currentOpt) {
+          setGenderFilter(currentOpt.gender);
+        }
         setRitualEnabled(Boolean(d.ritual_enabled));
         setRitualTime(d.ritual_time || "19:30");
       }
@@ -340,6 +382,26 @@ function ProfilePage() {
     setVoiceIdCache(nextVoiceId);
     toast.success("Stem opgeslagen.");
   }
+  async function handleQualityChange(next: VoiceQuality) {
+    if (!user || voiceSaving || next === voiceQuality) return;
+    const previous = voiceQuality;
+    setVoiceQualityState(next);
+    setVoiceSaving(true);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ voice_quality: next } as never)
+      .eq("user_id", user.id);
+    setVoiceSaving(false);
+    if (error) {
+      setVoiceQualityState(previous);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setVoiceQualityCache(next);
+    toast.success(
+      next === "natural" ? "Helder Nederlands aan." : "Snelle stem aan.",
+    );
+  }
 
 
 
@@ -472,10 +534,102 @@ function ProfilePage() {
         </p>
 
         {voiceEnabled && (
-          <div className="mt-6 space-y-3">
-            <Label className="text-sm text-foreground">Welke stem?</Label>
+          <div className="mt-6 space-y-5">
+            {/* Kwaliteit / accent-hint */}
             <div className="space-y-2">
-              {VOICE_OPTIONS.map((v) => {
+              <Label className="text-sm text-foreground">Spraakkwaliteit</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQualityChange("fast")}
+                  disabled={voiceSaving}
+                  className={`rounded-2xl border px-3 py-3 text-left text-sm transition-colors ${
+                    voiceQuality === "fast"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                  }`}
+                >
+                  <div className="text-sm text-foreground">Snel</div>
+                  <div className="text-xs text-muted-foreground">
+                    Laagste vertraging, kan Vlaams aandoen
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQualityChange("natural")}
+                  disabled={voiceSaving}
+                  className={`rounded-2xl border px-3 py-3 text-left text-sm transition-colors ${
+                    voiceQuality === "natural"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                  }`}
+                >
+                  <div className="text-sm text-foreground">Helder Nederlands</div>
+                  <div className="text-xs text-muted-foreground">
+                    Iets trager, natuurlijker NL uitspraak
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="space-y-2">
+              <Label className="text-sm text-foreground">Welke stem?</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { v: "all", l: "Alle" },
+                    { v: "v", l: "Vrouwelijk" },
+                    { v: "m", l: "Mannelijk" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setGenderFilter(opt.v)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      genderFilter === opt.v
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                    }`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+                <span className="mx-1 self-center text-xs text-muted-foreground">•</span>
+                {(
+                  [
+                    { v: "all", l: "Alle accenten" },
+                    { v: "nl", l: "NL-klank" },
+                    { v: "int", l: "Internationaal" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setAccentFilter(opt.v)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      accentFilter === opt.v
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                    }`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tip: kies "Helder Nederlands" + een NL-klank stem voor de meest natuurlijke uitspraak.
+              </p>
+            </div>
+
+            {/* Voice-lijst */}
+            <div className="space-y-2">
+              {VOICE_OPTIONS.filter(
+                (v) =>
+                  (genderFilter === "all" || v.gender === genderFilter) &&
+                  (accentFilter === "all" || v.accent === accentFilter),
+              ).map((v) => {
                 const selected = voiceId === v.id;
                 return (
                   <div
@@ -492,21 +646,44 @@ function ProfilePage() {
                       disabled={voiceSaving}
                       className="flex-1 text-left"
                     >
-                      <div className="text-sm text-foreground">{v.name}</div>
-                      <div className="text-xs text-muted-foreground">{v.desc}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-foreground">{v.name}</span>
+                        <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {v.gender === "v" ? "vrouw" : "man"}
+                        </span>
+                        <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {v.accent === "nl" ? "NL-klank" : "internationaal"}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{v.desc}</div>
                     </button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="rounded-full"
-                      onClick={() => speakText(SAMPLE_TEXT, { force: true, voiceId: v.id })}
+                      onClick={() =>
+                        speakText(SAMPLE_TEXT, {
+                          force: true,
+                          voiceId: v.id,
+                          quality: voiceQuality,
+                        })
+                      }
                     >
                       Beluister
                     </Button>
                   </div>
                 );
               })}
+              {VOICE_OPTIONS.filter(
+                (v) =>
+                  (genderFilter === "all" || v.gender === genderFilter) &&
+                  (accentFilter === "all" || v.accent === accentFilter),
+              ).length === 0 && (
+                <p className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
+                  Geen stemmen die aan deze filters voldoen.
+                </p>
+              )}
             </div>
           </div>
         )}
