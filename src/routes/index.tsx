@@ -33,8 +33,27 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-type Appt = { id: string; title: string; start_time: string | null; date: string };
+type Appt = { id: string; title: string; start_time: string | null; date: string; source?: "own" | "ics"; calendar_name?: string | null };
 type Reminder = { id: string; title: string; remind_at: string | null };
+
+function amsHMForIso(iso: string): string {
+  return new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+function amsDateForIso(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const map: Record<string, string> = {};
+  for (const p of fmt.formatToParts(new Date(iso))) map[p.type] = p.value;
+  return `${map.year}-${map.month}-${map.day}`;
+}
 
 function todayISO() {
   const d = new Date();
@@ -198,7 +217,8 @@ function Dashboard() {
     const startOfDay = `${today}T00:00:00`;
     const endOfDay = `${today}T23:59:59`;
     (async () => {
-      const [a, r] = await Promise.all([
+      // Eigen kalender + reminders + ICS-kalender-ids ophalen.
+      const [a, r, cals] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, title, start_time, date")
@@ -212,8 +232,44 @@ function Dashboard() {
           .eq("status", "active")
           .or(`remind_at.is.null,and(remind_at.gte.${startOfDay},remind_at.lte.${endOfDay})`)
           .order("remind_at", { ascending: true, nullsFirst: true }),
+        supabase.from("ics_calendars").select("id, name").eq("user_id", user.id),
       ]);
-      setAppts(a.data ?? []);
+      const own: Appt[] = (a.data ?? []).map((x) => ({
+        id: x.id as string,
+        title: x.title as string,
+        start_time: (x.start_time as string | null) ?? null,
+        date: x.date as string,
+        source: "own",
+      }));
+      let icsRows: Appt[] = [];
+      const calIds = (cals.data ?? []).map((c) => c.id as string);
+      if (calIds.length > 0) {
+        const dayStartIso = new Date(`${today}T00:00:00+02:00`).toISOString();
+        const dayEndIso = new Date(`${today}T23:59:59+02:00`).toISOString();
+        const { data: ics } = await supabase
+          .from("ics_events")
+          .select("id, summary, start_time, calendar_id, ics_calendars(name)")
+          .in("calendar_id", calIds)
+          .gte("start_time", dayStartIso)
+          .lte("start_time", dayEndIso)
+          .order("start_time", { ascending: true });
+        icsRows = (ics ?? []).map((x) => {
+          const iso = x.start_time as string;
+          return {
+            id: x.id as string,
+            title: (x.summary as string | null) ?? "Afspraak",
+            start_time: amsHMForIso(iso) + ":00",
+            date: amsDateForIso(iso),
+            source: "ics",
+            calendar_name:
+              (x as { ics_calendars?: { name?: string } | null }).ics_calendars?.name ?? null,
+          };
+        });
+      }
+      const merged = [...own, ...icsRows].sort((x, y) =>
+        (x.start_time ?? "").localeCompare(y.start_time ?? ""),
+      );
+      setAppts(merged);
       setReminders(r.data ?? []);
       void loadSuggestions();
       void loadBriefing(true);
@@ -389,13 +445,18 @@ function Dashboard() {
         ) : (
           <div className="space-y-3">
             {appts.map((a) => (
-              <Card key={a.id} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
+              <Card key={`${a.source ?? "own"}-${a.id}`} className="rounded-3xl border-border/60 bg-card/80 p-5 shadow-sm">
                 <div className="flex items-baseline justify-between gap-3">
                   <h3 className="text-base text-foreground">{a.title}</h3>
                   <span className="shrink-0 text-xs text-muted-foreground">
                     {a.start_time ? a.start_time.slice(0, 5) : "Hele dag"}
                   </span>
                 </div>
+                {a.source === "ics" && a.calendar_name && (
+                  <div className="mt-1 text-xs text-muted-foreground/80">
+                    via {a.calendar_name}
+                  </div>
+                )}
               </Card>
             ))}
           </div>
