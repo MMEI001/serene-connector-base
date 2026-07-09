@@ -44,11 +44,13 @@ async function synthesize(
   voiceId: string,
   text: string,
 ): Promise<
-  | { ok: true; audio: ArrayBuffer; contentType: string; status: number }
+  | { ok: true; body: ReadableStream<Uint8Array>; contentType: string; status: number }
   | { ok: false; status: number; contentType: string; detail: string }
 > {
+  // /stream endpoint + optimize_streaming_latency=3 (max latency reductie).
+  // mp3_44100_64 = lichter/sneller dan 128 kbps, kwaliteit prima voor spraak.
   const url =
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`;
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_64&optimize_streaming_latency=3`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -60,16 +62,15 @@ async function synthesize(
       text,
       model_id: MODEL_ID,
       voice_settings: {
-        stability: 0.6,
+        stability: 0.5,
         similarity_boost: 0.75,
-        style: 0.3,
         use_speaker_boost: true,
       },
     }),
   });
 
   const contentType = resp.headers.get("content-type") || "";
-  if (!resp.ok || !contentType.includes("audio")) {
+  if (!resp.ok || !contentType.includes("audio") || !resp.body) {
     const detail = await resp.text().catch(() => "");
     console.error(
       "[TTS] ElevenLabs non-audio",
@@ -77,14 +78,8 @@ async function synthesize(
     );
     return { ok: false, status: resp.status, contentType, detail };
   }
-  const audio = await resp.arrayBuffer();
-  console.log("[TTS] ElevenLabs audio ok", {
-    voiceId,
-    status: resp.status,
-    contentType,
-    bytes: audio.byteLength,
-  });
-  return { ok: true, audio, contentType, status: resp.status };
+  console.log("[TTS] ElevenLabs streaming start", { voiceId, status: resp.status, contentType });
+  return { ok: true, body: resp.body, contentType, status: resp.status };
 }
 
 Deno.serve(async (req) => {
