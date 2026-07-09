@@ -178,7 +178,7 @@ function Dashboard() {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
-  }
+
 
   const loadSuggestions = useCallback(async () => {
     if (!user) return;
