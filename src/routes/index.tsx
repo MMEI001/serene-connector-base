@@ -217,7 +217,8 @@ function Dashboard() {
     const startOfDay = `${today}T00:00:00`;
     const endOfDay = `${today}T23:59:59`;
     (async () => {
-      const [a, r] = await Promise.all([
+      // Eigen kalender + reminders + ICS-kalender-ids ophalen.
+      const [a, r, cals] = await Promise.all([
         supabase
           .from("appointments")
           .select("id, title, start_time, date")
@@ -231,8 +232,44 @@ function Dashboard() {
           .eq("status", "active")
           .or(`remind_at.is.null,and(remind_at.gte.${startOfDay},remind_at.lte.${endOfDay})`)
           .order("remind_at", { ascending: true, nullsFirst: true }),
+        supabase.from("ics_calendars").select("id, name").eq("user_id", user.id),
       ]);
-      setAppts(a.data ?? []);
+      const own: Appt[] = (a.data ?? []).map((x) => ({
+        id: x.id as string,
+        title: x.title as string,
+        start_time: (x.start_time as string | null) ?? null,
+        date: x.date as string,
+        source: "own",
+      }));
+      let icsRows: Appt[] = [];
+      const calIds = (cals.data ?? []).map((c) => c.id as string);
+      if (calIds.length > 0) {
+        const dayStartIso = new Date(`${today}T00:00:00+02:00`).toISOString();
+        const dayEndIso = new Date(`${today}T23:59:59+02:00`).toISOString();
+        const { data: ics } = await supabase
+          .from("ics_events")
+          .select("id, summary, start_time, calendar_id, ics_calendars(name)")
+          .in("calendar_id", calIds)
+          .gte("start_time", dayStartIso)
+          .lte("start_time", dayEndIso)
+          .order("start_time", { ascending: true });
+        icsRows = (ics ?? []).map((x) => {
+          const iso = x.start_time as string;
+          return {
+            id: x.id as string,
+            title: (x.summary as string | null) ?? "Afspraak",
+            start_time: amsHMForIso(iso) + ":00",
+            date: amsDateForIso(iso),
+            source: "ics",
+            calendar_name:
+              (x as { ics_calendars?: { name?: string } | null }).ics_calendars?.name ?? null,
+          };
+        });
+      }
+      const merged = [...own, ...icsRows].sort((x, y) =>
+        (x.start_time ?? "").localeCompare(y.start_time ?? ""),
+      );
+      setAppts(merged);
       setReminders(r.data ?? []);
       void loadSuggestions();
       void loadBriefing(true);
