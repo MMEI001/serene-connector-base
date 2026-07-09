@@ -20,7 +20,8 @@ export function buildContextSummary(
     snapshot.timeOfDay === "morning" ? "ochtend"
     : snapshot.timeOfDay === "afternoon" ? "middag"
     : snapshot.timeOfDay === "evening" ? "avond" : "nacht";
-  lines.push(`Vandaag is het ${dayLabel} (${partLabel}).`);
+  const today = todayIsoAmsterdam();
+  lines.push(`Vandaag is het ${dayLabel} ${today} (${partLabel}).`);
 
   // Afspraken vandaag
   if (snapshot.todayCount > 0) {
@@ -32,10 +33,22 @@ export function buildContextSummary(
   // Eerstvolgende afspraak
   if (snapshot.nextEvent) {
     const ne = snapshot.nextEvent;
-    const when = ne.date === todayIsoAmsterdam()
+    const when = ne.date === today
       ? `vandaag ${ne.startTime}`
       : `${ne.date} ${ne.startTime}`;
     lines.push(`Eerstvolgende afspraak: "${ne.title}" op ${when}.`);
+  }
+
+  if (snapshot.upcomingEvents.length > 0) {
+    lines.push("Komende agenda-afspraken:");
+    for (const ev of snapshot.upcomingEvents.slice(0, 10)) {
+      const date = new Date(`${ev.date}T12:00:00+01:00`);
+      const weekday = new Intl.DateTimeFormat("nl-NL", {
+        weekday: "long",
+        timeZone: "Europe/Amsterdam",
+      }).format(date);
+      lines.push(`- ${weekday} ${ev.date}${ev.startTime ? ` ${ev.startTime}` : ""}: ${ev.title}`);
+    }
   }
 
   // Vrije blokken

@@ -93,6 +93,7 @@ export type ContextCategoryCount = {
 export type ContextSnapshot = {
   todayCount: number;
   nextEvent?: NextAppointmentCompact | null;
+  upcomingEvents: NextAppointmentCompact[];
   freeBlocksToday: FreeTimeBlock[];
   openRemindersCount: number;
   relevantMemoriesCount: number;

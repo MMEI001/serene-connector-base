@@ -6,13 +6,39 @@ type Ctx = { supabase: SupabaseClient; userId: string };
 
 type Scope = "today" | "tomorrow" | "this_week" | "next_week" | "specific_date";
 
+function amsterdamDateTimeToIso(dateIso: string, time = "00:00:00"): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  const [hh, mm, ss] = time.split(":").map(Number);
+  const utcGuess = new Date(Date.UTC(y, m - 1, d, hh, mm, ss || 0));
+  const tz = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Europe/Amsterdam",
+    timeZoneName: "shortOffset",
+  }).formatToParts(utcGuess).find((p) => p.type === "timeZoneName")?.value ?? "GMT+1";
+  const match = tz.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  const offsetMinutes = match
+    ? Number(match[1]) * 60 + (Number(match[2] ?? 0) * Math.sign(Number(match[1])))
+    : 60;
+  return new Date(Date.UTC(y, m - 1, d, hh, mm, ss || 0) - offsetMinutes * 60_000).toISOString();
+}
+
+function todayIsoAmsterdam(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function addDaysIso(dateIso: string, days: number): string {
+  const [y, m, d] = dateIso.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 function rangeFor(scope: Scope, dateStr?: string): { from: Date; to: Date; label: string } {
-  const tz = "Europe/Amsterdam";
-  const now = new Date();
-  const today = new Date(
-    new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now) + "T00:00:00+02:00",
-  );
-  const day = 86400000;
+  const todayIso = todayIsoAmsterdam();
+  const today = new Date(amsterdamDateTimeToIso(todayIso));
+  const dayMs = 86400000;
   const startOfWeek = (d: Date) => {
     const out = new Date(d);
     const dow = (out.getDay() + 6) % 7; // maandag = 0
@@ -22,24 +48,25 @@ function rangeFor(scope: Scope, dateStr?: string): { from: Date; to: Date; label
 
   switch (scope) {
     case "tomorrow":
-      return { from: new Date(+today + day), to: new Date(+today + 2 * day), label: "Morgen" };
+      return { from: new Date(amsterdamDateTimeToIso(addDaysIso(todayIso, 1))), to: new Date(amsterdamDateTimeToIso(addDaysIso(todayIso, 2))), label: "Morgen" };
     case "this_week": {
       const from = startOfWeek(today);
-      return { from, to: new Date(+from + 7 * day), label: "Deze week" };
+      return { from, to: new Date(+from + 7 * dayMs), label: "Deze week" };
     }
     case "next_week": {
-      const from = new Date(+startOfWeek(today) + 7 * day);
-      return { from, to: new Date(+from + 7 * day), label: "Volgende week" };
+      const from = new Date(+startOfWeek(today) + 7 * dayMs);
+      return { from, to: new Date(+from + 7 * dayMs), label: "Volgende week" };
     }
     case "specific_date":
       if (dateStr) {
-        const f = new Date(`${dateStr}T00:00:00+02:00`);
-        return { from: f, to: new Date(+f + day), label: formatDayLabel(f) };
+        const f = new Date(amsterdamDateTimeToIso(dateStr));
+        const t = new Date(amsterdamDateTimeToIso(addDaysIso(dateStr, 1)));
+        return { from: f, to: t, label: formatDayLabel(f) };
       }
-      return { from: today, to: new Date(+today + day), label: "Vandaag" };
+      return { from: today, to: new Date(amsterdamDateTimeToIso(addDaysIso(todayIso, 1))), label: "Vandaag" };
     case "today":
     default:
-      return { from: today, to: new Date(+today + day), label: "Vandaag" };
+      return { from: today, to: new Date(amsterdamDateTimeToIso(addDaysIso(todayIso, 1))), label: "Vandaag" };
   }
 }
 
@@ -87,10 +114,10 @@ export async function handleQuery(
 
   const fromIso = from.toISOString();
   const toIso = to.toISOString();
-  const fromDate = fromIso.slice(0, 10);
-  const toDate = toIso.slice(0, 10);
+  const fromDate = scope === "specific_date" && dateStr ? dateStr : amsterdamDateForInstant(from);
+  const toDate = scope === "specific_date" && dateStr ? addDaysIso(dateStr, 1) : amsterdamDateForInstant(to);
 
-  const [appts, rems, ics] = await Promise.all([
+  const [appts, rems, calendars] = await Promise.all([
     ctx.supabase
       .from("appointments")
       .select("id,title,date,start_time")
@@ -108,12 +135,22 @@ export async function handleQuery(
       .lt("remind_at", toIso)
       .order("remind_at", { ascending: true }),
     ctx.supabase
-      .from("ics_events")
-      .select("id,summary,start_time,calendar_id,ics_calendars(name)")
-      .gte("start_time", fromIso)
-      .lt("start_time", toIso)
-      .order("start_time", { ascending: true }),
+      .from("ics_calendars")
+      .select("id,name")
+      .eq("user_id", ctx.userId),
   ]);
+
+  const calMap = new Map((calendars.data ?? []).map((c) => [c.id as string, c.name as string]));
+  const calIds = Array.from(calMap.keys());
+  const ics = calIds.length > 0
+    ? await ctx.supabase
+        .from("ics_events")
+        .select("id,summary,start_time,calendar_id")
+        .in("calendar_id", calIds)
+        .gte("start_time", fromIso)
+        .lt("start_time", toIso)
+        .order("start_time", { ascending: true })
+    : { data: [] };
 
   const items: QueryItem[] = [];
 
@@ -138,14 +175,13 @@ export async function handleQuery(
     });
   }
   for (const e of ics.data ?? []) {
-    const cal = (e as { ics_calendars?: { name?: string } | null }).ics_calendars;
     items.push({
       id: e.id as string,
       kind: "ics_event",
       title: e.summary as string,
       when: formatIcsWhen(e.start_time as string),
       source: "ics",
-      source_label: cal?.name ?? "Agenda",
+      source_label: calMap.get(e.calendar_id as string) ?? "Agenda",
     });
   }
 
@@ -185,4 +221,13 @@ export async function handleQuery(
     confirmation: intro,
     query_result: { intro, items: visibleItems },
   };
+}
+
+function amsterdamDateForInstant(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d);
 }
