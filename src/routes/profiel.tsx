@@ -534,10 +534,102 @@ function ProfilePage() {
         </p>
 
         {voiceEnabled && (
-          <div className="mt-6 space-y-3">
-            <Label className="text-sm text-foreground">Welke stem?</Label>
+          <div className="mt-6 space-y-5">
+            {/* Kwaliteit / accent-hint */}
             <div className="space-y-2">
-              {VOICE_OPTIONS.map((v) => {
+              <Label className="text-sm text-foreground">Spraakkwaliteit</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleQualityChange("fast")}
+                  disabled={voiceSaving}
+                  className={`rounded-2xl border px-3 py-3 text-left text-sm transition-colors ${
+                    voiceQuality === "fast"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                  }`}
+                >
+                  <div className="text-sm text-foreground">Snel</div>
+                  <div className="text-xs text-muted-foreground">
+                    Laagste vertraging, kan Vlaams aandoen
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleQualityChange("natural")}
+                  disabled={voiceSaving}
+                  className={`rounded-2xl border px-3 py-3 text-left text-sm transition-colors ${
+                    voiceQuality === "natural"
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                  }`}
+                >
+                  <div className="text-sm text-foreground">Helder Nederlands</div>
+                  <div className="text-xs text-muted-foreground">
+                    Iets trager, natuurlijker NL uitspraak
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Filters */}
+            <div className="space-y-2">
+              <Label className="text-sm text-foreground">Welke stem?</Label>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  [
+                    { v: "all", l: "Alle" },
+                    { v: "v", l: "Vrouwelijk" },
+                    { v: "m", l: "Mannelijk" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setGenderFilter(opt.v)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      genderFilter === opt.v
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                    }`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+                <span className="mx-1 self-center text-xs text-muted-foreground">•</span>
+                {(
+                  [
+                    { v: "all", l: "Alle accenten" },
+                    { v: "nl", l: "NL-klank" },
+                    { v: "int", l: "Internationaal" },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setAccentFilter(opt.v)}
+                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                      accentFilter === opt.v
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border/60 bg-background text-muted-foreground hover:bg-card"
+                    }`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tip: kies "Helder Nederlands" + een NL-klank stem voor de meest natuurlijke uitspraak.
+              </p>
+            </div>
+
+            {/* Voice-lijst */}
+            <div className="space-y-2">
+              {VOICE_OPTIONS.filter(
+                (v) =>
+                  (genderFilter === "all" || v.gender === genderFilter) &&
+                  (accentFilter === "all" || v.accent === accentFilter),
+              ).map((v) => {
                 const selected = voiceId === v.id;
                 return (
                   <div
@@ -554,21 +646,44 @@ function ProfilePage() {
                       disabled={voiceSaving}
                       className="flex-1 text-left"
                     >
-                      <div className="text-sm text-foreground">{v.name}</div>
-                      <div className="text-xs text-muted-foreground">{v.desc}</div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-foreground">{v.name}</span>
+                        <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {v.gender === "v" ? "vrouw" : "man"}
+                        </span>
+                        <span className="rounded-full border border-border/60 px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                          {v.accent === "nl" ? "NL-klank" : "internationaal"}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">{v.desc}</div>
                     </button>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       className="rounded-full"
-                      onClick={() => speakText(SAMPLE_TEXT, { force: true, voiceId: v.id })}
+                      onClick={() =>
+                        speakText(SAMPLE_TEXT, {
+                          force: true,
+                          voiceId: v.id,
+                          quality: voiceQuality,
+                        })
+                      }
                     >
                       Beluister
                     </Button>
                   </div>
                 );
               })}
+              {VOICE_OPTIONS.filter(
+                (v) =>
+                  (genderFilter === "all" || v.gender === genderFilter) &&
+                  (accentFilter === "all" || v.accent === accentFilter),
+              ).length === 0 && (
+                <p className="rounded-2xl border border-dashed border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
+                  Geen stemmen die aan deze filters voldoen.
+                </p>
+              )}
             </div>
           </div>
         )}
