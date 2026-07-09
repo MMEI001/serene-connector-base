@@ -58,6 +58,7 @@ export type VoiceTraceLog = {
 let cachedEnabled: boolean | null = null;
 let cachedVoiceId: string | null = null;
 let cachedProvider: string | null = null;
+let cachedQuality: VoiceQuality | null = null;
 
 let authListenerAttached = false;
 function ensureAuthListener() {
@@ -83,6 +84,7 @@ export function resetVoicePreferenceCache() {
   cachedEnabled = null;
   cachedVoiceId = null;
   cachedProvider = null;
+  cachedQuality = null;
 }
 
 export function setVoicePreferenceCache(enabled: boolean) {
@@ -93,40 +95,69 @@ export function setVoiceIdCache(voiceId: string) {
   cachedVoiceId = voiceId;
 }
 
+export function setVoiceQualityCache(quality: VoiceQuality) {
+  cachedQuality = quality;
+}
+
 export async function loadVoicePrefs(): Promise<{
   enabled: boolean;
   voiceId: string;
   provider: string;
+  quality: VoiceQuality;
 }> {
   ensureAuthListener();
-  if (cachedEnabled !== null && cachedVoiceId !== null && cachedProvider !== null) {
-    return { enabled: cachedEnabled, voiceId: cachedVoiceId, provider: cachedProvider };
+  if (
+    cachedEnabled !== null &&
+    cachedVoiceId !== null &&
+    cachedProvider !== null &&
+    cachedQuality !== null
+  ) {
+    return {
+      enabled: cachedEnabled,
+      voiceId: cachedVoiceId,
+      provider: cachedProvider,
+      quality: cachedQuality,
+    };
   }
   const { data: sessionData } = await supabase.auth.getSession();
   const user = sessionData.session?.user;
   if (!user) {
-    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+    return {
+      enabled: false,
+      voiceId: DEFAULT_VOICE_ID,
+      provider: "elevenlabs",
+      quality: DEFAULT_VOICE_QUALITY,
+    };
   }
   const { data, error } = await supabase
     .from("user_profiles")
-    .select("voice_enabled, voice_provider, voice_id")
+    .select("voice_enabled, voice_provider, voice_id, voice_quality" as "*")
     .eq("user_id", user.id)
     .maybeSingle();
   if (error || !data) {
-    return { enabled: false, voiceId: DEFAULT_VOICE_ID, provider: "elevenlabs" };
+    return {
+      enabled: false,
+      voiceId: DEFAULT_VOICE_ID,
+      provider: "elevenlabs",
+      quality: DEFAULT_VOICE_QUALITY,
+    };
   }
   const row = data as {
     voice_enabled?: boolean | null;
     voice_provider?: string | null;
     voice_id?: string | null;
+    voice_quality?: string | null;
   };
   const enabled = Boolean(row.voice_enabled);
   const provider = row.voice_provider || "elevenlabs";
   const voiceId = row.voice_id || DEFAULT_VOICE_ID;
+  const quality: VoiceQuality =
+    row.voice_quality === "natural" ? "natural" : DEFAULT_VOICE_QUALITY;
   cachedEnabled = enabled;
   cachedVoiceId = voiceId;
   cachedProvider = provider;
-  return { enabled, voiceId, provider };
+  cachedQuality = quality;
+  return { enabled, voiceId, provider, quality };
 }
 
 // -------------------------------------------------------------------
