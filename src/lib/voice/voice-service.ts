@@ -259,6 +259,8 @@ export async function speak(
     return;
   }
   const voiceId = options.voiceId ?? prefs.voiceId;
+  const quality: VoiceQuality = options.quality ?? prefs.quality;
+  const modelId = quality === "natural" ? "eleven_multilingual_v2" : "eleven_flash_v2_5";
 
   const SUPABASE_URL =
     import.meta.env.VITE_SUPABASE_URL ||
