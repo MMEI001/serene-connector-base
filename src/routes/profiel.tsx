@@ -382,6 +382,26 @@ function ProfilePage() {
     setVoiceIdCache(nextVoiceId);
     toast.success("Stem opgeslagen.");
   }
+  async function handleQualityChange(next: VoiceQuality) {
+    if (!user || voiceSaving || next === voiceQuality) return;
+    const previous = voiceQuality;
+    setVoiceQualityState(next);
+    setVoiceSaving(true);
+    const { error } = await supabase
+      .from("user_profiles")
+      .update({ voice_quality: next } as never)
+      .eq("user_id", user.id);
+    setVoiceSaving(false);
+    if (error) {
+      setVoiceQualityState(previous);
+      toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
+      return;
+    }
+    setVoiceQualityCache(next);
+    toast.success(
+      next === "natural" ? "Helder Nederlands aan." : "Snelle stem aan.",
+    );
+  }
 
 
 
