@@ -141,6 +141,9 @@ function ProfilePage() {
   const [voiceEnabled, setVoiceEnabled] = useState(false);
   const [voiceSaving, setVoiceSaving] = useState(false);
   const [voiceId, setVoiceId] = useState<string>(DEFAULT_VOICE_ID);
+  const [voiceQuality, setVoiceQualityState] = useState<VoiceQuality>(DEFAULT_VOICE_QUALITY);
+  const [genderFilter, setGenderFilter] = useState<Gender | "all">("all");
+  const [accentFilter, setAccentFilter] = useState<Accent | "all">("all");
   const [ritualEnabled, setRitualEnabled] = useState(false);
   const [ritualTime, setRitualTime] = useState("19:30");
   const [ritualSaving, setRitualSaving] = useState(false);
