@@ -28,7 +28,8 @@ const ALLOWED_VOICE_IDS = new Set([
   "onwK4e9ZLuTAKqWW03F9", // Daniel
   "JBFqnCBsd6RMkjVDRZzb", // George
 ]);
-const MODEL_ID = "eleven_multilingual_v2";
+// Flash v2.5 = laagste latency ElevenLabs model (~75ms). Multilingual, ondersteunt NL.
+const MODEL_ID = "eleven_flash_v2_5";
 const MAX_CHARS = 1000;
 
 function json(body: unknown, status: number) {
