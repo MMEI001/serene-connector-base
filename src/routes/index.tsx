@@ -132,7 +132,50 @@ function Dashboard() {
       toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
     } finally {
       setAiBusy(false);
+  }
+
+  function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Kon afbeelding niet lezen."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleScreenshot(file: File) {
+    if (screenshotBusy) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Kies een afbeelding (bijv. een screenshot).");
+      return;
     }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Deze afbeelding is te groot (max 8MB).");
+      return;
+    }
+    setScreenshotBusy(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const note = aiText.trim();
+      const result = await analyzeScreenshot({ data: { imageDataUrl: dataUrl, note } });
+      const spoken =
+        result.suggestion_type === "appointment"
+          ? "Ik heb een afspraak-voorstel klaargezet."
+          : result.suggestion_type === "reminder"
+            ? "Ik heb een herinnering-voorstel klaargezet."
+            : "Ik heb de screenshot bewaard als voorstel.";
+      toast.success(result.summary || spoken);
+      void speakText(spoken);
+      setAiText("");
+      void loadSuggestions();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Dit lukte nu even niet.";
+      toast.error(msg);
+    } finally {
+      setScreenshotBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
   }
 
   const loadSuggestions = useCallback(async () => {
