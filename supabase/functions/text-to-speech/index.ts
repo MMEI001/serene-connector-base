@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const text = body?.text;
     const requestedVoiceId = typeof body?.voice_id === "string" ? body.voice_id : "";
+    const requestedModel = typeof body?.model_id === "string" ? body.model_id : "";
     if (!text || typeof text !== "string") {
       return json({ error: "text is verplicht" }, 400);
     }
@@ -140,15 +141,17 @@ Deno.serve(async (req) => {
     const primaryVoiceId = ALLOWED_VOICE_IDS.has(requestedVoiceId)
       ? requestedVoiceId
       : DEFAULT_VOICE_ID;
+    const modelId = ALLOWED_MODELS.has(requestedModel) ? requestedModel : FAST_MODEL_ID;
     console.log("[TTS] request", {
       requestedVoiceId,
       primaryVoiceId,
+      modelId,
       fallbackVoiceId: FALLBACK_VOICE_ID,
       textLen: text.length,
     });
 
     let usedVoiceId = primaryVoiceId;
-    let result = await synthesize(apiKey, primaryVoiceId, text);
+    let result = await synthesize(apiKey, primaryVoiceId, text, modelId);
     let didFallback = false;
 
     if (!result.ok && primaryVoiceId !== FALLBACK_VOICE_ID) {
@@ -156,7 +159,7 @@ Deno.serve(async (req) => {
         "[TTS] primary voice failed, retrying with fallback",
         { primaryVoiceId, fallbackVoiceId: FALLBACK_VOICE_ID, primaryStatus: result.status },
       );
-      const fallback = await synthesize(apiKey, FALLBACK_VOICE_ID, text);
+      const fallback = await synthesize(apiKey, FALLBACK_VOICE_ID, text, modelId);
       if (fallback.ok) {
         result = fallback;
         usedVoiceId = FALLBACK_VOICE_ID;
@@ -190,7 +193,7 @@ Deno.serve(async (req) => {
         "x-voice-id": usedVoiceId,
         "x-voice-requested": requestedVoiceId || primaryVoiceId,
         "x-voice-fallback": didFallback ? "true" : "false",
-        "x-voice-model": MODEL_ID,
+        "x-voice-model": modelId,
       },
     });
   } catch (err) {
