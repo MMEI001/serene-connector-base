@@ -62,7 +62,10 @@ function Dashboard() {
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
   const [askBriefing, setAskBriefing] = useState(false);
   const briefingSpokenRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [screenshotBusy, setScreenshotBusy] = useState(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
+  const analyzeScreenshot = useServerFn(analyzeScreenshotForAppointment);
   const fetchBriefing = useServerFn(getDailyBriefing);
 
   useEffect(() => {
