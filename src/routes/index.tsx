@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { motion } from "motion/react";
 import { toast } from "sonner";
-import { Volume2 } from "lucide-react";
+import { Volume2, ImagePlus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/app-shell";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SuggestionCard, type Suggestion } from "@/components/suggestion-card";
 import { classifyAndStoreSuggestion } from "@/lib/ai-classify.functions";
+import { analyzeScreenshotForAppointment } from "@/lib/analyze-screenshot.functions";
 import { getDailyBriefing, type DailyBriefing } from "@/lib/daily-briefing.functions";
 import { speakText } from "@/lib/speak";
 
@@ -61,7 +62,10 @@ function Dashboard() {
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
   const [askBriefing, setAskBriefing] = useState(false);
   const briefingSpokenRef = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [screenshotBusy, setScreenshotBusy] = useState(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
+  const analyzeScreenshot = useServerFn(analyzeScreenshotForAppointment);
   const fetchBriefing = useServerFn(getDailyBriefing);
 
   useEffect(() => {
@@ -130,6 +134,51 @@ function Dashboard() {
       setAiBusy(false);
     }
   }
+
+
+  function fileToDataUrl(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error("Kon afbeelding niet lezen."));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function handleScreenshot(file: File) {
+    if (screenshotBusy) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Kies een afbeelding (bijv. een screenshot).");
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error("Deze afbeelding is te groot (max 8MB).");
+      return;
+    }
+    setScreenshotBusy(true);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const note = aiText.trim();
+      const result = await analyzeScreenshot({ data: { imageDataUrl: dataUrl, note } });
+      const spoken =
+        result.suggestion_type === "appointment"
+          ? "Ik heb een afspraak-voorstel klaargezet."
+          : result.suggestion_type === "reminder"
+            ? "Ik heb een herinnering-voorstel klaargezet."
+            : "Ik heb de screenshot bewaard als voorstel.";
+      toast.success(result.summary || spoken);
+      void speakText(spoken);
+      setAiText("");
+      void loadSuggestions();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Dit lukte nu even niet.";
+      toast.error(msg);
+    } finally {
+      setScreenshotBusy(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
 
   const loadSuggestions = useCallback(async () => {
     if (!user) return;
@@ -290,13 +339,45 @@ function Dashboard() {
             <p className="text-xs text-muted-foreground">
               Ik bewaar het zorgvuldig en doe niets zonder jouw bevestiging.
             </p>
-            <Button
-              onClick={handleClassify}
-              disabled={aiBusy || !aiText.trim()}
-              className="rounded-full px-6"
-            >
-              {aiBusy ? "Even verwerken…" : "Verwerken"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleScreenshot(f);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={screenshotBusy || aiBusy}
+                className="rounded-full px-4"
+                title="Screenshot uploaden — ik haal er een afspraak uit"
+              >
+                {screenshotBusy ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    Lezen…
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="mr-1.5 h-4 w-4" />
+                    Screenshot
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleClassify}
+                disabled={aiBusy || !aiText.trim()}
+                className="rounded-full px-6"
+              >
+                {aiBusy ? "Even verwerken…" : "Verwerken"}
+              </Button>
+            </div>
           </div>
         </Card>
       </section>
