@@ -132,7 +132,9 @@ function Dashboard() {
       toast.error("Dit lukte nu even niet. Probeer het zo nog eens.");
     } finally {
       setAiBusy(false);
+    }
   }
+
 
   function fileToDataUrl(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
