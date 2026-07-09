@@ -16,7 +16,8 @@ export const openaiProvider: SpeechProvider = {
     fd.append("file", input.file, input.filename);
     fd.append("model", MODEL);
     if (input.language) fd.append("language", input.language);
-    fd.append("response_format", "verbose_json");
+    // gpt-4o-mini-transcribe ondersteunt geen "verbose_json"; gebruik "json".
+    fd.append("response_format", "json");
 
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
       method: "POST",
