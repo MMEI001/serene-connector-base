@@ -53,14 +53,16 @@ async function synthesize(
   apiKey: string,
   voiceId: string,
   text: string,
+  modelId: string,
 ): Promise<
   | { ok: true; body: ReadableStream<Uint8Array>; contentType: string; status: number }
   | { ok: false; status: number; contentType: string; detail: string }
 > {
-  // /stream endpoint + optimize_streaming_latency=3 (max latency reductie).
-  // mp3_44100_64 = lichter/sneller dan 128 kbps, kwaliteit prima voor spraak.
+  // Bij "natuurlijk" model latency-optimalisatie iets verlagen om NL-uitspraak
+  // niet te schaden; bij flash mag hij op max.
+  const latency = modelId === FAST_MODEL_ID ? 3 : 2;
   const url =
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_64&optimize_streaming_latency=3`;
+    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=mp3_44100_64&optimize_streaming_latency=${latency}`;
   const resp = await fetch(url, {
     method: "POST",
     headers: {
@@ -70,7 +72,7 @@ async function synthesize(
     },
     body: JSON.stringify({
       text,
-      model_id: MODEL_ID,
+      model_id: modelId,
       voice_settings: {
         stability: 0.5,
         similarity_boost: 0.75,
