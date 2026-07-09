@@ -291,3 +291,23 @@ function getNextDaysIso(dateIso: string, days: number): string {
   const dt = new Date(Date.UTC(y, m - 1, d + days));
   return dt.toISOString().slice(0, 10);
 }
+
+function amsPartsForIso(iso: string): { dateIso: string; timeIso: string } {
+  const d = new Date(iso);
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const map: Record<string, string> = {};
+  for (const p of fmt.formatToParts(d)) map[p.type] = p.value;
+  return {
+    dateIso: `${map.year}-${map.month}-${map.day}`,
+    timeIso: `${map.hour}:${map.minute}:${map.second}`,
+  };
+}
