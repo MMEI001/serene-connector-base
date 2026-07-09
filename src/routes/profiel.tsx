@@ -206,6 +206,14 @@ function ProfilePage() {
         const vid = d.voice_id || DEFAULT_VOICE_ID;
         setVoiceId(vid);
         setVoiceIdCache(vid);
+        const q: VoiceQuality = d.voice_quality === "natural" ? "natural" : "fast";
+        setVoiceQualityState(q);
+        setVoiceQualityCache(q);
+        // Zet initiële filters op basis van huidige stem
+        const currentOpt = VOICE_OPTIONS.find((o) => o.id === vid);
+        if (currentOpt) {
+          setGenderFilter(currentOpt.gender);
+        }
         setRitualEnabled(Boolean(d.ritual_enabled));
         setRitualTime(d.ritual_time || "19:30");
       }
