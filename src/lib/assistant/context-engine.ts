@@ -24,8 +24,11 @@ export async function snapshot(
   const nextWeek = getNextDaysIso(amsParts.dateIso, 7);
 
   // Parallelle database reads voor kalender & open reminders
-  const [apptsTodayRes, apptsNextRes, remindersRes] = await Promise.all([
-    // Afspraken vandaag
+  const todayStartIso = `${today}T00:00:00Z`;
+  const nextWeekEndIso = `${getNextDaysIso(today, 8)}T00:00:00Z`;
+
+  const [apptsTodayRes, apptsNextRes, remindersRes, icsCalRes] = await Promise.all([
+    // Afspraken vandaag (eigen)
     supabase
       .from("appointments")
       .select("title,date,start_time,end_time")
@@ -33,7 +36,7 @@ export async function snapshot(
       .eq("date", today)
       .order("start_time", { ascending: true, nullsFirst: true }),
 
-    // Eerstvolgende afspraak vanaf nu (vandaag of later)
+    // Eerstvolgende afspraken (eigen)
     supabase
       .from("appointments")
       .select("title,date,start_time")
@@ -50,10 +53,56 @@ export async function snapshot(
       .eq("user_id", userId)
       .eq("is_completed", false)
       .limit(50),
+
+    // ICS-kalenders van deze gebruiker
+    supabase.from("ics_calendars").select("id").eq("user_id", userId),
   ]);
 
-  const apptsToday = apptsTodayRes.data ?? [];
-  const allUpcoming = apptsNextRes.data ?? [];
+  const calendarIds = (icsCalRes.data ?? []).map((c) => c.id as string);
+  let icsEvents: Array<{ summary: string; start_time: string; end_time: string | null }> = [];
+  if (calendarIds.length > 0) {
+    const { data: icsRows } = await supabase
+      .from("ics_events")
+      .select("summary,start_time,end_time")
+      .in("calendar_id", calendarIds)
+      .gte("start_time", todayStartIso)
+      .lt("start_time", nextWeekEndIso)
+      .order("start_time", { ascending: true });
+    icsEvents = (icsRows ?? []).map((r) => ({
+      summary: (r.summary as string | null) ?? "Afspraak",
+      start_time: r.start_time as string,
+      end_time: (r.end_time as string | null) ?? null,
+    }));
+  }
+
+  // ICS → hetzelfde vorm-formaat (date/start_time/end_time in Amsterdam-tijd).
+  const icsTodayRows: Array<{ title: string; date: string; start_time: string | null; end_time: string | null }> = [];
+  const icsUpcomingRows: Array<{ title: string; date: string; start_time: string | null }> = [];
+  for (const ev of icsEvents) {
+    const parts = amsPartsForIso(ev.start_time);
+    const endParts = ev.end_time ? amsPartsForIso(ev.end_time) : null;
+    if (parts.dateIso === today) {
+      icsTodayRows.push({
+        title: ev.summary,
+        date: parts.dateIso,
+        start_time: parts.timeIso.slice(0, 5),
+        end_time: endParts?.timeIso.slice(0, 5) ?? null,
+      });
+    }
+    icsUpcomingRows.push({
+      title: ev.summary,
+      date: parts.dateIso,
+      start_time: parts.timeIso.slice(0, 5),
+    });
+  }
+
+  const apptsToday = [...(apptsTodayRes.data ?? []), ...icsTodayRows].sort((a, b) =>
+    (a.start_time ?? "").localeCompare(b.start_time ?? ""),
+  );
+  const allUpcoming = [...(apptsNextRes.data ?? []), ...icsUpcomingRows].sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return (a.start_time ?? "").localeCompare(b.start_time ?? "");
+  });
   const openRemindersCount = remindersRes.data?.length ?? 0;
 
   // 1. Eerstvolgende afspraak na actueel tijdstip
