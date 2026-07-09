@@ -337,13 +337,45 @@ function Dashboard() {
             <p className="text-xs text-muted-foreground">
               Ik bewaar het zorgvuldig en doe niets zonder jouw bevestiging.
             </p>
-            <Button
-              onClick={handleClassify}
-              disabled={aiBusy || !aiText.trim()}
-              className="rounded-full px-6"
-            >
-              {aiBusy ? "Even verwerken…" : "Verwerken"}
-            </Button>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void handleScreenshot(f);
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={screenshotBusy || aiBusy}
+                className="rounded-full px-4"
+                title="Screenshot uploaden — ik haal er een afspraak uit"
+              >
+                {screenshotBusy ? (
+                  <>
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                    Lezen…
+                  </>
+                ) : (
+                  <>
+                    <ImagePlus className="mr-1.5 h-4 w-4" />
+                    Screenshot
+                  </>
+                )}
+              </Button>
+              <Button
+                onClick={handleClassify}
+                disabled={aiBusy || !aiText.trim()}
+                className="rounded-full px-6"
+              >
+                {aiBusy ? "Even verwerken…" : "Verwerken"}
+              </Button>
+            </div>
           </div>
         </Card>
       </section>
