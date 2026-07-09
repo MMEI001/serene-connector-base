@@ -59,6 +59,7 @@ function Dashboard() {
   const [aiBusy, setAiBusy] = useState(false);
   const [showPills, setShowPills] = useState(false);
   const [briefing, setBriefing] = useState<DailyBriefing | null>(null);
+  const [askBriefing, setAskBriefing] = useState(false);
   const briefingSpokenRef = useRef(false);
   const classify = useServerFn(classifyAndStoreSuggestion);
   const fetchBriefing = useServerFn(getDailyBriefing);
@@ -76,25 +77,30 @@ function Dashboard() {
   );
 
   const loadBriefing = useCallback(
-    async (autoSpeak: boolean) => {
+    async (autoAsk: boolean) => {
       if (!user) return;
       try {
         const b = await fetchBriefing();
         setBriefing(b);
-        if (!autoSpeak) return;
+        if (!autoAsk) return;
         const today = new Date().toISOString().slice(0, 10);
-        const key = `hoofdrust:daily-briefing:${user.id}:${today}`;
+        const key = `hoofdrust:daily-briefing-ask:${user.id}:${today}`;
         if (typeof window !== "undefined" && !window.localStorage.getItem(key)) {
           window.localStorage.setItem(key, "1");
           briefingSpokenRef.current = true;
-          // kleine pauze zodat de orb rustig verschijnt voor de stem begint
-          window.setTimeout(() => playBriefing(b), 1200);
+          setAskBriefing(true);
+          window.setTimeout(() => {
+            void speakText(
+              "Wil je horen wat er vandaag op je planning staat? Zeg ja of nee.",
+              { intent: "daily_briefing_ask", route: "assistant_reply" },
+            );
+          }, 900);
         }
       } catch {
         /* stil falen — dagoverzicht is niet-kritisch */
       }
     },
-    [user, fetchBriefing, playBriefing],
+    [user, fetchBriefing],
   );
 
   async function handleClassify() {
@@ -189,6 +195,43 @@ function Dashboard() {
             </Link>
           ))}
         </motion.div>
+
+        {askBriefing && briefing && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="mt-6 w-full max-w-sm rounded-3xl bg-white/70 px-5 py-4 backdrop-blur-md border border-white/60 shadow-[0_2px_12px_rgba(139,126,115,0.06)] text-center"
+          >
+            <p className="text-sm text-foreground/85">
+              Wil je horen wat er vandaag op je planning staat?
+            </p>
+            <div className="mt-3 flex justify-center gap-2">
+              <Button
+                className="rounded-full px-6"
+                onClick={() => {
+                  setAskBriefing(false);
+                  if (briefing) playBriefing(briefing);
+                }}
+              >
+                Ja, graag
+              </Button>
+              <Button
+                variant="ghost"
+                className="rounded-full px-6"
+                onClick={() => {
+                  setAskBriefing(false);
+                  void speakText("Prima, ik houd het rustig.", {
+                    intent: "daily_briefing_ask",
+                    route: "assistant_reply",
+                  });
+                }}
+              >
+                Nee, dank je
+              </Button>
+            </div>
+          </motion.div>
+        )}
 
         {briefing && (briefing.nextEvent || briefing.topReminder || briefing.freeBlock) && (
           <motion.div
