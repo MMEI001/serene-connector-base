@@ -33,8 +33,27 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-type Appt = { id: string; title: string; start_time: string | null; date: string };
+type Appt = { id: string; title: string; start_time: string | null; date: string; source?: "own" | "ics"; calendar_name?: string | null };
 type Reminder = { id: string; title: string; remind_at: string | null };
+
+function amsHMForIso(iso: string): string {
+  return new Intl.DateTimeFormat("nl-NL", {
+    timeZone: "Europe/Amsterdam",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(iso));
+}
+function amsDateForIso(iso: string): string {
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Amsterdam",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const map: Record<string, string> = {};
+  for (const p of fmt.formatToParts(new Date(iso))) map[p.type] = p.value;
+  return `${map.year}-${map.month}-${map.day}`;
+}
 
 function todayISO() {
   const d = new Date();
