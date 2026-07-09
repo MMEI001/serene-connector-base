@@ -273,7 +273,7 @@ export const runVoicePipeline = createServerFn({ method: "POST" })
 
     const directAgendaQuery = detectAgendaQuery(text);
     if (directAgendaQuery) {
-      const result = await handleQuery(supabase ? { supabase, userId } : { supabase, userId }, directAgendaQuery, persona);
+      const result = await handleQuery({ supabase, userId }, directAgendaQuery, persona);
       return { ...result, engine_trace: buildLegacyTrace() };
     }
 
