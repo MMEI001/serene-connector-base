@@ -1,6 +1,8 @@
 import { TranscribeError, type SpeechProvider, type TranscribeInput, type TranscribeOutput } from "./types";
 
-const MODEL = "whisper-1";
+// gpt-4o-mini-transcribe: aanzienlijk lagere latency dan whisper-1,
+// vergelijkbare kwaliteit voor korte NL spraakfragmenten.
+const MODEL = "gpt-4o-mini-transcribe";
 
 export const openaiProvider: SpeechProvider = {
   name: "openai",
