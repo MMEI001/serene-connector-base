@@ -1,0 +1,1 @@
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS voice_id text NOT NULL DEFAULT 'XB0fDUnXU5powFXDhCwa';
